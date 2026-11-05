@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ritmo Running: a running coach that adapts to you</title>
+  <meta name="description" content="Ritmo plans your week, explains every session and adapts after every run. From your first run/walk to a marathon. Coming soon to iPhone and Android." />
+  <meta name="theme-color" content="#E8480C" />
+  <link rel="icon" href="brand/ritmo-favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="brand/ritmo-app-icon-180.png" />
+  <meta property="og:title" content="Ritmo Running: train to your own rhythm" />
+  <meta property="og:description" content="A calm, expert running coach that plans your week, explains every session and adapts after every run." />
+  <meta property="og:image" content="img/og.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="top" id="top">
+    <div class="wrap top-row">
+      <a href="#top" class="brand" aria-label="Ritmo Running, back to top">
+        <img src="brand/ritmo-running-logo.svg" alt="Ritmo Running" width="131" height="48" class="logo-light" />
+        <img src="brand/ritmo-running-logo-reversed.svg" alt="" width="131" height="48" class="logo-dark" />
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#how">How it works</a>
+        <a href="#beginners">Beginners</a>
+        <a href="#racers">Racers</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">Questions</a>
+      </nav>
+      <a href="#waitlist" class="btn btn-small">Join the waitlist</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero">
+      <svg class="lanes" viewBox="0 0 600 600" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="10"><circle cx="600" cy="600" r="560"/><circle cx="600" cy="600" r="490"/><circle cx="600" cy="600" r="420"/><circle cx="600" cy="600" r="350"/></g></svg>
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Coming soon to iPhone and Android</p>
+          <h1>Train to your own rhythm.</h1>
+          <p class="lede">Ritmo is a running coach that plans your week, explains every session and adapts after every run. Whether it is your first run/walk or your next marathon.</p>
+          <form class="signup" name="waitlist-hero" method="POST" data-netlify="true" netlify-honeypot="company" action="thanks.html">
+            <input type="hidden" name="form-name" value="waitlist-hero" />
+            <p class="hp"><label>Leave this empty <input name="company" tabindex="-1" autocomplete="off" /></label></p>
+            <label for="hero-email" class="sr">Email address</label>
+            <input id="hero-email" name="email" type="email" required autocomplete="email" placeholder="Your email" />
+            <button class="btn btn-dark" type="submit">Join the waitlist</button>
+            <p class="fine">One email when Ritmo launches, and the occasional update. Unsubscribe any time. <a href="https://ritmo-running.netlify.app/privacy">Privacy notice</a>.</p>
+          </form>
+          <p class="hero-alt">Want a look now? <a href="https://ritmo-running.netlify.app/signup">Try the web app</a>.</p>
+        </div>
+        <div class="hero-phone">
+          <figure class="phone phone-tilt"><img src="img/10-today-with-photo.jpg" alt="The Today screen in Ritmo, showing a run/walk session of 8 times 1 minute, 29 minutes in total, with a chart of the intervals and why it matters." width="600" height="1299" /></figure>
+        </div>
+      </div>
+      <ul class="wrap pillars" aria-label="What Ritmo does">
+        <li><strong>Adapts daily</strong><span>to how your runs went, how you feel and the time you have</span></li>
+        <li><strong>Explains why</strong><span>every session comes with its purpose, in plain words</span></li>
+        <li><strong>Safety first</strong><span>a health check and gentle starts for new runners</span></li>
+        <li><strong>Your data</strong><span>stored in the EU, never sold, yours to export or delete</span></li>
+      </ul>
+    </section>
+
+    <!-- Today -->
+    <section class="band" aria-labelledby="today-title">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow eyebrow-brand">Every morning</p>
+          <h2 id="today-title">Open the app. Know exactly what to do, and why.</h2>
+          <p>No grids of numbers to decode. Today shows one session: what it is, how long, and the reason it is in your plan. Tap for the steps, paces or effort, and heart rate zones.</p>
+          <ul class="ticks">
+            <li>Short on time? Ask for a shorter version of the same session.</li>
+            <li>Ill, sore or busy? Tell Ritmo and the week rearranges itself.</li>
+            <li>Missed a session? It is moved or repeated, never piled on.</li>
+          </ul>
+        </div>
+        <figure class="phone"><img src="img/03-today.jpg" alt="Today screen with a marathon-pace session of 11 kilometres, 56 minutes, and its warm-up, main set and cool-down." width="600" height="1299" loading="lazy" /></figure>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <p class="eyebrow eyebrow-brand">How it works</p>
+        <h2 id="how-title">Three steps, then it keeps up with you.</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-n">1</span>
+            <h3>Tell Ritmo about you</h3>
+            <p>A short setup: your running so far, your goal, the days you can train and any injuries. If a goal is too much too soon, Ritmo says so kindly and suggests a safer one.</p>
+          </li>
+          <li>
+            <span class="step-n">2</span>
+            <h3>Run, then log it</h3>
+            <p>Bring in your history from Garmin, FIT, GPX or TCX files, or log a run by hand in seconds. Automatic Garmin sync is coming, pending Garmin's approval, and Apple Health and Health Connect come with the phone apps.</p>
+          </li>
+          <li>
+            <span class="step-n">3</span>
+            <h3>Your plan adapts</h3>
+            <p>After every run you see what went well and one thing to change. Your next sessions shift to match your fitness, fatigue and how the run felt.</p>
+          </li>
+        </ol>
+        <div class="shots">
+          <figure class="phone phone-sm"><img src="img/5-goal-safer.jpg" alt="Setup screen suggesting a safer goal: run 5K without stopping before building to 10K." width="600" height="1299" loading="lazy" /><figcaption>Honest goals</figcaption></figure>
+          <figure class="phone phone-sm"><img src="img/9-preview.jpg" alt="Plan preview explaining that the plan uses short run/walk intervals three days a week, set by effort." width="600" height="1299" loading="lazy" /><figcaption>A plan that explains itself</figcaption></figure>
+          <figure class="phone phone-sm"><img src="img/05-coach.jpg" alt="Coach chat answering a question using the runner's own training data." width="600" height="1299" loading="lazy" /><figcaption>A coach that knows your runs</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Honest numbers -->
+    <section class="section dark" aria-labelledby="honest-title">
+      <div class="wrap split split-rev">
+        <div class="meter" aria-hidden="true">
+          <div class="meter-row"><span class="tag tag-on">Measured</span><span>from your runs and races</span></div>
+          <div class="meter-row"><span class="tag">Estimated</span><span>until there is enough data</span></div>
+          <div class="meter-row"><span class="tag">By effort</span><span>when there are no numbers yet</span></div>
+        </div>
+        <div>
+          <p class="eyebrow">Honest numbers</p>
+          <h2 id="honest-title">Ritmo tells you what it knows, and what it is guessing.</h2>
+          <p>Paces, race predictions and fitness scores only appear when your runs support them, and each one says what it is based on. New runners train by effort until Ritmo has learned enough to set paces.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Beginners -->
+    <section class="section" id="beginners" aria-labelledby="beg-title">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow eyebrow-brand">New to running</p>
+          <h2 id="beg-title">From walking to 30 minutes of running.</h2>
+          <p>A gentle run/walk path, three days a week with rest days in between. Each step builds on the last, and if a session felt very hard, Ritmo holds you at that level a little longer. No watch needed.</p>
+          <p>When you can run for 30 minutes, a short time trial unlocks paces, race predictions and plans for 5K, 10K and beyond.</p>
+        </div>
+        <div class="ladder" role="img" aria-label="Run/walk progression: running time grows each week from 1-minute intervals to 30 minutes of continuous running.">
+          <div class="ladder-row"><span>Start</span><i style="--w:12%"></i><b>8 × 1 min</b></div>
+          <div class="ladder-row"><span>Then</span><i style="--w:30%"></i><b>5 × 3 min</b></div>
+          <div class="ladder-row"><span>Then</span><i style="--w:45%"></i><b>4 × 5 min</b></div>
+          <div class="ladder-row"><span>Then</span><i style="--w:62%"></i><b>3 × 8 min</b></div>
+          <div class="ladder-row"><span>Then</span><i style="--w:80%"></i><b>2 × 15 min</b></div>
+          <div class="ladder-row"><span>Goal</span><i style="--w:100%"></i><b>30 min</b></div>
+          <p class="fine">Running time in each session, with walking between. Some steps are left out here; your starting point depends on your answers in setup.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Racers -->
+    <section class="section band" id="racers" aria-labelledby="race-title">
+      <div class="wrap">
+        <p class="eyebrow eyebrow-brand">Training for a race</p>
+        <h2 id="race-title">5K to marathon, built around race day.</h2>
+        <div class="cards">
+          <article class="card"><h3>Structured, not rigid</h3><p>Base, build, peak and taper, with easy, tempo, threshold, interval, hill and long runs where they belong. Sessions move when life does.</p></article>
+          <article class="card"><h3>Race readiness</h3><p>A predicted finish time from your recent performances, and how ready you are for your goal, updated as you train.</p></article>
+          <article class="card"><h3>Load and recovery</h3><p>Fitness, fatigue and form from your training load, plus a daily readiness check that eases the plan when you need it.</p></article>
+          <article class="card"><h3>Feedback on every run</h3><p>Pacing, heart rate and how it felt, turned into what went well and one clear thing to change next time.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Privacy -->
+    <section class="section" id="privacy" aria-labelledby="priv-title">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow eyebrow-brand">Privacy and safety</p>
+          <h2 id="priv-title">Your health data is yours.</h2>
+          <ul class="ticks">
+            <li>Stored in the EU and private to your account.</li>
+            <li>Never sold, never used for advertising.</li>
+            <li>Garmin data is never used to train AI models.</li>
+            <li>The AI coach is optional, and only with your permission.</li>
+            <li>Export everything or delete your account at any time.</li>
+            <li>A health check before you start, for adults 18 and over.</li>
+          </ul>
+          <p class="fine">Ritmo gives coaching guidance, not medical advice.</p>
+        </div>
+        <figure class="phone"><img src="img/1-consent.jpg" alt="Setup screen explaining what data Ritmo uses, why, and how to export or delete it." width="600" height="1299" loading="lazy" /></figure>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section band" id="faq" aria-labelledby="faq-title">
+      <div class="wrap narrow">
+        <h2 id="faq-title">Questions</h2>
+        <details><summary>When does Ritmo launch?</summary><p>The phone apps are in final testing. Join the waitlist and you will hear first. You can already try the web app.</p></details>
+        <details><summary>How much will it cost?</summary><p>Pricing will be announced at launch. People on the waitlist will hear about it first.</p></details>
+        <details><summary>Do I need a running watch?</summary><p>No. You can log runs by hand with time, distance and how they felt. A watch or phone with GPS and heart rate gives Ritmo more to learn from.</p></details>
+        <details><summary>Does it work with Garmin?</summary><p>Today you can import your full Garmin history, or single FIT, GPX and TCX files. Automatic Garmin sync is coming once Garmin approves access.</p></details>
+        <details><summary>Apple Health and Health Connect?</summary><p>Yes, in the iPhone and Android apps, with your permission.</p></details>
+        <details><summary>I have never run before. Is it for me?</summary><p>Yes. The beginner path starts with short run/walk intervals and builds slowly, after a short health check.</p></details>
+        <details><summary>What happens to my data?</summary><p>It is stored in the EU, private to you and never sold. You can export or delete it at any time. Read the <a href="https://ritmo-running.netlify.app/privacy">privacy notice</a>.</p></details>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta" id="waitlist" aria-labelledby="cta-title">
+      <svg class="lanes" viewBox="0 0 600 600" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="10"><circle cx="600" cy="600" r="560"/><circle cx="600" cy="600" r="490"/><circle cx="600" cy="600" r="420"/><circle cx="600" cy="600" r="350"/></g></svg>
+      <div class="wrap narrow">
+        <h2 id="cta-title">Be first to run with Ritmo.</h2>
+        <p class="lede">Join the waitlist for launch news and early access.</p>
+        <form class="signup" name="waitlist" method="POST" data-netlify="true" netlify-honeypot="company" action="thanks.html">
+          <input type="hidden" name="form-name" value="waitlist" />
+          <p class="hp"><label>Leave this empty <input name="company" tabindex="-1" autocomplete="off" /></label></p>
+          <label for="cta-email" class="sr">Email address</label>
+          <input id="cta-email" name="email" type="email" required autocomplete="email" placeholder="Your email" />
+          <label for="cta-level" class="sr">Your running</label>
+          <select id="cta-level" name="level">
+            <option value="">Your running (optional)</option>
+            <option>New to running</option>
+            <option>Coming back</option>
+            <option>Run now and then</option>
+            <option>Run regularly</option>
+            <option>Train for races</option>
+          </select>
+          <button class="btn btn-dark" type="submit">Join the waitlist</button>
+          <p class="fine">One email at launch and the occasional update. Unsubscribe any time. <a href="https://ritmo-running.netlify.app/privacy">Privacy notice</a>.</p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-row">
+      <img src="brand/ritmo-running-logo-reversed.svg" alt="Ritmo Running" width="120" height="44" />
+      <nav aria-label="Footer">
+        <a href="https://www.instagram.com/ritmorunning.run/">Instagram</a>
+        <a href="https://ritmo-running.netlify.app/about">About</a>
+        <a href="https://ritmo-running.netlify.app/privacy">Privacy</a>
+        <a href="https://ritmo-running.netlify.app/terms">Terms</a>
+        <a href="https://ritmo-running.netlify.app/login">Log in</a>
+      </nav>
+      <p class="fine">Train to your own rhythm. Ritmo is not affiliated with Garmin, Apple or Google.</p>
+    </div>
+  </footer>
+</body>
+</html>
