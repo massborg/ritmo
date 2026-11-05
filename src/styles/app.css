@@ -186,24 +186,63 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 .composer { position: sticky; bottom: calc(68px + env(safe-area-inset-bottom)); background: var(--surface); padding: var(--s3) 0; display: flex; gap: var(--s2); }
 @media (min-width: 820px) { .composer { bottom: 0; } }
 
-/* ---------- Splash: the badge runs in, then the full logo settles ---------- */
-.splash { position: fixed; inset: 0; z-index: 100; background: var(--brand); overflow: hidden; animation: splash-out 300ms ease 2000ms forwards; }
-.splash-runner { position: absolute; top: 50%; left: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; animation: run-in 1100ms cubic-bezier(.2,.7,.2,1) both, runner-out 250ms ease 1150ms forwards; }
-.splash-bob { animation: stride 220ms ease-in-out 5 alternate; }
-.splash-bob { background: #FFFFFF; border-radius: 30px; padding: 18px; }
-.splash-bob img { border-radius: 22px; }
-.splash-lane { position: absolute; left: 0; height: 6px; width: 70vw; border-radius: 2px; background: var(--lane); transform-origin: left center; animation: lane 1100ms cubic-bezier(.2,.7,.2,1) both; }
-.splash-card { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.96); opacity: 0; background: #FFFFFF; border-radius: 24px; padding: 30px 34px; animation: card-in 300ms ease 1150ms forwards; }
-@keyframes run-in { from { transform: translateX(-75vw); } to { transform: translateX(0); } }
-@keyframes stride { from { translate: 0 0; } to { translate: 0 -10px; } }
-@keyframes lane { 0% { transform: translateX(-60vw); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(-20vw); opacity: 0; } }
-@keyframes runner-out { to { opacity: 0; } }
-@keyframes card-in { to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+/* ---------- Opening animations (see components/Splash.tsx) ---------- */
+.splash { position: fixed; inset: 0; z-index: 100; background: var(--brand); overflow: hidden; animation: splash-out 300ms ease forwards; }
+.sp-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.sp-tile { background: #FFFFFF; border-radius: 30px; padding: 18px; line-height: 0; }
+.sp-card { background: #FFFFFF; border-radius: 24px; padding: 30px 34px; line-height: 0; opacity: 0; }
 @keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+@keyframes sp-card-in { from { opacity: 0; scale: 0.96; } to { opacity: 1; scale: 1; } }
+@keyframes sp-out { to { opacity: 0; } }
+@keyframes sp-wipe { to { clip-path: inset(0 0 0 0); } }
+
+/* Run in */
+.sp-run { animation: sp-run-in 1100ms cubic-bezier(.2,.7,.2,1) both, sp-out 250ms ease 1150ms forwards; }
+.sp-bob { animation: sp-stride 220ms ease-in-out 5 alternate; }
+.sp-streak { position: absolute; left: 0; height: 6px; width: 70vw; border-radius: 3px; background: var(--lane); animation: sp-lane 1100ms cubic-bezier(.2,.7,.2,1) both; }
+.sp-card-late { animation: sp-card-in 300ms ease 1150ms forwards; }
+@keyframes sp-run-in { from { translate: -75vw 0; } to { translate: 0 0; } }
+@keyframes sp-stride { from { translate: 0 0; } to { translate: 0 -10px; } }
+@keyframes sp-lane { 0% { transform: translateX(-60vw); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(-20vw); opacity: 0; } }
+
+/* Track */
+.sp-track { position: absolute; top: 50%; left: 50%; width: min(92vw, 440px); transform: translate(-50%, -50%) rotate(-90deg); animation: sp-out 300ms ease 1300ms forwards; }
+.sp-track circle { animation: sp-draw 900ms cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes sp-draw { to { stroke-dashoffset: 0; } }
+.sp-wipe-card { animation: sp-card-in 250ms ease 850ms forwards; }
+.sp-wipe { clip-path: inset(0 63% 0 0); animation: sp-wipe 550ms cubic-bezier(.6,0,.2,1) 1250ms forwards; }
+
+/* Rhythm */
+.sp-beat { animation: sp-beat 380ms ease-in-out 3, sp-out 200ms ease 1250ms forwards; }
+.sp-ring { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px 0 0 -66px; border: 5px solid var(--lane); border-radius: 36px; opacity: 0; animation: sp-ring 900ms ease-out forwards; }
+.sp-card-rhythm { animation: sp-card-in 300ms ease 1300ms forwards; }
+@keyframes sp-beat { 0%, 100% { scale: 1; } 30% { scale: 1.08; } }
+@keyframes sp-ring { from { opacity: 0.9; scale: 1; } to { opacity: 0; scale: 2.4; } }
+
+/* Countdown */
+.sp-count { font: 500 128px/1 var(--font-mono); color: var(--on-brand); opacity: 0; animation: sp-count 450ms ease forwards; }
+.sp-go { opacity: 0; scale: 0.6; animation: sp-go 380ms cubic-bezier(.3,1.6,.5,1) 1350ms forwards, sp-out 200ms ease 1900ms forwards; }
+.sp-card-count { animation: sp-card-in 300ms ease 1900ms forwards; }
+@keyframes sp-count { 0% { opacity: 0; scale: 0.8; } 25% { opacity: 1; scale: 1; } 75% { opacity: 1; } 100% { opacity: 0; scale: 1.1; } }
+@keyframes sp-go { to { opacity: 1; scale: 1; } }
+
+/* Pace trail */
+.sp-step { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--on-brand); opacity: 0; animation: sp-step 700ms ease forwards; }
+.sp-arrive { opacity: 0; translate: -30vw 0; animation: sp-arrive 500ms cubic-bezier(.2,.8,.2,1) 800ms forwards, sp-out 200ms ease 1500ms forwards; }
+.sp-card-trail { animation: sp-card-in 300ms ease 1550ms forwards; }
+.sp-trail { position: absolute; inset: 0; animation: sp-out 300ms ease 1450ms forwards; }
+@keyframes sp-step { 0% { opacity: 0; scale: 0.4; } 30% { opacity: 0.9; scale: 1; } 100% { opacity: 0.3; scale: 1; } }
+@keyframes sp-arrive { to { opacity: 1; translate: 0 0; } }
+
+/* Quiet reveal */
+.sp-quiet { animation: sp-fade-up 500ms ease forwards; }
+.sp-quiet-mask { clip-path: inset(0 63% 0 0); animation: sp-wipe 700ms cubic-bezier(.6,0,.2,1) 650ms forwards; }
+@keyframes sp-fade-up { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .splash-runner, .splash-lane { display: none; }
-  .splash-card { opacity: 1; transform: translate(-50%, -50%); animation: none; }
-  .splash { animation: splash-out 200ms ease 300ms forwards; }
+  .splash > *:not(.sp-card) { display: none; }
+  .splash .sp-card { opacity: 1; animation: none; }
+  .splash .sp-card * { clip-path: none !important; animation: none !important; }
 }
 
 .skeleton { background: var(--surface-sunken); border-radius: var(--r-card); animation: pulse 1.2s ease-in-out infinite; }

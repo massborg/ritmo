@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, LineChart, MessageCircle, Sun, User } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo } from './components/ui';
 import Today from './pages/Today';
+import { getSplashVariant, Splash } from './components/Splash';
 
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Progress = lazy(() => import('./pages/Progress'));
@@ -18,6 +19,7 @@ const Welcome = lazy(() => import('./pages/Welcome'));
 const Story = lazy(() => import('./pages/Story'));
 const Review = lazy(() => import('./pages/Review'));
 const Goals = lazy(() => import('./pages/Goals'));
+const SplashPicker = lazy(() => import('./pages/SplashPicker'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: Sun },
@@ -95,6 +97,7 @@ function Shell() {
               <Route path="/profile/data" element={<DataSources />} />
               <Route path="/profile/privacy" element={<Privacy />} />
               <Route path="/goals" element={<Goals />} />
+              <Route path="/profile/opening" element={<SplashPicker />} />
               <Route path="/welcome" element={<Welcome />} />
               <Route path="/story" element={<Story />} />
               <Route path="/review/:period" element={<Review />} />
@@ -112,27 +115,6 @@ function Shell() {
   );
 }
 
-function Splash() {
-  const [show, setShow] = useState(true);
-  useEffect(() => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const t = setTimeout(() => setShow(false), reduce ? 500 : 2300);
-    return () => clearTimeout(t);
-  }, []);
-  if (!show) return null;
-  return (
-    <div className="splash" role="img" aria-label="Ritmo Running">
-      <div className="splash-track" aria-hidden="true">
-        {[0, 1, 2, 3].map((i) => <span key={i} className="splash-lane" style={{ top: `${46 + i * 3.2}%`, animationDelay: `${i * 60}ms` }} />)}
-      </div>
-      <div className="splash-runner" aria-hidden="true">
-        <div className="splash-bob"><img src="/brand/ritmo-badge.svg" width={96} height={96} alt="" /></div>
-      </div>
-      <div className="splash-card"><Logo variant="main" width={260} reversed={false} /></div>
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <AppProvider>
@@ -140,7 +122,7 @@ export default function App() {
         <ThemeSync />
         <FirstVisit />
         <ScrollTop />
-        <Splash />
+        <Splash variant={getSplashVariant()} />
         <Shell />
       </BrowserRouter>
     </AppProvider>
