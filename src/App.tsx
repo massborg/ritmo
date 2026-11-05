@@ -62,19 +62,18 @@ function Shell() {
   const { pathname } = useLocation();
   const bare = pathname.startsWith('/welcome');
   return (
-    <div className="app">
+    <div className={`app${bare ? ' app-bare' : ''}`}>
       <a href="#main" className="sr-only">Skip to content</a>
-      {!bare && (
-        <header className="topbar">
-          <div className="topbar-inner">
-            <NavLink to="/" aria-label="Ritmo, go to Today"><Logo variant="compact" width={104} alt="Ritmo" /></NavLink>
-            <nav className="topnav" aria-label="Main">
-              {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={18} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
-            </nav>
-          </div>
-        </header>
-      )}
-      <main id="main" className="main">
+      {!bare ? (
+        <aside className="sidebar" aria-label="Main navigation">
+          <NavLink to="/" className="sidebar-logo" aria-label="Ritmo, go to Today"><Logo variant="compact" width={112} alt="Ritmo" /></NavLink>
+          <nav className="stack-sm" aria-label="Main">
+            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+          </nav>
+          <p className="caption sidebar-foot">Train to your own rhythm.</p>
+        </aside>
+      ) : <span />}
+      <main id="main" className="main page" key={pathname}>
         {!ready ? (
           <div className="stack" aria-busy="true" aria-label="Loading">
             <div className="skeleton" style={{ height: 40, width: 220 }} />
@@ -117,15 +116,19 @@ function Splash() {
   const [show, setShow] = useState(true);
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const t = setTimeout(() => setShow(false), reduce ? 400 : 1400);
+    const t = setTimeout(() => setShow(false), reduce ? 500 : 2300);
     return () => clearTimeout(t);
   }, []);
   if (!show) return null;
   return (
-    <div className="splash" role="presentation">
-      <div className="splash-logo" style={{ background: 'var(--surface-raised)', borderRadius: 20, padding: '30px 34px' }}>
-        <Logo variant="main" width={260} />
+    <div className="splash" role="img" aria-label="Ritmo Running">
+      <div className="splash-track" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => <span key={i} className="splash-lane" style={{ top: `${46 + i * 3.2}%`, animationDelay: `${i * 60}ms` }} />)}
       </div>
+      <div className="splash-runner" aria-hidden="true">
+        <div className="splash-bob"><img src="/brand/ritmo-badge.svg" width={96} height={96} alt="" /></div>
+      </div>
+      <div className="splash-card"><Logo variant="main" width={260} reversed={false} /></div>
     </div>
   );
 }

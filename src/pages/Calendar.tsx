@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, Flag, Plus, RefreshCw } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Flag, Plus, RefreshCw } from 'lucide-react';
+import { MonthCalendar, Sheet } from '../components/inputs';
 import { useApp } from '../app/AppContext';
-import { Empty, SampleBanner, Segmented, StatusLine } from '../components/ui';
+import { AppHeader, Avatar, SampleChip } from '../components/app';
+import { Empty, Segmented, StatusLine } from '../components/ui';
 import { addDays, DAY_SHORT, dist, distanceLabel, duration, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { TYPE_LABEL } from '../training/analysis';
@@ -22,6 +24,7 @@ export default function Calendar() {
   const { data, plan, today, typeOf, buildMyPlan } = useApp();
   const [view, setView] = useState<View>(date ? 'day' : 'week');
   const [cursor, setCursor] = useState<Date>(date ? parseYmd(date) : today);
+  const [picking, setPicking] = useState(false);
   const U = data.profile.units;
   const t = ymd(today);
 
@@ -73,19 +76,16 @@ export default function Calendar() {
 
   return (
     <div className="stack-lg">
-      <SampleBanner />
-      <div className="screen-head">
-        <h1 className="display-lg">Calendar</h1>
+      <AppHeader title="Calendar" right={<><SampleChip /><Avatar /></>} />
+      <div className="row-between">
         <Segmented<View> label="Calendar view" value={view} onChange={setView} options={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
+        <button className="chip" onClick={() => setCursor(today)}>Today</button>
       </div>
 
       <section className="stack" aria-labelledby="cal-title">
-        <div className="row-between">
+        <div className="cal-nav">
           <button className="icon-btn" aria-label="Previous" onClick={() => shift(-1)}><ChevronLeft size={22} strokeWidth={2} /></button>
-          <div className="stack-sm" style={{ alignItems: 'center' }}>
-            <h2 id="cal-title" className="title" aria-live="polite">{title}</h2>
-            <button className="btn btn-ghost btn-small" onClick={() => setCursor(today)}>Today</button>
-          </div>
+          <button id="cal-title" className="cal-nav-title" aria-live="polite" aria-haspopup="dialog" aria-label={`${title}. Choose a date`} onClick={() => setPicking(true)}><CalendarDays size={18} strokeWidth={2} aria-hidden="true" />{title}</button>
           <button className="icon-btn" aria-label="Next" onClick={() => shift(1)}><ChevronRight size={22} strokeWidth={2} /></button>
         </div>
 
@@ -132,8 +132,8 @@ export default function Calendar() {
                     aria-label={`${longDate(d)}: ${race ? race.name : s ? s.title : 'nothing planned'}${acts.length ? ', run done' : ''}`}
                     onClick={() => { setCursor(d); setView('day'); }}>
                     <span className="caption" style={{ color: 'var(--ink)' }}>{d.getDate()}</span>
-                    {race ? <span className="cal-pill" style={typeStyle('race')}>{race.name}</span>
-                      : s && s.type !== 'rest' ? <span className="cal-pill" style={typeStyle(s.type)}>{s.focus}</span> : null}
+                    {race ? <span className="cal-pill" style={typeStyle('race')}><span className="pill-long">{race.name}</span><span className="pill-short">Race</span></span>
+                      : s && s.type !== 'rest' ? <span className="cal-pill" style={typeStyle(s.type)}><span className="pill-long">{s.focus}</span><span className="pill-short">{(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(0)}</span></span> : null}
                     {acts.length > 0 && <span className="row caption" style={{ gap: 2, color: 'var(--success)' }}><Check size={12} strokeWidth={2.5} aria-hidden="true" />{(acts.reduce((x, a) => x + a.distanceM, 0) / (U === 'km' ? 1000 : 1609.344)).toFixed(0)}</span>}
                   </button>
                 );
@@ -178,6 +178,12 @@ export default function Calendar() {
           )}
         </section>
       </div>
+
+      <Sheet open={picking} onClose={() => setPicking(false)} title="Go to date">
+        <MonthCalendar value={ymd(cursor)} marks={new Set((plan?.sessions ?? []).filter((x) => x.type !== 'rest').map((x) => x.date).concat(data.races.map((r) => r.date)))} onChange={(d) => { setCursor(parseYmd(d)); setView('day'); setPicking(false); }} />
+        <p className="caption" style={{ textAlign: 'center' }}>Dots mark planned sessions and races.</p>
+      </Sheet>
+      <button className="fab" aria-label="Add race" onClick={() => nav('/race/new')}><Plus size={26} strokeWidth={2} /></button>
 
       {plan && plan.changes.length > 0 && (
         <section className="card stack" aria-labelledby="changes">

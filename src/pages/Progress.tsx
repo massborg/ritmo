@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Award, Flame, Share2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
-import { Empty, Kpi, SampleBanner, Segmented, ZoneBar } from '../components/ui';
+import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
 import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
 import { estimateFitness, predictTime } from '../training/fitness';
@@ -97,9 +98,8 @@ export default function Progress() {
 
   return (
     <div className="stack-lg">
-      <SampleBanner />
-      <div className="screen-head">
-        <h1 className="display-lg">Progress</h1>
+      <AppHeader title="Progress" right={<><SampleChip /><Avatar /></>} />
+      <div className="row">
         <Segmented label="Units" value={U} onChange={(u) => updateProfile({ units: u })} options={[{ value: 'km', label: 'km' }, { value: 'mi', label: 'miles' }]} />
       </div>
 

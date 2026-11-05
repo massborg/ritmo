@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
 import { addDays, DAY_SHORT, durationWords, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
@@ -34,7 +35,7 @@ export default function Planned() {
 
   return (
     <div className="stack-lg">
-      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
+      <AppHeader title="Session" back large={false} />
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(s.date))} · {PHASE_LABEL[s.phase]} phase{s.movedFrom ? ` · moved from ${DAY_SHORT[weekday(parseYmd(s.movedFrom))]}` : ''}</p>
         <h1 className="display-lg">{s.title}</h1>

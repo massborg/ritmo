@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileUp, Upload } from 'lucide-react';
+import { FileUp, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { SOURCES } from '../data/integration';
 import { relTime } from '../lib/format';
@@ -73,8 +74,7 @@ export default function DataSources() {
   const status = (k: string) => data.sources.find((s) => s.kind === k);
   return (
     <div className="stack-lg">
-      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
-      <h1 className="display-lg">Data sources</h1>
+      <AppHeader title="Data sources" back />
 
       {data.mode === 'sample' && (
         <div className="banner" role="note"><p>You are viewing <strong>sample data</strong>. Uploading your own runs replaces it.</p></div>

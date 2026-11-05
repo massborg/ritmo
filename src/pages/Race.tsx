@@ -1,57 +1,51 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine } from '../components/ui';
 import { daysBetween, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import { pacingPlan, raceReadiness, taperGuidance } from '../training/insights';
 import { estimateFitness, predictTime, vdotFromPerformance } from '../training/fitness';
 import type { CourseType, Race, RacePriority } from '../lib/types';
+import { Chips, DateField, DurationField, Stepper } from '../components/inputs';
 
-function parseTime(s: string): number | undefined {
-  const parts = s.trim().split(':').map(Number);
-  if (!parts.length || parts.some(isNaN)) return undefined;
-  return parts.reduce((acc, p) => acc * 60 + p, 0) * (parts.length === 2 ? 1 : 1);
-}
+const DIST_OPTS = [...RACE_DISTANCES.map((d) => ({ value: String(d.m), label: d.label })), { value: 'custom', label: 'Other' }];
 
 function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) {
+  const known = race ? RACE_DISTANCES.some((d) => Math.abs(d.m - race.distanceM) < 1) : true;
   const [name, setName] = useState(race?.name ?? '');
   const [date, setDate] = useState(race?.date ?? '');
-  const [dm, setDm] = useState(String(race?.distanceM ?? 10000));
-  const [custom, setCustom] = useState('');
+  const [dm, setDm] = useState(race ? (known ? String(race.distanceM) : 'custom') : '10000');
+  const [customKm, setCustomKm] = useState<number | undefined>(race && !known ? Math.round(race.distanceM / 1000) : 15);
   const [course, setCourse] = useState<CourseType>(race?.courseType ?? 'road');
-  const [goal, setGoal] = useState(race?.goalS ? duration(race.goalS) : '');
+  const [goalS, setGoalS] = useState<number | undefined>(race?.goalS);
   const [prio, setPrio] = useState<RacePriority>(race?.priority ?? 'A');
   const [err, setErr] = useState('');
   return (
-    <form className="card stack" onSubmit={(e) => {
+    <form className="stack-lg" onSubmit={(e) => {
       e.preventDefault();
-      const distanceM = dm === 'custom' ? Number(custom) * 1000 : Number(dm);
-      if (!name.trim() || !date || !distanceM) { setErr('Add a name, date and distance.'); return; }
-      const goalS = goal ? parseTime(goal) : undefined;
-      if (goal && !goalS) { setErr('Write the goal time as h:mm:ss or mm:ss.'); return; }
+      const distanceM = dm === 'custom' ? (customKm ?? 0) * 1000 : Number(dm);
+      if (!name.trim()) { setErr('Give the race a name.'); return; }
+      if (!date) { setErr('Choose the race date.'); return; }
+      if (!distanceM) { setErr('Choose a distance.'); return; }
       onSave({ id: race?.id ?? uid(), name: name.trim(), date, distanceM, courseType: course, goalS, priority: prio, resultActivityId: race?.resultActivityId });
     }}>
-      <div className="field"><label htmlFor="rn">Race name</label><input id="rn" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" /></div>
-      <div className="field"><label htmlFor="rd">Date</label><input id="rd" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-      <div className="field"><label htmlFor="rdist">Distance</label>
-        <select id="rdist" className="input" value={dm} onChange={(e) => setDm(e.target.value)}>
-          {RACE_DISTANCES.map((d) => <option key={d.m} value={d.m}>{d.label}</option>)}
-          <option value="custom">Other distance</option>
-        </select>
-        {dm === 'custom' && <input aria-label="Distance in km" className="input" inputMode="decimal" placeholder="Distance in km" value={custom} onChange={(e) => setCustom(e.target.value)} />}
-      </div>
-      <div className="field"><label htmlFor="rc">Course type</label>
-        <select id="rc" className="input" value={course} onChange={(e) => setCourse(e.target.value as CourseType)}>
-          <option value="road">Road</option><option value="trail">Trail</option><option value="track">Track</option><option value="cross-country">Cross-country</option>
-        </select></div>
-      <div className="field"><label htmlFor="rg">Goal time (optional)</label><input id="rg" className="input" placeholder="3:14:30" value={goal} onChange={(e) => setGoal(e.target.value)} inputMode="numeric" /></div>
-      <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend className="label">Priority</legend>
-        <div className="row wrap">{(['A', 'B', 'C'] as RacePriority[]).map((p) => <button type="button" key={p} className="chip" aria-pressed={prio === p} onClick={() => setPrio(p)}>{p}{p === 'A' ? ': main goal' : p === 'B' ? ': important' : ': training race'}</button>)}</div>
-      </fieldset>
+      <section className="card stack">
+        <div className="field"><label htmlFor="rn">Race name</label><input id="rn" className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" placeholder="For example, City Half Marathon" /></div>
+        <DateField id="rd" label="Race date" value={date} onChange={setDate} min={ymd(new Date())} />
+      </section>
+      <section className="card stack">
+        <Chips label="Distance" value={dm} onChange={setDm} options={DIST_OPTS} />
+        {dm === 'custom' && <Stepper id="rkm" label="Distance" unit="km" value={customKm} onChange={setCustomKm} min={1} max={250} />}
+        <Chips<CourseType> label="Course" value={course} onChange={setCourse} options={[{ value: 'road', label: 'Road' }, { value: 'trail', label: 'Trail' }, { value: 'track', label: 'Track' }, { value: 'cross-country', label: 'Cross-country' }]} />
+      </section>
+      <section className="card stack">
+        <DurationField id="rg" label="Goal time (optional)" value={goalS} onChange={setGoalS} />
+        <Chips<RacePriority> label="Priority" value={prio} onChange={setPrio} options={[{ value: 'A', label: 'A', sub: 'main goal' }, { value: 'B', label: 'B', sub: 'important' }, { value: 'C', label: 'C', sub: 'training race' }]} />
+      </section>
       {err && <StatusLine kind="danger">{err}</StatusLine>}
-      <button className="btn btn-primary" type="submit">{race ? 'Save race' : 'Add race'}</button>
+      <button className="btn btn-primary btn-block" type="submit">{race ? 'Save race' : 'Add race'}</button>
     </form>
   );
 }
@@ -67,8 +61,7 @@ export default function RacePage() {
   if (id === 'new' || editing) {
     return (
       <div className="stack-lg">
-        <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => (race ? setEditing(false) : nav(-1))}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
-        <h1 className="display-lg">{race ? 'Edit race' : 'Add a race'}</h1>
+        <AppHeader title={race ? 'Edit race' : 'Add a race'} back />
         <RaceForm race={race} onSave={(r) => { saveRace(r); setEditing(false); nav(`/race/${r.id}`, { replace: true }); }} />
       </div>
     );
@@ -89,7 +82,7 @@ export default function RacePage() {
 
   return (
     <div className="stack-lg">
-      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
+      <AppHeader title="Race" back large={false} />
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(race.date))} · {distanceLabel(race.distanceM)} · {race.courseType}</p>
         <h1 className="display-lg">{race.name}</h1>

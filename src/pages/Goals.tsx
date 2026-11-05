@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { DAY_NAMES, DAY_SHORT, distanceLabel, shortDate, parseYmd } from '../lib/format';
 import type { Injury } from '../lib/types';
 
@@ -26,7 +27,7 @@ export default function Goals() {
   return (
     <div className="stack-lg" style={{ maxWidth: 720 }}>
       {setup && <p className="caption">Step 3 of 3</p>}
-      <h1 className="display-lg">Goals and availability</h1>
+      <AppHeader title="Goals" eyebrow="Goals, races and availability" back={!setup} />
 
       <section className="card stack">
         <div className="field"><label htmlFor="goal">What are you training for?</label><input id="goal" className="input" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="For example, my first 10K, or a marathon under 3:30" /></div>

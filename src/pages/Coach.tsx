@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { SampleBanner } from '../components/ui';
+import { AppHeader, SampleChip } from '../components/app';
 
 const SUGGESTIONS = ['Why is today easy?', 'Am I on track?', 'I only have 30 minutes, what should I do?', 'How did my last run go?', 'What is threshold pace?'];
 
@@ -24,14 +24,7 @@ export default function Coach() {
 
   return (
     <div className="stack-lg">
-      <SampleBanner />
-      <div className="screen-head" style={{ marginBottom: 0 }}>
-        <div className="stack-sm">
-          <h1 className="display-lg">Coach</h1>
-          <p className="muted">Answers come from your own runs and plan. This is coaching guidance, not medical advice.</p>
-        </div>
-        {data.coach.length > 0 && <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear chat</button>}
-      </div>
+      <AppHeader title="Coach" eyebrow="Answers from your own runs and plan. Coaching guidance, not medical advice." right={data.coach.length > 0 ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
 
       <div className="chat" aria-live="polite">
         {data.coach.length === 0 && (

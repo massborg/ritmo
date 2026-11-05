@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Cloud, Database, Shield, Target, Thermometer } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { Logo, SampleBanner, Segmented, StatusLine } from '../components/ui';
+import { Logo, Segmented, StatusLine } from '../components/ui';
+import { AppHeader, SampleChip } from '../components/app';
+import { Stepper } from '../components/inputs';
 import { distanceLabel, relTime, shortDate, parseYmd } from '../lib/format';
 import type { Profile as P } from '../lib/types';
 
@@ -15,8 +17,7 @@ export default function Profile() {
 
   return (
     <div className="stack-lg">
-      <SampleBanner />
-      <div className="screen-head"><h1 className="display-lg">Profile</h1></div>
+      <AppHeader title="Profile" right={<SampleChip />} />
 
       <section className="card stack">
         <div className="field"><label htmlFor="pname">Your name</label><input id="pname" className="input" value={p.name} onChange={(e) => updateProfile({ name: e.target.value })} autoComplete="given-name" /></div>
@@ -28,11 +29,11 @@ export default function Profile() {
         </div>
       </section>
 
-      <ul className="card list" style={{ padding: '0 var(--s4)' }}>
-        <li><Link to="/goals" className="list-item row-between"><span className="row"><Target size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Goals and availability</span><span className="caption">{p.goal || 'Not set'}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link></li>
-        <li><Link to="/profile/data" className="list-item row-between"><span className="row"><Database size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Data sources</span><span className="caption">{data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}{data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link></li>
-        <li><Link to="/profile/privacy" className="list-item row-between"><span className="row"><Shield size={20} strokeWidth={2} aria-hidden="true" /><span className="label">Privacy and your data</span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link></li>
-      </ul>
+      <div className="group">
+        <Link to="/goals" className="row-between"><span className="row"><span className="row-icon"><Target size={18} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Goals and availability</span><span className="caption">{p.goal || 'Not set'}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
+        <Link to="/profile/data" className="row-between"><span className="row"><span className="row-icon"><Database size={18} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Data sources</span><span className="caption">{data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}{data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
+        <Link to="/profile/privacy" className="row-between"><span className="row"><span className="row-icon"><Shield size={18} strokeWidth={2} aria-hidden="true" /></span><span className="label">Privacy and your data</span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
+      </div>
 
       <section className="card stack" aria-labelledby="ill">
         <div className="row" style={{ gap: 8 }}><Thermometer size={20} strokeWidth={2} aria-hidden="true" /><h2 id="ill" className="title">Feeling unwell?</h2></div>
@@ -52,8 +53,8 @@ export default function Profile() {
       <section className="card stack" aria-labelledby="hr">
         <h2 id="hr" className="title">Heart rate and fitness</h2>
         <div className="grid-2">
-          <div className="field"><label htmlFor="maxhr">Maximum heart rate</label><input id="maxhr" className="input" inputMode="numeric" value={p.maxHr ?? ''} placeholder={`${hr.max} estimated`} onChange={(e) => updateProfile({ maxHr: Number(e.target.value) || undefined })} /></div>
-          <div className="field"><label htmlFor="resthr">Resting heart rate</label><input id="resthr" className="input" inputMode="numeric" value={p.restHr ?? ''} placeholder={`${hr.rest} estimated`} onChange={(e) => updateProfile({ restHr: Number(e.target.value) || undefined })} /></div>
+          <Stepper id="maxhr" label="Maximum heart rate" unit="bpm" value={p.maxHr} placeholder={String(hr.max)} min={120} max={230} onChange={(v) => updateProfile({ maxHr: v })} />
+          <Stepper id="resthr" label="Resting heart rate" unit="bpm" value={p.restHr} placeholder={String(hr.rest)} min={30} max={100} onChange={(v) => updateProfile({ restHr: v })} />
         </div>
         <div className="table-scroll"><table className="data"><caption className="sr-only">Heart rate zones</caption><thead><tr><th scope="col">Zone</th><th scope="col">From</th><th scope="col">To</th></tr></thead>
           <tbody>{zones.map((z) => <tr key={z.zone}><td style={{ fontFamily: 'var(--font-body)' }}><span className="row" style={{ gap: 8 }}><span className={`zone-dot z${z.zone}`} aria-hidden="true" />Z{z.zone}</span></td><td>{z.min}</td><td>{z.max}</td></tr>)}</tbody></table></div>

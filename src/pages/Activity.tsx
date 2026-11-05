@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, TrendingUp, X } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { Check, TrendingUp, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
 import { dist, duration, longDate, pace, type Units } from '../lib/format';
@@ -76,7 +77,6 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const nav = useNavigate();
   const { data, analysisFor, logFeedback } = useApp();
   const a = data.activities.find((x) => x.id === id);
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
@@ -98,7 +98,7 @@ export default function ActivityPage() {
 
   return (
     <div className="stack-lg">
-      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
+      <AppHeader title="Run" back large={false} />
       <div className="stack-sm">
         <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source}</p>
         <h1 className="display-lg">{a.name}</h1>

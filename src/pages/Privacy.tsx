@@ -1,18 +1,16 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 
 export default function Privacy() {
-  const nav = useNavigate();
   const { exportData, deleteAll, session } = useApp();
   const [confirm, setConfirm] = useState('');
   const [done, setDone] = useState(false);
   return (
     <div className="stack-lg">
-      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
-      <h1 className="display-lg">Privacy and your data</h1>
+      <AppHeader title="Privacy" eyebrow="Your data, and how Ritmo uses it" back />
 
       <section className="card stack">
         <h2 className="title">What Ritmo uses, and why</h2>
