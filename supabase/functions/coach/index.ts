@@ -1,6 +1,7 @@
 // Ritmo coach: phrases an answer from facts computed in the app. It must not invent numbers.
 // Requires the ANTHROPIC_API_KEY secret. Without it, returns 503 and the app uses its local, grounded answers.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,10 @@ A DRAFT answer built from the same facts is provided; you may improve its wordin
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  // Only real signed-in users may use the coach (the public anon key alone is not enough)
+  const asUser = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
+  const { data: who } = await asUser.auth.getUser();
+  if (!who?.user) return new Response(JSON.stringify({ error: 'not_signed_in' }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } });
   const key = Deno.env.get('ANTHROPIC_API_KEY');
   if (!key) return new Response(JSON.stringify({ error: 'not_configured' }), { status: 503, headers: { ...cors, 'Content-Type': 'application/json' } });
   try {

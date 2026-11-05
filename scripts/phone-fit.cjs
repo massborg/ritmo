@@ -1,17 +1,25 @@
 // Phone-fit check: run 'npm run build && npx vite preview --port 4173' first, then 'node scripts/phone-fit.cjs'. Reports overflow and small tap targets on seven phone sizes.
 const { chromium, devices } = require('playwright');
+const { createMock } = require('../e2e/mock-supabase.cjs');
+const SUPA = 'https://gujuzacfqxbwfpprkgrx.supabase.co';
 const B = 'http://localhost:4173';
 const DEV = ['iPhone SE', 'iPhone 13 mini', 'iPhone 15', 'iPhone 15 Pro Max', 'Pixel 7', 'Galaxy S9+', 'Galaxy A55'];
-const ROUTES = ['/', '/calendar', '/progress', '/coach', '/profile', '/profile/data', '/profile/privacy', '/profile/health', '/goals', '/story', '/review/2026-10', '/race/race-valencia', '/race/new', '/welcome'];
+const ROUTES = ['/login', '/signup', '/forgot-password', '/start', '/', '/calendar', '/progress', '/coach', '/profile', '/profile/data', '/profile/privacy', '/profile/health', '/goals', '/story', '/review/2026-10', '/race/race-valencia', '/race/new', '/welcome'];
 (async () => {
   const b = await chromium.launch();
   const out = [];
   for (const name of DEV) {
     const d = devices[name] || { viewport: { width: 360, height: 780 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: devices['Pixel 7'].userAgent };
     const c = await b.newContext({ ...d });
+    const mock = createMock();
+    await mock.install(c, SUPA);
     const p = await c.newPage();
-    await p.goto(B + '/welcome'); await p.waitForTimeout(2600);
-    await p.getByRole('button', { name: 'Explore with sample data' }).click(); await p.waitForTimeout(1800);
+    const email = `fit-${name.replace(/\W/g, '')}@test.ritmo`;
+    await p.goto(B + '/signup'); await p.waitForTimeout(2600);
+    await p.locator('#su-email').fill(email); await p.locator('#su-password').fill('Runner2026'); await p.locator('.consent input').check();
+    await p.getByRole('button', { name: 'Create account' }).click(); await p.getByText('Check your email').waitFor();
+    await p.goto(B + '/login?confirmed=1' + mock.linkFor(email, 'signup')); await p.waitForURL(/welcome/);
+    await p.getByRole('button', { name: /Look around with sample data/ }).click(); await p.waitForTimeout(1800);
     const routes = [...ROUTES];
     // add an activity and a session page
     const act = await p.evaluate(() => [...document.querySelectorAll('a[href^="/activity/"]')].map(a => a.getAttribute('href'))[0]);
@@ -19,9 +27,11 @@ const ROUTES = ['/', '/calendar', '/progress', '/coach', '/profile', '/profile/d
     await p.goto(B + '/calendar'); await p.waitForTimeout(1500);
     const sess = await p.evaluate(() => [...document.querySelectorAll('a[href^="/session/"]')].map(a => a.getAttribute('href'))[0]);
     if (sess) routes.push(sess);
+    const anon = await (await b.newContext({ ...d })).newPage();
     for (const r of routes) {
-      await p.goto(B + r); await p.waitForTimeout(2600);
-      const res = await p.evaluate(() => {
+      const pg = ['/login', '/signup', '/forgot-password'].includes(r) ? anon : p;
+      await pg.goto(B + r); await pg.waitForTimeout(2600);
+      const res = await pg.evaluate(() => {
         const vw = document.documentElement.clientWidth;
         const sw = document.documentElement.scrollWidth;
         const bad = [];

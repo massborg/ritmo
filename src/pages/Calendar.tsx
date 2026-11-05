@@ -4,7 +4,7 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, Flag, Plus, RefreshCw }
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
-import { Empty, Segmented, StatusLine } from '../components/ui';
+import { Segmented, StatusLine } from '../components/ui';
 import { addDays, DAY_SHORT, dist, distanceLabel, duration, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { TYPE_LABEL } from '../training/analysis';
@@ -13,7 +13,7 @@ import type { PlannedSession, SessionType } from '../lib/types';
 type View = 'day' | 'week' | 'month';
 
 const typeStyle = (t: SessionType): React.CSSProperties => {
-  const z: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, tempo: 3, threshold: 4, hills: 4, vo2max: 5, speed: 5 };
+  const z: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, runwalk: 2, tempo: 3, threshold: 4, hills: 4, timetrial: 4, vo2max: 5, speed: 5 };
   const zone = z[t];
   return zone ? { borderLeft: `3px solid var(--zone-${zone})` } : t === 'race' ? { background: 'var(--accent)', color: 'var(--on-accent)' } : {};
 };
@@ -25,6 +25,7 @@ export default function Calendar() {
   const [view, setView] = useState<View>(date ? 'day' : 'week');
   const [cursor, setCursor] = useState<Date>(date ? parseYmd(date) : today);
   const [picking, setPicking] = useState(false);
+  const [planMsg, setPlanMsg] = useState<string>();
   const U = data.profile.units;
   const t = ymd(today);
 
@@ -60,7 +61,7 @@ export default function Calendar() {
         <span className="label">{s.title}</span>
         {s.status === 'done' ? <StatusLine kind="success">Done</StatusLine> : s.status === 'missed' ? <StatusLine kind="warning">Missed</StatusLine> : <span className="caption">{s.focus}</span>}
       </div>
-      {s.type !== 'rest' && <span className="caption">{dist(s.distanceM, U, 0)} · {s.steps.map((x) => x.label).join(', ')}</span>}
+      {s.type !== 'rest' && <span className="caption">{s.distanceM > 0 ? `${dist(s.distanceM, U, 0)} · ` : `${Math.round(s.durationS / 60)} min · `}{s.steps.map((x) => x.label).join(', ')}</span>}
     </Link>
   );
 
@@ -107,7 +108,7 @@ export default function Calendar() {
                       </span>
                       <span className="stack-sm" style={{ gap: 2 }}>
                         <span className="label">{race ? race.name : s ? s.title : 'Nothing planned'}</span>
-                        <span className="caption">{acts.length ? `${acts.map((a) => dist(a.distanceM, U)).join(' + ')} done` : s && s.type !== 'rest' ? `${dist(s.distanceM, U, 0)} · ${s.focus}` : ''}</span>
+                        <span className="caption">{acts.length ? `${acts.map((a) => dist(a.distanceM, U)).join(' + ')} done` : s && s.type !== 'rest' ? `${s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · ${s.focus}` : ''}</span>
                       </span>
                       <span>{acts.length ? <span className="status status-success"><Check size={18} strokeWidth={2} aria-hidden="true" /><span className="sr-only">Done</span></span> : s?.status === 'missed' ? <span className="caption">Missed</span> : null}</span>
                     </button>
@@ -133,7 +134,7 @@ export default function Calendar() {
                     onClick={() => { setCursor(d); setView('day'); }}>
                     <span className="caption" style={{ color: 'var(--ink)' }}>{d.getDate()}</span>
                     {race ? <span className="cal-pill" style={typeStyle('race')}><span className="pill-long">{race.name}</span><span className="pill-short">Race</span></span>
-                      : s && s.type !== 'rest' ? <span className="cal-pill" style={typeStyle(s.type)}><span className="pill-long">{s.focus}</span><span className="pill-short">{(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(0)}</span></span> : null}
+                      : s && s.type !== 'rest' ? <span className="cal-pill" style={typeStyle(s.type)}><span className="pill-long">{s.focus}</span><span className="pill-short">{s.distanceM > 0 ? (s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(0) : `${Math.round(s.durationS / 60)}′`}</span></span> : null}
                     {acts.length > 0 && <span className="row caption" style={{ gap: 2, color: 'var(--success)' }}><Check size={12} strokeWidth={2.5} aria-hidden="true" />{(acts.reduce((x, a) => x + a.distanceM, 0) / (U === 'km' ? 1000 : 1609.344)).toFixed(0)}</span>}
                   </button>
                 );
@@ -162,8 +163,9 @@ export default function Calendar() {
 
         <section className="card stack" aria-labelledby="plan">
           <div className="row-between"><h2 id="plan" className="title">Training plan</h2>
-            <button className="btn btn-small" onClick={buildMyPlan}><RefreshCw size={18} strokeWidth={2} aria-hidden="true" />{plan ? 'Rebuild' : 'Build my plan'}</button></div>
-          {!plan ? <Empty title="No plan yet">Build a plan from your history, fitness, races and available days.</Empty> : (
+            <button className="btn btn-small" onClick={() => setPlanMsg(buildMyPlan())}><RefreshCw size={18} strokeWidth={2} aria-hidden="true" />{plan ? 'Rebuild' : 'Build my plan'}</button></div>
+          {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
+          {!plan ? <p className="muted">No plan yet. {data.activities.length ? 'Build one from your history, fitness, races and available days.' : <>New to running? <Link to="/start" className="label">Start a beginner plan</Link>. Already running? <Link to="/profile/data" className="label">Upload your runs</Link> first.</>}</p> : (
             <>
               <div className="row" style={{ gap: 2 }} role="img" aria-label={plan.phases.map((p) => `${PHASE_LABEL[p.phase]} from ${p.start}`).join(', ')}>
                 {plan.phases.map((p) => {

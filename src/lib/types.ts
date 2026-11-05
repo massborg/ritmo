@@ -3,6 +3,7 @@
 export type SourceKind =
   | 'sample'
   | 'upload'
+  | 'manual'
   | 'garmin'
   | 'apple_health'
   | 'health_connect'
@@ -19,6 +20,8 @@ export type SessionType =
   | 'speed'
   | 'hills'
   | 'race'
+  | 'runwalk'
+  | 'timetrial'
   | 'rest';
 
 export interface StreamPoint {
@@ -56,6 +59,7 @@ export interface Activity {
   laps?: Lap[];
   streams?: StreamPoint[];
   isRace?: boolean;
+  isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
   detailScore: number; // higher = more detailed, used to choose the best duplicate
   importedAt: string;
 }
@@ -102,6 +106,9 @@ export interface Profile {
   injuries: Injury[];
   onboarded: boolean;
   illnessUntil?: string; // YYYY-MM-DD, set when runner reports illness
+  experience?: 'new' | 'runner';
+  starter?: { canRun10: boolean; walksRegularly: boolean; startedAt: string };
+  healthConsentAt?: string; // when the runner agreed to health data processing
 }
 
 export interface SessionStep {

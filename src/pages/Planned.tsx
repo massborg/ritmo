@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeftRight } from 'lucide-react';
+import { Check, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
 import { addDays, DAY_SHORT, durationWords, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
@@ -17,6 +18,8 @@ const CONCEPTS: Record<string, string> = {
   speed: 'Strides and short reps train fast, relaxed form. They make every pace more economical.',
   hills: 'Hill reps build strength and power with less impact than flat speed work.',
   race: 'Race day. Start controlled and run your plan.',
+  runwalk: 'Run/walk means short spells of easy running with walking breaks. It is how most new runners build up safely: your heart and lungs adapt quickly, while muscles, tendons and bones need a little longer.',
+  timetrial: 'A time trial is a solo effort over a set distance. It tells Ritmo your current fitness so it can set paces and predict race times.',
   rest: 'Rest is when your body adapts to training. Skipping it makes the hard days less effective.',
 };
 
@@ -26,6 +29,7 @@ export default function Planned() {
   const { plan, data, moveSession, today } = useApp();
   const s = plan?.sessions.find((x) => x.id === id);
   const [moving, setMoving] = useState(false);
+  const [logging, setLogging] = useState(false);
   const U = data.profile.units;
   if (!s) return <Empty title="Session not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
 
@@ -50,7 +54,7 @@ export default function Planned() {
           <h2 className="title">The session</h2>
           {s.type !== 'rest' && (
             <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-              <div><p className="caption">Distance</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(1)} {U}</p></div>
+              <div><p className="caption">Distance</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{s.distanceM > 0 ? `${(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(1)} ${U}` : 'By time'}</p></div>
               <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{durationWords(s.durationS)}</p></div>
             </div>
           )}
@@ -71,11 +75,13 @@ export default function Planned() {
 
       <div className="row wrap">
         {done && <Link className="btn btn-primary" to={`/activity/${done}`}>See your feedback</Link>}
+        {!done && s.type !== 'rest' && s.date <= ymd(today) && <button className="btn btn-primary" onClick={() => setLogging(true)}><Check size={18} strokeWidth={2} aria-hidden="true" />I did it</button>}
         {!done && s.date >= ymd(today) && options.length > 0 && (
           <button className="btn" aria-expanded={moving} onClick={() => setMoving((m) => !m)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Move this session</button>
         )}
         <Link to="/coach?q=Why is today easy?" className="btn btn-ghost">Ask your coach</Link>
       </div>
+      {logging && <LogRunSheet open onClose={() => setLogging(false)} session={s} />}
       {moving && (
         <section className="card stack" aria-label="Choose a new day">
           <p className="label">Move to another day this week. If that day has a session, the two swap.</p>

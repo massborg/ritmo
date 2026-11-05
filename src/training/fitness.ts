@@ -1,5 +1,6 @@
 // Fitness model: VDOT (Daniels/Gilbert), race predictions, training paces and heart-rate zones.
 import type { Activity, Profile, StreamPoint } from '../lib/types';
+import { shortDate } from '../lib/format';
 
 /** Oxygen cost of running at v metres/minute */
 const vo2AtV = (v: number) => -4.6 + 0.182258 * v + 0.000104 * v * v;
@@ -126,28 +127,31 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
     const t = new Date(a.startTime).getTime();
     if (t < from || t > at.getTime() || a.distanceM < 3000) continue;
     const hardHr = a.avgHr ? a.avgHr >= hr.rest + 0.82 * (hr.max - hr.rest) : false;
-    const candidates: { v: number; label: string }[] = [];
-    if (a.isRace) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: `your ${a.name}` });
+    const allOut = a.isRace || a.isTimeTrial;
+    const when = shortDate(new Date(a.startTime));
+    const candidates: { v: number; label: string; allOut: boolean }[] = [];
+    if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isRace ? `your ${a.name} on ${when}` : `your time trial on ${when}`, allOut: true });
     if (a.streams?.length) {
       for (const d of EFFORT_DISTANCES) {
         const e = bestEffort(a.streams, d);
-        if (e) candidates.push({ v: vdotFromPerformance(d, e) * (a.isRace ? 1 : 0.965), label: `a ${d / 1000} km effort on ${a.startTime.slice(0, 10)}` });
+        if (e) candidates.push({ v: vdotFromPerformance(d, e) * (allOut ? 1 : 0.965), label: `a ${d / 1000} km effort on ${when}`, allOut: !!allOut });
       }
     }
-    if (!a.isRace && hardHr) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS) * 0.97, label: `your hard run on ${a.startTime.slice(0, 10)}` });
+    if (!allOut && hardHr) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS) * 0.97, label: `your hard run on ${when}`, allOut: false });
     for (const c of candidates) {
-      // decay older results a little: 1% per 30 days
+      // Results stay at full value for 60 days, then fade by about 1% a month as fitness may have changed
       const ageDays = (at.getTime() - t) / 86400000;
-      const v = c.v * (1 - 0.01 * (ageDays / 30));
-      if (!best || v > best.vdot) {
-        best = { vdot: v, basedOn: c.label, date: a.startTime.slice(0, 10), confidence: a.isRace ? 'high' : 'medium' };
+      const v = c.v * (1 - 0.01 * (Math.max(0, ageDays - 60) / 30));
+      // Prefer the all-out result when a training segment of the same run scores higher
+      if (!best || v > best.vdot + 0.05) {
+        best = { vdot: v, basedOn: c.label, date: a.startTime.slice(0, 10), confidence: c.allOut ? 'high' : 'medium' };
       }
     }
   }
   if (!best) {
     // fall back to average easy running: easy pace ~ 70% VO2max
     const easy = activities
-      .filter((a) => new Date(a.startTime).getTime() > from && a.distanceM > 4000)
+      .filter((a) => new Date(a.startTime).getTime() > from && a.distanceM >= 1500 && a.movingS >= 600)
       .map((a) => a.movingS / (a.distanceM / 1000));
     if (!easy.length) return undefined;
     easy.sort((a, b) => a - b);
@@ -155,6 +159,5 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
     const v = 60000 / median;
     return { vdot: vo2AtV(v) / 0.7, basedOn: 'your typical easy pace', date: new Date(at).toISOString().slice(0, 10), confidence: 'low' };
   }
-  best.vdot = Math.round(best.vdot * 10) / 10;
   return best;
 }

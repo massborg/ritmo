@@ -15,6 +15,8 @@ export const TYPE_LABEL: Record<SessionType, string> = {
   speed: 'Speed session',
   hills: 'Hill session',
   race: 'Race',
+  runwalk: 'Run/walk',
+  timetrial: 'Time trial',
   rest: 'Rest day',
 };
 
@@ -28,6 +30,8 @@ export const TYPE_FOCUS: Record<SessionType, string> = {
   speed: 'Speed',
   hills: 'Hill strength',
   race: 'Race',
+  runwalk: 'Building up',
+  timetrial: 'Fitness test',
   rest: 'Recovery',
 };
 
@@ -235,6 +239,9 @@ export function analyse(opts: {
   typeOf: (x: Activity) => SessionType;
 }): Analysis {
   const { a, all, paces, zones, typicalMovingS, planned, feedback, pastFeedback, units, typeOf } = opts;
+  if (planned?.type === 'runwalk' || planned?.type === 'timetrial' || a.source === 'manual' || a.isTimeTrial) {
+    return simpleAnalysis(a, planned, feedback, units);
+  }
   const cls = classify(a, paces, zones, typicalMovingS);
   const type = cls.type;
   const avgPace = a.movingS / (a.distanceM / 1000);
@@ -397,5 +404,61 @@ export function analyse(opts: {
     improve,
     nextDays,
     limitedData,
+  };
+}
+
+/** Feedback for run/walk sessions, time trials and hand-logged runs: built only from time, distance and feel. */
+function simpleAnalysis(a: Activity, planned: PlannedSession | undefined, feedback: SessionFeedback | undefined, units: Units): Analysis {
+  const type: SessionType = a.isTimeTrial || planned?.type === 'timetrial' ? 'timetrial' : planned?.type === 'runwalk' ? 'runwalk' : a.isRace ? 'race' : 'easy';
+  const P = (s: number) => fmtPace(s, units);
+  const minutes = Math.round(a.movingS / 60);
+  const pva: Analysis['plannedVsActual'] = [];
+  let score = 85;
+  const wentWell: string[] = [];
+  const improve: string[] = [];
+  if (planned && planned.durationS > 0) {
+    const ratio = a.movingS / planned.durationS;
+    const ok = ratio >= 0.85;
+    pva.push({ label: 'Time', planned: `${Math.round(planned.durationS / 60)} min`, actual: `${minutes} min`, ok });
+    if (!ok) score -= 10;
+  }
+  if (type === 'runwalk') {
+    wentWell.push(`You completed ${planned ? `"${planned.title}"` : 'your session'}: ${minutes} minutes on your feet. Every session like this makes the next one easier.`);
+  } else if (type === 'timetrial') {
+    wentWell.push(`You ran ${(a.distanceM / 1000).toFixed(2)} km in ${Math.floor(a.movingS / 60)}:${String(Math.round(a.movingS % 60)).padStart(2, '0')}, an average of ${P(a.movingS / (a.distanceM / 1000))}. This result now sets your training paces and race predictions.`);
+  } else {
+    wentWell.push(`You logged ${(a.distanceM / 1000).toFixed(1)} km in ${minutes} minutes. Consistency like this is what builds fitness.`);
+  }
+  if (feedback?.feel === 1) {
+    score -= 10;
+    improve.push(type === 'runwalk'
+      ? 'That felt very hard, so your next session repeats this one instead of moving on. There is no rush: repeating a week is normal and smart.'
+      : 'That felt very hard. Take an extra rest day and keep your next run gentle.');
+  } else if (feedback?.feel === 2) {
+    improve.push('If the running felt hard, slow it right down. You should be able to talk in full sentences.');
+  } else {
+    improve.push(feedback ? 'Nothing to change. Keep the running parts relaxed and conversational.' : 'Tell Ritmo how it felt below, so the next sessions can be adjusted for you.');
+  }
+  if (feedback?.pain.some((p) => p.severity >= 2 || /chest|dizz/i.test(p.area))) {
+    improve.push('You logged pain or a worrying symptom. Rest, and see a doctor or physio if it continues. For chest pain, dizziness or fainting, stop exercising and get medical advice straight away.');
+  }
+  const nextDays = feedback?.pain.length ? 'The next days are rest or easy walking while this settles.'
+    : type === 'timetrial' ? 'Two easy days now. Your full plans, predictions and readiness score are unlocked.'
+    : 'Rest tomorrow. Your body gets stronger on rest days, not only on run days.';
+  return {
+    type,
+    classificationReason: type === 'runwalk' ? 'Planned run/walk session' : type === 'timetrial' ? 'Marked as a time trial' : 'Logged by hand',
+    score: Math.max(40, Math.min(100, score)),
+    scoreReason: score >= 80 ? 'Session done as planned.' : 'Session done, with some changes from the plan.',
+    planned,
+    plannedVsActual: pva,
+    splits: [],
+    patterns: {},
+    patternNotes: [],
+    similar: [],
+    wentWell,
+    improve,
+    nextDays,
+    limitedData: a.source === 'manual' ? 'You logged this run by hand, so there are no splits or heart rate. Ritmo uses your time, distance and how it felt.' : undefined,
   };
 }

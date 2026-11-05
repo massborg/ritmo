@@ -10,7 +10,7 @@ import { TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import type { SessionFeedback } from '../lib/types';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
-const AREAS = ['Foot', 'Ankle', 'Achilles', 'Left calf', 'Right calf', 'Shin', 'Knee', 'Hamstring', 'Hip', 'Lower back'];
+const AREAS = ['Foot', 'Ankle', 'Achilles', 'Left calf', 'Right calf', 'Shin', 'Knee', 'Hamstring', 'Hip', 'Lower back', 'Chest pain, dizziness or feeling faint'];
 
 function FeedbackForm({ activityId, existing, onSave }: { activityId: string; existing?: SessionFeedback; onSave: (f: SessionFeedback) => void }) {
   const [feel, setFeel] = useState<number | undefined>(existing?.feel);
@@ -40,7 +40,8 @@ function FeedbackForm({ activityId, existing, onSave }: { activityId: string; ex
             ))}
           </div>
         ))}
-        {pain.some((p) => p.severity >= 2) && <StatusLine kind="warning">Ritmo will keep the next days easy. If pain persists or changes how you run, please see a physio or doctor.</StatusLine>}
+        {pain.some((p) => /chest|dizz/i.test(p.area)) ? <div role="alert"><StatusLine kind="danger">Please stop exercising and get medical advice before you run again. If it is severe or happening now, call your local emergency number.</StatusLine></div>
+          : pain.some((p) => p.severity >= 2) && <StatusLine kind="warning">Ritmo will keep the next days easy. If pain persists or changes how you run, please see a physio or doctor.</StatusLine>}
       </fieldset>
       <div className="field">
         <label htmlFor="notes">Notes</label>

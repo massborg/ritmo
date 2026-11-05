@@ -3,11 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, SampleChip } from '../components/app';
+import { suggestions } from '../coach/coach';
 
-const SUGGESTIONS = ['Why is today easy?', 'Am I on track?', 'I only have 30 minutes, what should I do?', 'How did my last run go?', 'What is threshold pace?'];
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession } = useApp();
+  const SUGGESTIONS = suggestions(todaySession, data.activities.length > 0);
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
@@ -28,7 +29,7 @@ export default function Coach() {
 
       <div className="chat" aria-live="polite">
         {data.coach.length === 0 && (
-          <div className="bubble bubble-coach"><p>Hello{data.profile.name ? ` ${data.profile.name}` : ''}. I know your history, your plan and how your recent runs went. What would you like to know?</p></div>
+          <div className="bubble bubble-coach"><p>Hello{data.profile.name ? ` ${data.profile.name}` : ''}. {data.activities.length ? 'I know your runs, your plan and how your recent sessions went.' : todaySession ? 'I know your plan, and I will learn more about you with every run you log.' : 'Once you have a plan or log a run, I can answer with your own data.'} What would you like to know?</p></div>
         )}
         {data.coach.map((m) => (
           <div key={m.id} className={`bubble ${m.role === 'coach' ? 'bubble-coach' : 'bubble-runner'}`}>

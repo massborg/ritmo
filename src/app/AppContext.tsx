@@ -2,18 +2,23 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Plan, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
-import { type AppData, clearLocal, deleteCloudData, emptyData, loadLocal, pullFromCloud, pushToCloud, saveLocal } from '../data/store';
-import { generateSample, SAMPLE_TODAY } from '../data/sample';
-import { merge } from '../data/integration';
+import {
+  type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
+  loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushToCloud, saveUserCache,
+} from '../data/store';
+import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
+import { detailScore, merge } from '../data/integration';
 import { parseFiles } from '../data/parsers';
 import { supabase } from '../data/supabase';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { estimateFitness, type FitnessEstimate, hrSetup, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
-import { adaptPlan, buildPlan, moveSession as movePlanSession } from '../training/plan';
+import { adaptPlan, buildPlan, buildStarterPlan, moveSession as movePlanSession } from '../training/plan';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
+import { fitnessStage, type StageInfo } from '../training/stage';
 import { ask, type CoachContext } from '../coach/coach';
+import { logOut } from './auth';
 
 export interface ImportState {
   running: boolean;
@@ -24,12 +29,26 @@ export interface ImportState {
   error?: string;
 }
 
+export interface ManualRun {
+  date: string;
+  durationS: number;
+  distanceM: number;
+  feel: SessionFeedback['feel'];
+  rpe?: number;
+  pain: SessionFeedback['pain'];
+  notes?: string;
+  sessionId?: string;
+}
+
+export interface StarterAnswers { canRun10: boolean; walksRegularly: boolean; goal: string; days: number[]; injuries: Profile['injuries'] }
+
 interface Derived {
   today: Date;
   hr: HrSetup;
   zones: Zones;
   fitness?: FitnessEstimate;
   paces?: TrainingPaces;
+  stage: StageInfo;
   series: LoadDay[];
   readiness: Readiness;
   plan?: Plan;
@@ -42,20 +61,29 @@ interface Derived {
 }
 
 interface Ctx extends Derived {
-  ready: boolean;
-  data: AppData;
+  authReady: boolean;
   session: Session | null;
-  cloudError?: string;
+  recovering: boolean;
+  ready: boolean;
+  loadError?: string;
+  data: AppData;
+  syncError?: string;
+  legacyOffer?: { runs: number; races: number };
   importState: ImportState;
   coachBusy: boolean;
+  retryLoad: () => void;
+  acceptLegacy: () => Promise<void>;
+  dismissLegacy: (discard: boolean) => Promise<void>;
   loadSample: () => void;
   startFresh: () => void;
+  startBeginner: (a: StarterAnswers) => void;
   importFiles: (files: File[]) => Promise<void>;
+  logManualRun: (r: ManualRun) => string;
   updateProfile: (p: Partial<Profile>) => void;
   saveRace: (r: Race) => void;
   deleteRace: (id: string) => void;
   logFeedback: (f: SessionFeedback) => void;
-  buildMyPlan: () => void;
+  buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
   reportIllness: (days: number) => void;
   clearIllness: () => void;
@@ -63,13 +91,13 @@ interface Ctx extends Derived {
   sendCoach: (text: string) => Promise<void>;
   clearCoach: () => void;
   exportData: () => void;
-  deleteAll: () => Promise<void>;
+  deleteEverything: () => Promise<string | undefined>;
   disconnectSource: (k: SourceKind) => void;
   connectHealth: () => Promise<string | undefined>;
   syncHealthNow: (justConnected?: boolean) => Promise<void>;
   healthSyncing: boolean;
-  signIn: (email: string) => Promise<string | undefined>;
   signOut: () => Promise<void>;
+  finishRecovery: () => void;
 }
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -80,57 +108,143 @@ export function useApp() {
   return c;
 }
 
+const sampleBundle = (keep?: Partial<Profile>): AppData => {
+  const s = generateSample();
+  return { ...s, profile: { ...SAMPLE_PROFILE, ...pickPrefs(keep) }, mode: 'sample', coach: [], sources: [{ kind: 'sample', connected: true, lastSyncAt: new Date().toISOString(), activityCount: s.activities.length }] };
+};
+/** Combine account data with changes that only reached this device (e.g. the app closed before saving). */
+function mergeDeviceChanges(cloud: AppData, device: AppData): AppData {
+  const out = { ...cloud };
+  out.activities = merge(cloud.activities, device.activities.filter((a) => !cloud.activities.some((b) => b.id === a.id))).activities;
+  const fb = new Map(cloud.feedback.map((f) => [f.activityId, f]));
+  for (const f of device.feedback) { const c = fb.get(f.activityId); if (!c || f.loggedAt > c.loggedAt) fb.set(f.activityId, f); }
+  out.feedback = [...fb.values()];
+  out.races = [...cloud.races, ...device.races.filter((r) => !cloud.races.some((x) => x.id === r.id))];
+  out.coach = [...cloud.coach, ...device.coach.filter((m) => !cloud.coach.some((x) => x.id === m.id))].sort((a, b) => a.at.localeCompare(b.at));
+  if (device.plan && (!cloud.plan || (device.plan.id === cloud.plan.id ? device.plan.changes.length > cloud.plan.changes.length : device.plan.createdAt > cloud.plan.createdAt))) out.plan = device.plan;
+  if (JSON.stringify(device.profile) !== JSON.stringify(cloud.profile) && device.profile.onboarded && !cloud.profile.onboarded) out.profile = device.profile;
+  return out;
+}
+
+/** Settings that belong to the person, not to the data set */
+const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt } : {});
+
 export function AppProvider({ children }: { children: ReactNode }) {
+  const [authReady, setAuthReady] = useState(!supabase);
+  const [session, setSession] = useState<Session | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
   const [ready, setReady] = useState(false);
-  const [session, setSession] = useState<Session | null>(null);
-  const [cloudError, setCloudError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const [syncError, setSyncError] = useState<string>();
+  const [legacyOffer, setLegacyOffer] = useState<{ runs: number; races: number }>();
   const [importState, setImportState] = useState<ImportState>({ running: false, done: 0, total: 0, label: '' });
   const [coachBusy, setCoachBusy] = useState(false);
   const [healthSyncing, setHealthSyncing] = useState(false);
-  const firstLoad = useRef(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const userId = session?.user.id;
+  const currentUid = useRef<string | undefined>(undefined);
+  const cloudLoaded = useRef(false);
+  const pushState = useRef(newPushState());
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
-  // ---- Load ----
+  // ---- Auth ----
   useEffect(() => {
-    (async () => {
-      const local = await loadLocal();
-      if (local && local.mode !== 'empty') setData(local);
-      else setData({ ...generateSample(), mode: 'sample', coach: [], sources: [{ kind: 'sample', connected: true, lastSyncAt: new Date().toISOString(), activityCount: 0 }] });
-      setReady(true);
-    })();
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: d }) => setSession(d.session));
-      const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-      return () => sub.subscription.unsubscribe();
-    }
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: d }) => { setSession(d.session); setAuthReady(true); });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  // ---- Save locally on every change; mirror real data to the cloud ----
+  // ---- Load the signed-in user's data (device cache first, then the cloud) ----
   useEffect(() => {
-    if (!ready) return;
-    if (firstLoad.current) { firstLoad.current = false; return; }
-    saveLocal(data);
-  }, [data, ready]);
-
-  useEffect(() => {
-    if (!ready || !session) return;
+    currentUid.current = userId;
+    cloudLoaded.current = false;
+    pushState.current = newPushState();
+    setLegacyOffer(undefined);
+    setSyncError(undefined);
+    setLoadError(undefined);
+    if (!userId) { setData(emptyData()); setReady(false); return; }
     let cancelled = false;
+    const stale = () => cancelled || currentUid.current !== userId;
+    setReady(false);
     (async () => {
-      if (data.mode !== 'real') {
-        const remote = await pullFromCloud();
-        if (remote && !cancelled) setData((d) => ({ ...d, ...remote, coach: d.coach, sources: d.sources.length ? d.sources : [{ kind: 'upload', connected: true, activityCount: remote.activities?.length ?? 0, lastSyncAt: new Date().toISOString() }] } as AppData));
+      const cached = await loadUserCache(userId);
+      if (stale()) return;
+      if (cached) { setData(cached); setReady(true); }
+      try {
+        const cloud = await pullFromCloud();
+        if (stale()) return;
+        let next: AppData;
+        if (cloud.found && cloud.data) {
+          if (cloud.data.mode === 'sample') {
+            next = { ...sampleBundle(cloud.data.profile), coach: cloud.data.coach ?? [] };
+            // keep local-only sample edits (feedback, races) from this device
+            if (cached?.mode === 'sample') next = { ...next, feedback: cached.feedback, races: cached.races, plan: cached.plan ?? next.plan };
+          } else {
+            next = { ...emptyData(), ...cloud.data } as AppData;
+            // Changes made on this device that had not reached the account yet are kept, then saved
+            if (cached?.mode === 'real') next = mergeDeviceChanges(next, cached);
+          }
+        } else {
+          next = cached && cached.mode !== 'empty' ? cached : { ...emptyData(), profile: { ...emptyData().profile, healthConsentAt: (session?.user.user_metadata?.health_consent_at as string | undefined) } };
+          const legacy = await loadLegacy();
+          if (legacy && !stale()) setLegacyOffer({ runs: legacy.activities.length, races: legacy.races.length });
+        }
+        // Record what the account already holds, so anything only on this device is saved next
+        markPulled(pushState.current, cloud.found && cloud.data ? ({ ...emptyData(), ...cloud.data } as AppData) : next);
+        if (!cloud.found) pushState.current = newPushState();
+        cloudLoaded.current = true;
+        setData(next);
+        setReady(true);
+      } catch (e) {
+        if (stale()) return;
+        if (cached) { setSyncError(`Showing data saved on this device. ${friendlyError(e)}`); setReady(true); }
+        else setLoadError(friendlyError(e));
       }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, ready]);
+  }, [userId, reloadKey]);
+
+  // ---- Save: device cache immediately, cloud shortly after (only what changed) ----
+  useEffect(() => {
+    if (!userId || !ready) return;
+    void saveUserCache(userId, data);
+  }, [data, userId, ready]);
 
   const pushTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!ready || !session || data.mode !== 'real') return;
+    if (!userId || !ready || !cloudLoaded.current) return;
     window.clearTimeout(pushTimer.current);
-    pushTimer.current = window.setTimeout(async () => setCloudError(await pushToCloud(data)), 1500);
-  }, [data, session, ready]);
+    pushTimer.current = window.setTimeout(async () => {
+      if (currentUid.current !== userId) return;
+      try {
+        await pushToCloud(userId, dataRef.current, pushState.current);
+        setSyncError(undefined);
+      } catch (e) {
+        setSyncError(`Your latest changes are saved on this device but not yet in your account. ${friendlyError(e)}`);
+      }
+    }, 1200);
+  }, [data, userId, ready]);
+
+  // Save straight away when the app is hidden or closed, rather than waiting for the timer
+  useEffect(() => {
+    if (!userId) return;
+    const flush = () => {
+      if (!ready || !cloudLoaded.current || currentUid.current !== userId) return;
+      window.clearTimeout(pushTimer.current);
+      void pushToCloud(userId, dataRef.current, pushState.current).catch(() => {});
+    };
+    const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', flush);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); };
+  }, [userId, ready]);
 
   // ---- Derived training state ----
   const derived = useMemo<Derived>(() => {
@@ -139,10 +253,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const hr = hrSetup(data.profile, acts, today);
     const zones = hrZones(hr);
     const fitness = estimateFitness(acts, hr, today);
-    const paces = fitness ? trainingPaces(fitness.vdot) : undefined;
+    const stage = fitnessStage(acts, fitness, today);
+    const paces = fitness && stage.paces ? trainingPaces(fitness.vdot) : undefined;
     const series = loadSeries(acts, hr, paces?.threshold[1], today, 400);
 
-    // Paces at the time of each run (monthly), so old runs are judged against fitness back then
     const monthPaces = new Map<string, TrainingPaces>();
     const pacesAt = (iso: string) => {
       const k = iso.slice(0, 7);
@@ -160,26 +274,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const typeCache = new Map<string, SessionType>();
     const typeOf = (a: Activity) => {
       let t = typeCache.get(a.id);
-      if (!t) { t = classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
+      if (!t) { t = a.isTimeTrial ? 'timetrial' : classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
       return t;
     };
 
-    const plan = data.plan && paces
-      ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces })
+    const plan = data.plan
+      ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces: paces ?? trainingPaces(35) })
       : data.plan;
     const t = ymd(today);
     const todaySession = plan?.sessions.find((s) => s.date === t);
     const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
     const aRace = upcoming.find((r) => r.priority === 'A') ?? upcoming[0];
     const nextRace = upcoming[0];
-    const readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback });
-    const aRaceReadiness = aRace && fitness ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
-    return { today, hr, zones, fitness, paces, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS };
+    const readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
+    const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
+    return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS };
   }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode]);
 
-  // Persist new plan changes for real data so the log is kept
+  // Keep the plan's change log once adaptations happen
   useEffect(() => {
-    if (data.mode !== 'real' || !derived.plan || !data.plan) return;
+    if (data.mode === 'sample' || !derived.plan || !data.plan) return;
     if (derived.plan.changes.length !== data.plan.changes.length) setData((d) => ({ ...d, plan: derived.plan }));
   }, [derived.plan, data.plan, data.mode]);
 
@@ -199,16 +313,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return res;
   }, [derived, data.activities, data.feedback, data.profile.units]);
 
+  // ---- Moving data from before accounts existed ----
+  const acceptLegacy = async () => {
+    const legacy = await loadLegacy();
+    if (legacy) {
+      setData((d) => {
+        const base = d.mode === 'real' ? d : { ...emptyData(), mode: 'real' as const, profile: { ...legacy.profile, ...pickPrefs(d.profile), healthConsentAt: d.profile.healthConsentAt } };
+        const m = merge(base.activities, legacy.activities);
+        return {
+          ...base, mode: 'real', activities: m.activities,
+          races: [...base.races, ...legacy.races.filter((r) => !base.races.some((x) => x.id === r.id))],
+          feedback: [...base.feedback, ...legacy.feedback.filter((f) => !base.feedback.some((x) => x.activityId === f.activityId))],
+          plan: base.plan ?? legacy.plan,
+          sources: [...base.sources.filter((s) => s.kind !== 'upload'), { kind: 'upload', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.length }],
+        };
+      });
+    }
+    await clearLegacy();
+    setLegacyOffer(undefined);
+  };
+  const dismissLegacy = async (discard: boolean) => {
+    if (discard) await clearLegacy();
+    setLegacyOffer(undefined);
+  };
+
   // ---- Actions ----
-  const loadSample = () => setData({ ...generateSample(), mode: 'sample', coach: [], sources: [{ kind: 'sample', connected: true, lastSyncAt: new Date().toISOString(), activityCount: 0 }] });
-  const startFresh = () => setData({ ...emptyData(), mode: 'real' });
+  const loadSample = () => setData((d) => sampleBundle(d.profile));
+  const startFresh = () => setData((d) => ({ ...emptyData(), mode: 'real', profile: { ...emptyData().profile, ...pickPrefs(d.profile) } }));
+
+  const startBeginner = (a: StarterAnswers) => setData((d) => {
+    const today = new Date();
+    const profile: Profile = {
+      ...emptyData().profile, ...pickPrefs(d.profile), name: d.mode === 'sample' ? '' : d.profile.name,
+      experience: 'new', goal: a.goal, daysAvailable: a.days, longRunDay: a.days[a.days.length - 1] ?? 6, injuries: a.injuries, onboarded: true,
+      starter: { canRun10: a.canRun10, walksRegularly: a.walksRegularly, startedAt: ymd(today) },
+    };
+    const base = d.mode === 'real' ? d : { ...emptyData(), mode: 'real' as const };
+    return { ...base, mode: 'real', profile, plan: buildStarterPlan({ today, profile, canRun10: a.canRun10, walksRegularly: a.walksRegularly }) };
+  });
 
   const importFiles = async (files: File[]) => {
     setImportState({ running: true, done: 0, total: files.length, label: 'Reading files' });
     try {
       const parsed = await parseFiles(files, (done, total, label) => setImportState((s) => ({ ...s, done, total, label })));
+      if (!parsed.activities.length) {
+        setImportState({ running: false, done: 0, total: 0, label: '', error: parsed.skipped.length ? `No runs were found in ${parsed.skipped.length === 1 ? 'that file' : `those ${parsed.skipped.length} files`}. Check that they are FIT, GPX or TCX running files, or a Garmin export ZIP.` : 'No files were chosen.', result: { added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped } });
+        return;
+      }
       setData((d) => {
-        const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...d.profile, onboarded: false, name: '' } } : d;
+        const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
         const m = merge(base.activities, parsed.activities);
         setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped } });
         const sources = base.sources.filter((s) => s.kind !== 'upload' && s.kind !== 'sample');
@@ -216,8 +369,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return { ...base, mode: 'real', activities: m.activities, sources };
       });
     } catch (e) {
-      setImportState({ running: false, done: 0, total: 0, label: '', error: (e as Error).message });
+      setImportState({ running: false, done: 0, total: 0, label: '', error: `The upload failed: ${friendlyError(e)}` });
     }
+  };
+
+  const logManualRun = (r: ManualRun): string => {
+    const id = `manual-${uid()}`;
+    const session = derived.plan?.sessions.find((s) => s.id === r.sessionId);
+    const isToday = r.date === ymd(new Date());
+    const start = isToday ? new Date(Date.now() - r.durationS * 1000) : new Date(`${r.date}T12:00:00`);
+    const a: Activity = {
+      id, source: 'manual', sourceIds: { manual: id }, startTime: start.toISOString(),
+      name: session && session.type !== 'rest' ? session.title : 'Run', sport: 'run',
+      distanceM: Math.round(r.distanceM), durationS: Math.round(r.durationS), movingS: Math.round(r.durationS),
+      isTimeTrial: session?.type === 'timetrial' || undefined,
+      detailScore: 0, importedAt: new Date().toISOString(),
+    };
+    a.detailScore = detailScore(a);
+    const fb: SessionFeedback = { activityId: id, feel: r.feel, rpe: r.rpe, pain: r.pain, notes: r.notes, loggedAt: new Date().toISOString() };
+    setData((d) => {
+      const base = d.mode === 'empty' ? { ...d, mode: 'real' as const } : d;
+      const m = merge(base.activities, [a]);
+      const sources = base.sources.some((s) => s.kind === 'manual') ? base.sources.map((s) => (s.kind === 'manual' ? { ...s, lastSyncAt: new Date().toISOString(), activityCount: s.activityCount + 1 } : s)) : [...base.sources, { kind: 'manual' as SourceKind, connected: true, lastSyncAt: new Date().toISOString(), activityCount: 1 }];
+      return { ...base, activities: m.activities, feedback: [...base.feedback, fb], sources };
+    });
+    return id;
   };
 
   const updateProfile = (p: Partial<Profile>) => setData((d) => ({ ...d, profile: { ...d.profile, ...p } }));
@@ -230,7 +406,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const recent = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 28; });
     const longest = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
     const plan = buildPlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000 });
-    // keep what already happened this week
     if (d.plan) {
       const past = d.plan.sessions.filter((s) => s.date < ymd(today) && s.date >= plan.startDate);
       plan.sessions = [...past, ...plan.sessions.filter((s) => s.date >= ymd(today))];
@@ -243,19 +418,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const prev = d.races.find((x) => x.id === r.id);
     const races = prev ? d.races.map((x) => (x.id === r.id ? r : x)) : [...d.races, r];
     let plan = d.plan;
-    const isPlanRace = d.plan?.raceId === r.id;
-    if (isPlanRace && prev && prev.date !== r.date) plan = rebuild({ ...d, races }, r, `${r.name} moved from ${prev.date} to ${r.date}, so the plan was rebuilt around the new date.`);
+    if (d.plan?.raceId === r.id && prev && prev.date !== r.date) plan = rebuild({ ...d, races }, r, `${r.name} moved from ${prev.date} to ${r.date}, so the plan was rebuilt around the new date.`);
     return { ...d, races, plan };
   });
-  const deleteRace = (id: string) => setData((d) => ({ ...d, races: d.races.filter((r) => r.id !== id) }));
+  const deleteRace = (id: string) => {
+    setData((d) => ({ ...d, races: d.races.filter((r) => r.id !== id) }));
+    if (dataRef.current.mode === 'real') deleteRaceInCloud(id).catch((e) => setSyncError(`The race was removed here but not from your account. ${friendlyError(e)}`));
+  };
 
   const logFeedback = (f: SessionFeedback) => setData((d) => ({ ...d, feedback: [...d.feedback.filter((x) => x.activityId !== f.activityId), f] }));
 
-  const buildMyPlan = () => setData((d) => {
+  /** Returns a message when a plan cannot be built, so nothing fails silently. */
+  const buildMyPlan = (): string | undefined => {
+    const d = dataRef.current;
+    if (d.profile.experience === 'new' && !derived.stage.predictions) {
+      const st = d.profile.starter ?? { canRun10: false, walksRegularly: true, startedAt: ymd(new Date()) };
+      const plan = buildStarterPlan({ today: new Date(), profile: d.profile, canRun10: st.canRun10, walksRegularly: st.walksRegularly });
+      setData((x) => ({ ...x, plan }));
+      void deleteOtherPlans(plan.id).catch(() => {});
+      return undefined;
+    }
+    if (!derived.fitness) {
+      return d.activities.length
+        ? 'Ritmo needs a few runs with time and distance from the last four months to build a plan. Log a run or upload more recent files.'
+        : 'Ritmo needs some running history to build a plan. Upload your files, log a run, or choose "I\'m new to running" for a starter plan.';
+    }
     const t = ymd(d.mode === 'sample' ? parseYmd(SAMPLE_TODAY) : new Date());
     const race = d.races.filter((r) => r.date >= t).sort((a, b) => (a.priority === b.priority ? a.date.localeCompare(b.date) : a.priority.localeCompare(b.priority)))[0];
-    return { ...d, plan: rebuild({ ...d, plan: undefined }, race) };
-  });
+    const plan = rebuild({ ...d, plan: undefined }, race);
+    if (!plan) return 'The plan could not be built. Please try again.';
+    setData((x) => ({ ...x, plan, profile: { ...x.profile, experience: x.profile.experience ?? 'runner' } }));
+    if (d.mode === 'real') void deleteOtherPlans(plan.id).catch(() => {});
+    return undefined;
+  };
 
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
 
@@ -266,27 +461,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString() };
     setData((d) => ({ ...d, coach: [...d.coach, msg] }));
     setCoachBusy(true);
-    const t = ymd(derived.today);
-    const wk = ymd(startOfWeek(derived.today));
-    const weekEnd = ymd(addDays(startOfWeek(derived.today), 6));
-    const last = [...data.activities].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
-    const ctx: CoachContext = {
-      today: derived.today, profile: data.profile, units: data.profile.units, readiness: derived.readiness,
-      todaySession: derived.todaySession, nextSessions: (derived.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
-      race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.fitness, paces: derived.paces,
-      weekDoneM: data.activities.filter((a) => a.startTime.slice(0, 10) >= wk && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0),
-      weekPlannedM: (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= weekEnd).reduce((x, s) => x + s.distanceM, 0),
-      last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
-      hasData: data.activities.length > 0,
-    };
-    const reply = await ask(text, ctx, data.coach.map((m) => ({ role: m.role, text: m.text })));
-    setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts }] }));
-    setCoachBusy(false);
+    try {
+      const t = ymd(derived.today);
+      const wk = ymd(startOfWeek(derived.today));
+      const weekEnd = ymd(addDays(startOfWeek(derived.today), 6));
+      const last = [...data.activities].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
+      const weekSessions = (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= weekEnd && s.type !== 'rest');
+      const ctx: CoachContext = {
+        today: derived.today, profile: data.profile, units: data.profile.units, readiness: derived.readiness, stage: derived.stage,
+        todaySession: derived.todaySession, nextSessions: (derived.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
+        race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.stage.predictions ? derived.fitness : undefined, paces: derived.paces,
+        weekDoneM: data.activities.filter((a) => a.startTime.slice(0, 10) >= wk && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0),
+        weekPlannedM: weekSessions.reduce((x, s) => x + s.distanceM, 0),
+        weekSessionsDone: weekSessions.filter((s) => s.status === 'done').length,
+        weekSessionsPlanned: weekSessions.length,
+        planSessionsDone: (derived.plan?.sessions ?? []).filter((s) => s.status === 'done').length,
+        planSessionsTotal: (derived.plan?.sessions ?? []).filter((s) => s.type !== 'rest').length,
+        runCount: data.activities.length,
+        last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
+        hasData: data.activities.length > 0 || !!derived.plan,
+      };
+      const reply = await ask(text, ctx, data.coach.map((m) => ({ role: m.role, text: m.text })));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts }] }));
+    } catch {
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString() }] }));
+    } finally {
+      setCoachBusy(false);
+    }
   };
-  const clearCoach = () => setData((d) => ({ ...d, coach: [] }));
+  const clearCoach = () => {
+    setData((d) => ({ ...d, coach: [] }));
+    pushState.current.coach.clear();
+    clearCoachInCloud().catch((e) => setSyncError(`The chat was cleared here but not in your account. ${friendlyError(e)}`));
+  };
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', ...data }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', account: session?.user.email, ...data }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `ritmo-export-${ymd(new Date())}.json`;
@@ -294,10 +504,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     URL.revokeObjectURL(a.href);
   };
 
-  const deleteAll = async () => {
-    if (session) setCloudError(await deleteCloudData());
-    await clearLocal();
-    setData({ ...emptyData(), mode: 'real' });
+  /** Deletes the account and all cloud data, then clears this device. */
+  const deleteEverything = async (): Promise<string | undefined> => {
+    try {
+      await deleteAccount();
+    } catch (e) {
+      return `Your account could not be deleted: ${friendlyError(e)} Nothing has been removed.`;
+    }
+    const uid = userId;
+    await logOut();
+    if (uid) await clearUserCache(uid);
+    return undefined;
   };
 
   const disconnectSource = (k: SourceKind) => setData((d) => ({ ...d, sources: d.sources.map((s) => (s.kind === k ? { ...s, connected: false } : s)) }));
@@ -306,27 +523,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncHealthNow = async (justConnected = false) => {
     const kind = healthKind();
     if (!kind) return;
-    const src = data.sources.find((x) => x.kind === kind);
+    const src = dataRef.current.sources.find((x) => x.kind === kind);
     if (!justConnected && !src?.connected) return;
     setHealthSyncing(true);
     try {
-      // overlap by 2 days so late-arriving runs are not missed; duplicates are merged
-      const since = src?.lastSyncAt ? new Date(new Date(src!.lastSyncAt!).getTime() - 2 * 86400000).toISOString() : undefined;
+      const since = src?.lastSyncAt ? new Date(new Date(src.lastSyncAt).getTime() - 2 * 86400000).toISOString() : undefined;
       const runs = await syncHealth(since);
       setData((d) => {
-        const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...d.profile, onboarded: false, name: '' } } : d;
+        const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
         const m = merge(base.activities, runs);
         const sources = base.sources.filter((x) => x.kind !== kind && x.kind !== 'sample');
         sources.push({ kind, connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds[kind]).length });
         return { ...base, mode: 'real', activities: m.activities, sources };
       });
     } catch (e) {
-      setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === kind ? { ...x, lastError: `Sync failed: ${(e as Error).message}` } : x)) }));
+      setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === kind ? { ...x, lastError: `Sync failed: ${friendlyError(e)}` } : x)) }));
     } finally {
       setHealthSyncing(false);
     }
   };
-
   const connectHealth = async () => {
     const kind = healthKind();
     if (!kind) return 'Available in the iPhone and Android apps.';
@@ -337,34 +552,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void syncHealthNow(true);
       return r.message;
     } catch (e) {
-      return (e as Error).message;
+      return friendlyError(e);
     }
   };
   const syncHealthNowRef = useRef(syncHealthNow);
   syncHealthNowRef.current = syncHealthNow;
-
-  // Sync when the app comes back to the foreground
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative() || !ready) return;
     let remove: (() => void) | undefined;
     import('@capacitor/app').then(({ App }) => {
       App.addListener('resume', () => { void syncHealthNowRef.current(); }).then((h) => { remove = () => h.remove(); });
     });
-    if (ready) void syncHealthNowRef.current();
+    void syncHealthNowRef.current();
     return () => remove?.();
   }, [ready]);
 
-  const signIn = async (email: string) => {
-    if (!supabase) return 'Cloud sync is not configured for this build.';
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + '/profile' } });
-    return error?.message;
+  /** Log out: clear this device, keep everything in the account. */
+  const signOut = async () => {
+    const uid = userId;
+    window.clearTimeout(pushTimer.current);
+    await logOut(); // session ends first, so nothing saves to this device afterwards
+    if (uid) await clearUserCache(uid);
   };
-  const signOut = async () => { await supabase?.auth.signOut(); };
 
   const value: Ctx = {
-    ...derived, ready, data, session, cloudError, importState, coachBusy,
-    loadSample, startFresh, importFiles, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
-    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteAll, disconnectSource, connectHealth, syncHealthNow, healthSyncing, signIn, signOut,
+    ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
+    retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
+    loadSample, startFresh, startBeginner, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
+    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
+    signOut, finishRecovery: () => setRecovering(false),
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

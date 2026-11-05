@@ -1,5 +1,6 @@
-// Persistence. Local-first in IndexedDB; mirrored to Supabase when the runner signs in.
-import { get, set, del } from 'idb-keyval';
+// Persistence. Every account is required; data lives in Supabase per user (row-level security),
+// with a per-user cache on the device for speed. Nothing is shared between accounts on one device.
+import { del, get, set } from 'idb-keyval';
 import type { Activity, CoachMessage, Plan, Profile, Race, SessionFeedback, SourceStatus } from '../lib/types';
 import { supabase } from './supabase';
 
@@ -14,14 +15,12 @@ export interface AppData {
   sources: SourceStatus[];
 }
 
-const KEY = 'ritmo:data:v1';
-
 export const EMPTY_PROFILE: Profile = {
   name: '',
   units: 'km',
   theme: 'system',
   goal: '',
-  daysAvailable: [1, 3, 5, 6],
+  daysAvailable: [1, 3, 5],
   longRunDay: 6,
   injuries: [],
   onboarded: false,
@@ -37,29 +36,31 @@ export const emptyData = (): AppData => ({
   sources: [],
 });
 
-export async function loadLocal(): Promise<AppData | undefined> {
+// ---------------- Device cache (per user) ----------------
+const userKey = (uid: string) => `ritmo:user:${uid}`;
+/** Data saved by earlier versions that worked without an account */
+export const LEGACY_KEY = 'ritmo:data:v1';
+
+export async function loadUserCache(uid: string): Promise<AppData | undefined> {
+  try { return (await get(userKey(uid))) as AppData | undefined; } catch { return undefined; }
+}
+export async function saveUserCache(uid: string, data: AppData) {
+  try { await set(userKey(uid), data); } catch (e) { console.warn('Could not save on this device', e); }
+}
+export async function clearUserCache(uid: string) {
+  try { await del(userKey(uid)); } catch { /* ignore */ }
+}
+export async function loadLegacy(): Promise<AppData | undefined> {
   try {
-    return (await get(KEY)) as AppData | undefined;
-  } catch {
-    return undefined;
-  }
+    const d = (await get(LEGACY_KEY)) as AppData | undefined;
+    return d && d.mode === 'real' && (d.activities.length > 0 || d.races.length > 0) ? d : undefined;
+  } catch { return undefined; }
+}
+export async function clearLegacy() {
+  try { await del(LEGACY_KEY); } catch { /* ignore */ }
 }
 
-export async function saveLocal(data: AppData) {
-  try {
-    await set(KEY, data);
-  } catch (e) {
-    console.warn('Could not save locally', e);
-  }
-}
-
-export async function clearLocal() {
-  try { await del(KEY); } catch { /* ignore */ }
-}
-
-// ---------------- Supabase mirror ----------------
-// Sample data is never uploaded. Real data is stored per user with row-level security.
-
+// ---------------- Cloud ----------------
 type Row = Record<string, unknown>;
 
 const actToRow = (uid: string, a: Activity): Row => ({
@@ -73,64 +74,139 @@ const rowToAct = (r: Row): Activity => ({
   startTime: r.start_time as string, name: r.name as string, sport: 'run', distanceM: Number(r.distance_m), durationS: Number(r.duration_s),
   movingS: Number(r.moving_s), elevGainM: (r.elev_gain_m as number) ?? undefined, avgHr: (r.avg_hr as number) ?? undefined,
   maxHr: (r.max_hr as number) ?? undefined, avgCadence: (r.avg_cadence as number) ?? undefined, isRace: !!r.is_race,
+  isTimeTrial: !!(r.source_ids as Record<string, unknown> | null)?.timeTrial,
   detailScore: Number(r.detail_score), laps: (r.laps as Activity['laps']) ?? undefined, streams: (r.streams as Activity['streams']) ?? undefined,
   importedAt: r.imported_at as string,
 });
 
-export async function pushToCloud(data: AppData): Promise<string | undefined> {
-  if (!supabase || data.mode !== 'real') return;
-  const { data: u } = await supabase.auth.getUser();
-  const uid = u.user?.id;
-  if (!uid) return;
-  try {
-    const p = await supabase.from('profiles').upsert({ user_id: uid, data: data.profile, updated_at: new Date().toISOString() });
-    if (p.error) throw p.error;
-    for (let i = 0; i < data.activities.length; i += 200) {
-      const r = await supabase.from('activities').upsert(data.activities.slice(i, i + 200).map((a) => actToRow(uid, a)));
-      if (r.error) throw r.error;
-    }
-    if (data.races.length) {
-      const r = await supabase.from('races').upsert(data.races.map((x) => ({ id: x.id, user_id: uid, data: x })));
-      if (r.error) throw r.error;
-    }
-    if (data.plan) {
-      const r = await supabase.from('plans').upsert({ id: data.plan.id, user_id: uid, data: data.plan, updated_at: new Date().toISOString() });
-      if (r.error) throw r.error;
-    }
-    if (data.feedback.length) {
-      const r = await supabase.from('session_feedback').upsert(data.feedback.map((f) => ({ activity_id: f.activityId, user_id: uid, data: f })));
-      if (r.error) throw r.error;
-    }
-    return undefined;
-  } catch (e) {
-    return (e as Error).message ?? 'Cloud sync failed';
-  }
+/** Turn Supabase and network errors into plain language. */
+export function friendlyError(e: unknown): string {
+  const err = e as { message?: string; code?: string; status?: number; name?: string };
+  const msg = err?.message ?? String(e);
+  if (/fetch|network|Failed to fetch|NetworkError|Load failed/i.test(msg) || err?.name === 'TypeError') return 'Ritmo cannot reach the server. Check your internet connection and try again.';
+  if (err?.status === 401 || /JWT|not_signed_in/i.test(msg)) return 'Your session has expired. Please log in again.';
+  return msg;
 }
 
-export async function pullFromCloud(): Promise<Partial<AppData> | undefined> {
-  if (!supabase) return;
-  const { data: u } = await supabase.auth.getUser();
-  if (!u.user) return;
-  const [p, a, r, pl, f] = await Promise.all([
-    supabase.from('profiles').select('data').maybeSingle(),
+export interface CloudSnapshot { found: boolean; data?: Partial<AppData> }
+
+/** Load everything for the signed-in user. Row-level security returns only their rows. */
+export async function pullFromCloud(): Promise<CloudSnapshot> {
+  if (!supabase) return { found: false };
+  const p = await supabase.from('profiles').select('data').maybeSingle();
+  if (p.error) throw p.error;
+  if (!p.data) return { found: false };
+  const stored = p.data.data as { profile?: Profile; mode?: AppData['mode']; sources?: SourceStatus[] } & Partial<Profile>;
+  const profile = (stored.profile ?? stored) as Profile;
+  const mode = stored.mode ?? 'real';
+  const coach = await supabase.from('coach_messages').select('data').order('created_at');
+  if (coach.error) throw coach.error;
+  const base: Partial<AppData> = { profile, mode, sources: stored.sources ?? [], coach: (coach.data ?? []).map((x) => x.data as CoachMessage) };
+  if (mode !== 'real') return { found: true, data: base };
+  const [a, r, pl, f] = await Promise.all([
     supabase.from('activities').select('*').order('start_time'),
     supabase.from('races').select('data'),
     supabase.from('plans').select('data').order('updated_at', { ascending: false }).limit(1),
     supabase.from('session_feedback').select('data'),
   ]);
-  if (!p.data && !(a.data ?? []).length) return undefined;
+  for (const res of [a, r, pl, f]) if (res.error) throw res.error;
   return {
-    mode: 'real',
-    profile: p.data?.data as Profile,
-    activities: (a.data ?? []).map(rowToAct),
-    races: (r.data ?? []).map((x) => x.data as Race),
-    plan: (pl.data?.[0]?.data as Plan) ?? undefined,
-    feedback: (f.data ?? []).map((x) => x.data as SessionFeedback),
+    found: true,
+    data: {
+      ...base,
+      activities: (a.data ?? []).map(rowToAct),
+      races: (r.data ?? []).map((x) => x.data as Race),
+      plan: (pl.data?.[0]?.data as Plan) ?? undefined,
+      feedback: (f.data ?? []).map((x) => x.data as SessionFeedback),
+    },
   };
 }
 
-export async function deleteCloudData(): Promise<string | undefined> {
+/** Tracks what has been saved so each save only sends changes. */
+export interface PushState {
+  activities: Map<string, number>; // id -> detail score saved
+  coach: Set<string>;
+  profileJson?: string;
+  racesJson?: string;
+  planJson?: string;
+  feedbackJson?: string;
+}
+export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
+
+export function markPulled(ps: PushState, d: AppData) {
+  for (const a of d.activities) ps.activities.set(a.id, a.detailScore);
+  for (const m of d.coach) ps.coach.add(m.id);
+  ps.profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
+  ps.racesJson = JSON.stringify(d.races);
+  ps.planJson = JSON.stringify(d.plan ?? null);
+  ps.feedbackJson = JSON.stringify(d.feedback);
+}
+
+export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promise<void> {
+  if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt) return;
+  const profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
+  if (profileJson !== ps.profileJson) {
+    const r = await supabase.from('profiles').upsert({ user_id: uid, data: JSON.parse(profileJson), updated_at: new Date().toISOString() });
+    if (r.error) throw r.error;
+    ps.profileJson = profileJson;
+  }
+  const newMsgs = d.coach.filter((m) => !ps.coach.has(m.id));
+  if (newMsgs.length) {
+    const r = await supabase.from('coach_messages').upsert(newMsgs.map((m) => ({ id: m.id, user_id: uid, data: m, created_at: m.at })));
+    if (r.error) throw r.error;
+    newMsgs.forEach((m) => ps.coach.add(m.id));
+  }
+  if (d.mode !== 'real') return; // sample data is regenerated on the device and never uploaded
+  const changed = d.activities.filter((a) => ps.activities.get(a.id) !== a.detailScore);
+  for (let i = 0; i < changed.length; i += 100) {
+    const chunk = changed.slice(i, i + 100);
+    const r = await supabase.from('activities').upsert(chunk.map((a) => ({ ...actToRow(uid, a), source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}) } })));
+    if (r.error) throw r.error;
+    chunk.forEach((a) => ps.activities.set(a.id, a.detailScore));
+  }
+  const racesJson = JSON.stringify(d.races);
+  if (racesJson !== ps.racesJson && d.races.length) {
+    const r = await supabase.from('races').upsert(d.races.map((x) => ({ id: x.id, user_id: uid, data: x })));
+    if (r.error) throw r.error;
+  }
+  ps.racesJson = racesJson;
+  const planJson = JSON.stringify(d.plan ?? null);
+  if (planJson !== ps.planJson && d.plan) {
+    const r = await supabase.from('plans').upsert({ id: d.plan.id, user_id: uid, data: d.plan, updated_at: new Date().toISOString() });
+    if (r.error) throw r.error;
+  }
+  ps.planJson = planJson;
+  const feedbackJson = JSON.stringify(d.feedback);
+  if (feedbackJson !== ps.feedbackJson && d.feedback.length) {
+    const r = await supabase.from('session_feedback').upsert(d.feedback.map((f) => ({ activity_id: f.activityId, user_id: uid, data: f })));
+    if (r.error) throw r.error;
+  }
+  ps.feedbackJson = feedbackJson;
+}
+
+export async function deleteRaceInCloud(id: string) {
   if (!supabase) return;
-  const { error } = await supabase.rpc('delete_my_data');
-  return error?.message;
+  const r = await supabase.from('races').delete().eq('id', id);
+  if (r.error) throw r.error;
+}
+export async function clearCoachInCloud() {
+  if (!supabase) return;
+  const { data: u } = await supabase.auth.getUser();
+  if (!u.user) return;
+  const r = await supabase.from('coach_messages').delete().eq('user_id', u.user.id);
+  if (r.error) throw r.error;
+}
+/** Remove old plans when a new one replaces them, so only one plan is stored. */
+export async function deleteOtherPlans(keepId: string) {
+  if (!supabase) return;
+  const r = await supabase.from('plans').delete().neq('id', keepId);
+  if (r.error) throw r.error;
+}
+
+/** Deletes the account and, through cascading deletes, every row the user owns. */
+export async function deleteAccount(): Promise<void> {
+  if (!supabase) return;
+  const { data, error } = await supabase.functions.invoke('delete-account', { body: {} });
+  if (error) throw error;
+  if (!data?.deleted) throw new Error('The account could not be deleted. Please try again.');
 }

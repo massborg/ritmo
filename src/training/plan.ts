@@ -1,6 +1,9 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
 import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, Race, SessionFeedback, SessionStep, SessionType } from '../lib/types';
-import { addDays, clamp, daysBetween, DAY_NAMES, distanceLabel, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
+import { addDays, clamp, daysBetween, DAY_NAMES, distanceLabel, longDate, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
+
+/** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
+const dayLabel = (d: string) => longDate(parseYmd(d));
 import type { TrainingPaces } from './fitness';
 
 const p = (s: number) => {
@@ -319,6 +322,7 @@ export function adaptPlan(opts: {
 
   const upcoming = plan.sessions.filter((s) => s.date >= t && s.status === 'planned');
   const toEasy = (s: PlannedSession, why: string) => {
+    if (s.type === 'runwalk' || s.type === 'timetrial') { Object.assign(s, { ...walkSession(s.date, s.phase), id: s.id, purpose: `${why} ${walkSession(s.date, s.phase).purpose}` }); return; }
     const e = easySession(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces, goalLabel: '' });
     Object.assign(s, { ...e, id: s.id, title: 'Easy run (adjusted)', purpose: `${why} ${e.purpose}` });
   };
@@ -326,7 +330,7 @@ export function adaptPlan(opts: {
   // 2) Missed sessions
   const recentMissed = plan.sessions.filter((s) => s.status === 'missed' && daysBetween(parseYmd(s.date), today) <= 7);
   for (const s of recentMissed.filter((x) => KEY.includes(x.type) && daysBetween(parseYmd(x.date), today) <= 3)) {
-    log(`missed:${s.id}`, 'missed', `You missed ${s.title.toLowerCase()} on ${DAY_NAMES[weekday(parseYmd(s.date))]}. We will not squeeze it in on top of other sessions: one missed session costs almost nothing, but cramming raises injury risk. The rest of the week stays as planned.`);
+    log(`missed:${s.id}`, 'missed', `You missed ${s.title.toLowerCase()} on ${dayLabel(s.date)}. We will not squeeze it in on top of other sessions: one missed session costs almost nothing, but cramming raises injury risk. The rest of the week stays as planned.`);
   }
   if (recentMissed.length >= 3) {
     const nextWeek = upcoming.filter((s) => daysBetween(today, parseYmd(s.date)) < 7);
@@ -349,13 +353,37 @@ export function adaptPlan(opts: {
       const nextQ = upcoming.find((x) => ['threshold', 'vo2max', 'tempo', 'hills'].includes(x.type) && daysBetween(parseYmd(s.date), parseYmd(x.date)) <= 2);
       if (nextQ && !has(`harder:${s.id}`)) {
         toEasy(nextQ, 'Adjusted because your last run was harder than planned.');
-        log(`harder:${s.id}`, 'harder', `Your ${DAY_NAMES[weekday(parseYmd(s.date))]} run was ${ranHard ? `a ${actualType} effort instead of easy` : `${((a.distanceM - s.distanceM) / 1000).toFixed(0)} km longer than planned`}. To keep fatigue in check, ${DAY_NAMES[weekday(parseYmd(nextQ.date))]}'s quality session is now an easy run.`);
+        log(`harder:${s.id}`, 'harder', `Your ${dayLabel(s.date)} run was ${ranHard ? `a ${actualType} effort instead of easy` : `${((a.distanceM - s.distanceM) / 1000).toFixed(0)} km longer than planned`}. To keep fatigue in check, ${dayLabel(nextQ.date)}'s quality session is now an easy run.`);
       } else if (!has(`harder:${s.id}`)) {
-        log(`harder:${s.id}`, 'harder', `Your ${DAY_NAMES[weekday(parseYmd(s.date))]} run was harder than planned. No change needed, but keep the next easy day truly easy.`);
+        log(`harder:${s.id}`, 'harder', `Your ${dayLabel(s.date)} run was harder than planned. No change needed, but keep the next easy day truly easy.`);
       }
     }
     const ranEasy = ['threshold', 'vo2max', 'tempo'].includes(s.type) && ['easy', 'recovery'].includes(actualType);
-    if (ranEasy) log(`easier:${s.id}`, 'easier', `${s.title} on ${DAY_NAMES[weekday(parseYmd(s.date))]} ended up as an easy run. That is fine occasionally. Your next quality session stays as planned rather than doubling up.`);
+    if (ranEasy) log(`easier:${s.id}`, 'easier', `${s.title} on ${dayLabel(s.date)} ended up as an easy run. That is fine occasionally. Your next quality session stays as planned rather than doubling up.`);
+  }
+
+  // 3b) Beginners: repeat instead of progressing when a run/walk felt very hard, or after missed sessions
+  const doneRW = plan.sessions.filter((x) => x.status === 'done' && (x.type === 'runwalk') && x.date < t).sort((x, y) => y.date.localeCompare(x.date))[0];
+  const upcomingRW = upcoming.filter((x) => x.type === 'runwalk');
+  const nextRW = upcomingRW[0];
+  if (doneRW && nextRW) {
+    const fb = feedback.find((f) => f.activityId === doneRW.completedActivityId);
+    const veryHard = fb && (fb.feel === 1 || (fb.feel === 2 && (fb.rpe ?? 0) >= 9));
+    if (veryHard && !has(`repeat:${doneRW.id}`)) {
+      // Hold back the next step up: the next session that would progress repeats this level instead
+      const stepUp = upcomingRW.slice(0, 3).find((x) => x.title !== doneRW.title);
+      if (stepUp) Object.assign(stepUp, { title: doneRW.title, steps: doneRW.steps, durationS: doneRW.durationS, purpose: `A repeat of an earlier level, because your run on ${dayLabel(doneRW.date)} felt very hard. ${doneRW.purpose}` });
+      log(`repeat:${doneRW.id}`, 'harder', `Your run/walk on ${dayLabel(doneRW.date)} felt very hard, so your next sessions stay at this level before moving on. Repeating a step is normal and smart: you will move on when it feels comfortable.`);
+    }
+  }
+  const missedRW = plan.sessions.filter((x) => x.type === 'runwalk' && x.status === 'missed' && daysBetween(parseYmd(x.date), today) <= 10);
+  if (missedRW.length >= 2 && nextRW) {
+    const id = `missedrw:${missedRW[missedRW.length - 1].id}`;
+    const level = doneRW ?? missedRW[0];
+    if (!has(id) && level && nextRW.title !== level.title) {
+      Object.assign(nextRW, { title: level.title, steps: level.steps, durationS: level.durationS, purpose: `Picking up where you left off. ${level.purpose}` });
+      log(id, 'missed', `A couple of sessions did not happen, and that is fine. Your next session picks up at the level you last ran, so you ease back in without a jump.`);
+    }
   }
 
   // 4) Illness
@@ -371,13 +399,13 @@ export function adaptPlan(opts: {
   }
 
   // 5) Pain
-  const painFb = feedback.filter((f) => f.pain.some((x) => x.severity >= 2) && daysBetween(new Date(f.loggedAt), today) <= 2);
+  const painFb = feedback.filter((f) => f.pain.some((x) => x.severity >= 2 || /chest|dizz/i.test(x.area)) && daysBetween(new Date(f.loggedAt), today) <= 2);
   for (const f of painFb) {
     const id = `pain:${f.activityId}`;
     if (has(id)) continue;
     const next2 = upcoming.filter((s) => daysBetween(today, parseYmd(s.date)) <= 2 && s.type !== 'rest' && s.type !== 'race');
     next2.forEach((s, i) => (i === 0 ? Object.assign(s, { ...restSession(s.date, s.phase), id: s.id }) : toEasy(s, 'Adjusted because you logged pain.')));
-    log(id, 'pain', `You logged ${f.pain.map((x) => x.area.toLowerCase()).join(' and ')} pain, so the next two days are rest and easy running. This is coaching, not medical advice: if pain persists, gets worse or changes how you run, please see a physio or doctor.`);
+    log(id, 'pain', `You logged ${f.pain.map((x) => x.area.toLowerCase()).join(' and ')} pain, so the next two days are rest and easy running. This is coaching, not medical advice: if pain persists, gets worse or changes how you run, please see a physio or doctor.${f.pain.some((x) => /chest|dizz/i.test(x.area)) ? ' Chest pain, dizziness or fainting need medical advice before you exercise again.' : ''}`);
   }
 
   // 6) Load spike check on the coming week
@@ -414,7 +442,123 @@ export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan
     sessions,
     changes: [...plan.changes, {
       id: uid(), at: new Date().toISOString(), reason: 'moved',
-      summary: `Moved ${a.title.toLowerCase()} from ${DAY_NAMES[weekday(parseYmd(from))]} to ${DAY_NAMES[weekday(parseYmd(toDate))]}${b ? ` and ${b.title.toLowerCase()} to ${DAY_NAMES[weekday(parseYmd(from))]}` : ''}.${warn ? ' Two hard sessions are now on back-to-back days, so take the second one a little easier.' : ''}`,
+      summary: `Moved ${a.title.toLowerCase()} from ${dayLabel(from)} to ${dayLabel(toDate)}${b ? ` and ${b.title.toLowerCase()} to ${dayLabel(from)}` : ''}.${warn ? ' Two hard sessions are now on back-to-back days, so take the second one a little easier.' : ''}`,
+    }],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Beginner run/walk plan: effort-based (no paces), three days a week with rest between,
+// building to 30 minutes of continuous running, then a 5K time trial that unlocks full features.
+
+/** [run seconds, walk seconds, repeats] per week */
+const STARTER_LEVELS: [number, number, number][] = [
+  [60, 90, 8], [90, 120, 6], [120, 120, 6], [180, 90, 5], [300, 120, 4], [480, 120, 3], [600, 90, 3], [900, 120, 2],
+];
+const FIRST_STEPS: [number, number, number] = [45, 105, 8];
+const fmtS = (sec: number) => (sec % 60 === 0 ? `${sec / 60} min` : sec > 60 ? `${Math.floor(sec / 60)} min ${sec % 60} s` : `${sec} s`);
+
+function walkSession(date: string, phase: Phase): PlannedSession {
+  return {
+    id: uid(), date, phase, status: 'planned', type: 'recovery', title: 'Easy walk', focus: 'Recovery',
+    purpose: 'A gentle 20 to 30 minute walk keeps you moving while your body recovers.',
+    howItHelps: 'Recovering well now means you come back stronger.',
+    steps: [{ label: '20–30 min walk', detail: 'relaxed pace, stop if anything hurts' }],
+    distanceM: 0, durationS: 25 * 60,
+  };
+}
+
+function runWalkSession(date: string, level: [number, number, number], week: number, weeks: number, phase: Phase): PlannedSession {
+  const [run, walk, reps] = level;
+  const continuous = reps === 1;
+  const main = continuous ? `${fmtS(run)} easy running` : `${reps} x (${fmtS(run)} running + ${fmtS(walk)} walking)`;
+  return {
+    id: uid(), date, phase, status: 'planned', type: 'runwalk',
+    title: continuous ? `Run ${fmtS(run)}` : `Run/walk: ${reps} x ${fmtS(run)}`,
+    focus: 'Building up',
+    purpose: 'Short running spells with walking breaks let your heart, lungs, muscles and tendons adapt gradually, so you build fitness without getting hurt.',
+    howItHelps: `Week ${week} of ${weeks}. You are building to 30 minutes of continuous running.`,
+    steps: [
+      { label: 'Warm up', detail: '5 min brisk walk' },
+      { label: main, detail: 'easy effort: you can talk in full sentences. Slow down if you cannot.' },
+      { label: 'Cool down', detail: '5 min easy walk' },
+    ],
+    distanceM: 0,
+    durationS: 600 + reps * run + (reps - 1) * walk,
+  };
+}
+
+function timeTrialSession(date: string, phase: Phase): PlannedSession {
+  return {
+    id: uid(), date, phase, status: 'planned', type: 'timetrial', title: 'Your first 5K', focus: 'Fitness test',
+    purpose: 'A steady 5 km at a comfortably hard effort. Your time sets your training paces and unlocks race predictions.',
+    howItHelps: 'From here Ritmo can build a full plan for a 5K, 10K or longer goal.',
+    steps: [
+      { label: 'Warm up', detail: '10 min brisk walk with a few short jogs' },
+      { label: '5 km steady', detail: 'even effort, comfortably hard. Walk breaks are fine.' },
+      { label: 'Cool down', detail: '5–10 min easy walk' },
+    ],
+    distanceM: 5000, durationS: 40 * 60,
+  };
+}
+
+/** Pick up to three training days with at least one rest day between them. */
+export function pickStarterDays(available: number[]): number[] {
+  const days = [...new Set(available)].sort((a, b) => a - b);
+  const picked: number[] = [];
+  for (const d of days) {
+    if (picked.length >= 3) break;
+    const prev = picked[picked.length - 1];
+    if (prev !== undefined && d - prev < 2) continue;
+    if (picked.length === 2 && (picked[0] + 7) - d < 2) continue; // keep Sunday and Monday apart
+    picked.push(d);
+  }
+  if (picked.length < 2) return days.slice(0, Math.min(3, days.length));
+  return picked;
+}
+
+export function buildStarterPlan(input: { today: Date; profile: Profile; canRun10: boolean; walksRegularly: boolean }): Plan {
+  const { today, profile, canRun10, walksRegularly } = input;
+  let levels = canRun10 ? STARTER_LEVELS.slice(4) : STARTER_LEVELS;
+  if (!canRun10 && !walksRegularly) levels = [FIRST_STEPS, ...levels];
+  const days = pickStarterDays(profile.daysAvailable.length ? profile.daysAvailable : [1, 3, 5]);
+  // flat list of sessions; the last week is 20, 25 then 30 minutes continuous, then the time trial
+  const flat: { make: (date: string, week: number, weeks: number, phase: Phase) => PlannedSession }[] = [];
+  for (const lv of levels) for (let i = 0; i < 3; i++) flat.push({ make: (d, w, n, ph) => runWalkSession(d, lv, w, n, ph) });
+  for (const min of [20, 25, 30]) flat.push({ make: (d, w, n, ph) => runWalkSession(d, [min * 60, 0, 1], w, n, ph) });
+  flat.push({ make: (d, _w, _n, ph) => timeTrialSession(d, ph) });
+  const weeks = Math.ceil(flat.length / days.length);
+
+  const sessions: PlannedSession[] = [];
+  const start = parseYmd(ymd(today));
+  let i = 0;
+  let d = start;
+  let firstDate: string | undefined;
+  while (i < flat.length) {
+    const key = ymd(d);
+    const dow = weekday(d);
+    const week = Math.floor(i / days.length) + 1;
+    const phase: Phase = week <= Math.ceil(weeks / 2) ? 'base' : 'build';
+    if (days.includes(dow)) {
+      sessions.push(flat[i].make(key, week, weeks, phase));
+      firstDate ??= key;
+      i++;
+    } else if (firstDate) {
+      sessions.push({ ...restSession(key, phase), purpose: 'Rest days are when your body adapts and gets stronger. A gentle walk is fine.' });
+    }
+    d = addDays(d, 1);
+  }
+  const end = sessions[sessions.length - 1].date;
+  const mid = sessions.find((x) => x.phase === 'build')?.date ?? end;
+  const dayNames = days.map((x) => DAY_NAMES[x]).join(', ').replace(/, ([^,]*)$/, ' and $1');
+  const first = levels[0];
+  return {
+    id: uid(), createdAt: new Date().toISOString(), startDate: firstDate ?? ymd(start), endDate: end,
+    phases: [{ phase: 'base', start: firstDate ?? ymd(start), end: ymd(addDays(parseYmd(mid), -1)) }, { phase: 'build', start: mid, end }],
+    sessions,
+    changes: [{
+      id: 'built', at: new Date().toISOString(), reason: 'rebuilt',
+      summary: `Built a ${weeks}-week run/walk plan on ${dayNames}. You start with ${first[2]} x ${fmtS(first[0])} of easy running with walking breaks and build to 30 minutes of continuous running, then a 5K at your own pace. Go by feel: you should be able to talk the whole time.`,
     }],
   };
 }

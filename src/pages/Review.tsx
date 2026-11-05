@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Kpi, Lanes, Logo, StatusLine } from '../components/ui';
@@ -45,7 +45,7 @@ export default function Review() {
         <p className="body">{acts.length} runs · {Math.round(acts.reduce((x, a) => x + a.movingS, 0) / 3600)} hours{prevTotal ? ` · ${total >= prevTotal ? '+' : ''}${Math.round(((total - prevTotal) / prevTotal) * 100)}% on the ${isMonth ? 'month' : 'year'} before` : ''}</p>
         <div style={{ background: 'var(--surface-raised)', borderRadius: 12, padding: '8px 12px', alignSelf: 'flex-start' }}><Logo variant="compact" width={96} /></div>
       </section>
-      {acts.length === 0 ? <p className="muted">No runs in {label}.</p> : (
+      {acts.length === 0 ? <div className="card stack"><p className="muted">No runs in {label}, so there is nothing to review yet.</p><div className="row wrap"><Link to="/" className="btn btn-primary">Go to Today</Link><Link to="/progress" className="btn">Back to Progress</Link></div></div> : (
         <div className="grid-2">
           <div className="card"><Kpi label="Longest run" value={longest ? dist(longest.distanceM, U) : '–'} sub={longest ? duration(longest.movingS) : ''} /></div>
           <div className="card"><Kpi label="Most common session" value={topType ? TYPE_LABEL[topType[0] as keyof typeof TYPE_LABEL] : '–'} sub={topType ? `${topType[1]} times` : ''} /></div>
@@ -58,7 +58,7 @@ export default function Review() {
         </div>
       )}
       <div className="row">
-        <button className="btn btn-primary" onClick={share}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share</button>
+        <button className="btn btn-primary" onClick={share} disabled={acts.length === 0}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share</button>
         {shared && <StatusLine kind="success">{shared}</StatusLine>}
       </div>
     </div>

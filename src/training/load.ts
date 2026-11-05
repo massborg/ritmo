@@ -76,20 +76,23 @@ export function readiness(opts: {
   series: LoadDay[];
   activities: Activity[];
   feedback: SessionFeedback[];
+  /** Too little data for load numbers: judge only from feel, pain and illness */
+  simple?: boolean;
 }): Readiness {
-  const { today, profile, series, activities, feedback } = opts;
+  const { today, profile, series, activities, feedback, simple } = opts;
   const t = ymd(today);
   const day = series.find((d) => d.date === t) ?? series[series.length - 1];
   const tsb = day ? day.tsb : 0;
   const ratio = acwr(activities, today);
   const basedOn: string[] = [];
-  if (day) basedOn.push(`Form ${tsb >= 0 ? '+' : ''}${tsb.toFixed(0)} (fitness ${day.ctl.toFixed(0)}, fatigue ${day.atl.toFixed(0)})`);
-  if (ratio.chronicWeekly > 0)
+  if (day && !simple) basedOn.push(`Form ${tsb >= 0 ? '+' : ''}${tsb.toFixed(0)} (fitness ${day.ctl.toFixed(0)}, fatigue ${day.atl.toFixed(0)})`);
+  if (ratio.chronicWeekly > 0 && !simple)
     basedOn.push(`Last 7 days ${(ratio.acute / 1000).toFixed(0)} km against a 4-week average of ${(ratio.chronicWeekly / 1000).toFixed(0)} km (ratio ${ratio.ratio.toFixed(2)})`);
 
   const recentFb = feedback
     .filter((f) => (today.getTime() - new Date(f.loggedAt).getTime()) / 86400000 <= 3)
     .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
+  const redFlag = recentFb.flatMap((f) => f.pain).find((p) => /chest|dizz/i.test(p.area));
   const pain = recentFb.flatMap((f) => f.pain).filter((p) => p.severity >= 2);
   const lastFeel = recentFb[0]?.feel;
   if (lastFeel) basedOn.push(`You rated your last run ${['', 'very hard', 'hard', 'okay', 'good', 'great'][lastFeel]}`);
@@ -102,6 +105,14 @@ export function readiness(opts: {
       basedOn: ['Illness reported', ...basedOn],
     };
   }
+  if (redFlag) {
+    return {
+      level: 'recovery',
+      label: 'Recovery day',
+      summary: 'You reported chest pain, dizziness or feeling faint. Please do not run until you have spoken to a doctor.',
+      basedOn: ['Worrying symptom logged after a run', ...basedOn],
+    };
+  }
   if (pain.length) {
     return {
       level: 'recovery',
@@ -109,6 +120,10 @@ export function readiness(opts: {
       summary: `You logged ${pain[0].area.toLowerCase()} pain recently. Rest or walk today, and see a physio or doctor if it persists.`,
       basedOn: [`Pain logged: ${pain.map((p) => p.area).join(', ')}`, ...basedOn],
     };
+  }
+  if (simple) {
+    if (lastFeel && lastFeel <= 1) return { level: 'easy', label: 'Take it easy', summary: 'Your last run felt very hard. Today is about recovering, so keep anything you do gentle.', basedOn };
+    return { level: 'ready', label: 'Ready to train', summary: 'Nothing is holding you back today. Go by feel and keep it easy.', basedOn: basedOn.length ? basedOn : ['How your recent runs felt, and no pain or illness logged'] };
   }
   if (tsb < -25 || ratio.ratio > 1.5) {
     return {

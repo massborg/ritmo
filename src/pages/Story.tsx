@@ -4,12 +4,12 @@ import { Award } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { BarChart } from '../components/charts';
 import { Kpi, Lanes } from '../components/ui';
-import { dist, duration, MONTHS_LONG, shortDate, toUnit } from '../lib/format';
+import { dist, duration, MONTHS_LONG, parseYmd, shortDate, toUnit } from '../lib/format';
 import { runningStory } from '../training/insights';
 import { estimateFitness, predictTime } from '../training/fitness';
 
 export default function Story() {
-  const { data, today, hr } = useApp();
+  const { data, today, hr, stage } = useApp();
   const [params] = useSearchParams();
   const setup = params.get('setup') === '1';
   const U = data.profile.units;
@@ -19,7 +19,12 @@ export default function Story() {
     const f = estimateFitness(data.activities, hr, end > today ? today : end);
     return { year: y.year, tenK: f ? predictTime(f.vdot, 10000) : undefined };
   }), [st.years, data.activities, hr, today]);
-  if (!st.totalRuns) return <p className="muted">Upload your runs to see your story.</p>;
+  if (!st.totalRuns) return (
+    <div className="stack-lg"><h1 className="display-lg">Your running story</h1>
+      <div className="card stack"><p className="muted">Your story builds as you run: total distance, biggest weeks, streaks and personal bests. Log your first run or upload your history to start it.</p>
+        <div className="row wrap"><Link to="/" className="btn btn-primary">Log a run</Link><Link to="/profile/data" className="btn">Upload my runs</Link></div></div>
+    </div>
+  );
   const bm = st.biggestMonth ? `${MONTHS_LONG[Number(st.biggestMonth.month.slice(5)) - 1]} ${st.biggestMonth.month.slice(0, 4)}` : '';
   const first10 = trend.find((t) => t.tenK), last10 = [...trend].reverse().find((t) => t.tenK);
 
@@ -45,14 +50,15 @@ export default function Story() {
       <section className="card stack">
         <h2 className="title">Year by year</h2>
         <BarChart bars={st.years.map((y) => ({ label: y.year, value: toUnit(y.m, U), highlight: y.year === st.biggestYear?.year }))} format={(v) => `${v.toFixed(0)} ${U}`} />
-        {first10?.tenK && last10?.tenK && first10.year !== last10.year && (
+        {stage.predictions && first10?.tenK && last10?.tenK && first10.year !== last10.year && (
           <p>{last10.tenK < first10.tenK ? `Your estimated 10K has improved from ${duration(first10.tenK)} in ${first10.year} to ${duration(last10.tenK)} in ${last10.year}.` : `Your estimated 10K is ${duration(last10.tenK)}, compared with ${duration(first10.tenK)} in ${first10.year}.`}</p>
         )}
       </section>
 
       <section className="card stack">
         <div className="row" style={{ gap: 8 }}><Award size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 className="title">Personal bests</h2></div>
-        <div className="grid-3">{st.pbs.map((p) => <Kpi key={p.label} label={p.label} value={duration(p.timeS)} sub={p.date} />)}</div>
+        {st.pbs.length === 0 && <p className="muted">Personal bests appear once you have run 5 km or more in one go.</p>}
+        <div className="grid-3">{st.pbs.map((p) => <Kpi key={p.label} label={p.label} value={duration(p.timeS)} sub={shortDate(parseYmd(p.date))} />)}</div>
       </section>
 
       {setup ? <Link to="/goals?setup=1" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>Set my goals</Link> : <Link to="/progress" className="btn" style={{ alignSelf: 'flex-start' }}>Back to progress</Link>}

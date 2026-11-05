@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { Compass, Footprints, Smartphone, Upload, Watch } from 'lucide-react';
 import { isNative } from '../data/health';
-import { Watch, Smartphone } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Lanes, Logo } from '../components/ui';
 import { GarminExportSteps, UploadPanel } from './DataSources';
@@ -9,43 +9,56 @@ const markWelcomed = () => { try { localStorage.setItem('ritmo:welcomed', '1'); 
 
 export default function Welcome() {
   const nav = useNavigate();
-  const { loadSample, importState, data } = useApp();
-  const imported = !!importState.result && data.mode === 'real' && data.activities.length > 0;
+  const { loadSample, importState, data, updateProfile } = useApp();
+  const imported = !!importState.result && data.mode === 'real' && data.activities.length > 0 && importState.result.added + importState.result.replaced > 0;
   return (
     <div className="stack-lg" style={{ maxWidth: 720, margin: '0 auto' }}>
       <div className="welcome-top" style={{ paddingTop: 'calc(var(--s5) + env(safe-area-inset-top))' }}><Logo variant="main" width={180} /></div>
       <section className="hero stack">
         <Lanes />
         <h1 className="display-lg">Train to your own rhythm.</h1>
-        <p className="body" style={{ maxWidth: 520 }}>Ritmo reads your training history, understands how you run, and tells you what to do next and why. Like a calm, expert coach in your pocket, for a first 10K or a marathon best.</p>
+        <p className="body" style={{ maxWidth: 520 }}>Ritmo understands how you run and tells you what to do next and why. A calm, expert coach in your pocket, for a first 5K or a marathon best.</p>
       </section>
 
-      <section className="card stack" aria-labelledby="s1">
-        <p className="caption">Step 1 of 3</p>
-        <h2 id="s1" className="title">Bring in your runs</h2>
-        <p className="muted">Uploading your history is the best way to start. Ritmo reads the files on your device.</p>
+      <h2 className="title">How would you like to start?</h2>
+
+      <Link to="/start" className="card card-link row" style={{ gap: 'var(--s4)' }}>
+        <span className="row-icon" style={{ width: 48, height: 48 }}><Footprints size={22} strokeWidth={2} aria-hidden="true" /></span>
+        <span className="stack-sm" style={{ gap: 2, flex: 1 }}>
+          <span className="label">I'm new to running</span>
+          <span className="caption">A gentle run/walk plan, three days a week, building to 30 minutes of running. No watch or history needed.</span>
+        </span>
+      </Link>
+
+      <section className="card stack" aria-labelledby="s-upload">
+        <div className="row" style={{ gap: 'var(--s4)' }}>
+          <span className="row-icon" style={{ width: 48, height: 48 }}><Upload size={22} strokeWidth={2} aria-hidden="true" /></span>
+          <span className="stack-sm" style={{ gap: 2 }}>
+            <h3 id="s-upload" className="label">I already run</h3>
+            <span className="caption">Upload your history so Ritmo can learn from it. Files are read on your device.</span>
+          </span>
+        </div>
         <UploadPanel />
         <details>
           <summary className="label" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>How to get your Garmin history</summary>
           <GarminExportSteps />
         </details>
         {imported && (
-          <button className="btn btn-primary" onClick={() => { markWelcomed(); nav('/story?setup=1'); }}>See your running story</button>
+          <button className="btn btn-primary" onClick={() => { markWelcomed(); updateProfile({ experience: 'runner' }); nav('/story?setup=1'); }}>See your running story</button>
         )}
-      </section>
-
-      <section className="card stack">
-        <h2 className="title">Other ways to connect</h2>
         <ul className="list">
-          <li className="list-item row-between wrap"><span className="row"><Watch size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Connect Garmin</span><span className="caption">Automatic sync is coming once Garmin approves access.</span></span></span><span className="tag">Coming soon</span></li>
-          <li className="list-item row-between wrap"><span className="row"><Smartphone size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Apple Health and Health Connect</span><span className="caption">In the iPhone and Android apps.</span></span></span>{isNative() ? <Link to="/profile/health" className="btn btn-small btn-primary">Connect</Link> : <span className="tag">In the phone app</span>}</li>
+          <li className="list-item row-between wrap"><span className="row"><Watch size={20} strokeWidth={2} aria-hidden="true" /><span className="caption">Automatic Garmin sync is coming once Garmin approves access.</span></span></li>
+          <li className="list-item row-between wrap"><span className="row"><Smartphone size={20} strokeWidth={2} aria-hidden="true" /><span className="caption">Apple Health and Health Connect: in the phone apps.</span></span>{isNative() && <Link to="/profile/health" className="btn btn-small btn-primary">Connect</Link>}</li>
         </ul>
       </section>
 
-      <div className="stack-sm" style={{ alignItems: 'center', paddingBottom: 'var(--s6)' }}>
-        <p className="muted">Want to look around first?</p>
-        <button className="btn" onClick={() => { loadSample(); markWelcomed(); nav('/'); }}>Explore with sample data</button>
-      </div>
+      <button className="card card-link row" style={{ gap: 'var(--s4)', textAlign: 'left', cursor: 'pointer', width: '100%' }} onClick={() => { loadSample(); markWelcomed(); nav('/'); }}>
+        <span className="row-icon" style={{ width: 48, height: 48 }}><Compass size={22} strokeWidth={2} aria-hidden="true" /></span>
+        <span className="stack-sm" style={{ gap: 2, flex: 1 }}>
+          <span className="label">Look around with sample data</span>
+          <span className="caption">Explore Ritmo with an example runner. You can switch to your own data at any time.</span>
+        </span>
+      </button>
     </div>
   );
 }

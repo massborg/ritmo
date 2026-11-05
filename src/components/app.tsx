@@ -40,12 +40,12 @@ export function SampleChip() {
 }
 
 export function Avatar() {
-  const { data } = useApp();
-  const initials = (data.profile.name || 'You').split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase();
+  const { data, session } = useApp();
+  const initials = (data.profile.name ? data.profile.name.split(' ').map((x) => x[0]).join('') : (session?.user.email ?? 'R')[0]).slice(0, 2).toUpperCase();
   return <Link to="/profile" className="avatar" aria-label="Profile">{initials}</Link>;
 }
 
-export const ZONE_OF: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, tempo: 3, threshold: 4, hills: 4, vo2max: 5, speed: 5, race: 4 };
+export const ZONE_OF: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, runwalk: 2, tempo: 3, threshold: 4, hills: 4, timetrial: 4, vo2max: 5, speed: 5, race: 4 };
 
 /** Horizontal strip of days with a coloured mark for each session. */
 export function WeekStrip({ days, selected, onSelect }: { days: { date: string; dow: string; dom: number; session?: PlannedSession; done: boolean; today: boolean }[]; selected: string; onSelect: (d: string) => void }) {
@@ -74,8 +74,17 @@ export function workoutBlocks(s: PlannedSession): Block[] {
   const workZone = s.hrZones?.[s.hrZones.length - 1] ?? ZONE_OF[s.type] ?? 2;
   for (const st of s.steps) {
     const label = st.label.toLowerCase();
+    const rw = st.label.match(/(\d+) x \((\d+) (min|s)(?: (\d+) s)? running \+ (\d+) (min|s)(?: (\d+) s)? walking\)/);
+    if (rw) {
+      const secs = (n: string, u: string, extra?: string) => Number(n) * (u === 'min' ? 60 : 1) + Number(extra ?? 0);
+      const run = secs(rw[2], rw[3], rw[4]) * 3, walk = secs(rw[5], rw[6], rw[7]) * 1.6; // relative widths by time
+      for (let i = 0; i < Number(rw[1]); i++) { blocks.push({ label: 'Run', m: run, zone: 3 }); if (i < Number(rw[1]) - 1) blocks.push({ label: 'Walk', m: walk, zone: 1 }); }
+      continue;
+    }
+    const cont = st.label.match(/^(\d+) min easy running$/);
+    if (cont) { blocks.push({ label: st.label, m: Number(cont[1]) * 180, zone: 3 }); continue; }
     const reps = st.label.match(/(\d+)\s*x\s*([\d.]+)\s*(km|m|s)\b/i);
-    if (/warm up|cool down/.test(label)) { blocks.push({ label: st.label, m: 2000, zone: 1 }); continue; }
+    if (/warm up|cool down/.test(label)) { blocks.push({ label: st.label, m: s.type === 'runwalk' ? 900 : 2000, zone: 1 }); continue; }
     if (reps) {
       const n = Number(reps[1]);
       const len = reps[3].toLowerCase() === 'km' ? Number(reps[2]) * 1000 : reps[3].toLowerCase() === 'm' ? Number(reps[2]) : Number(reps[2]) * 4.5;

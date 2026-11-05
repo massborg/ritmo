@@ -168,3 +168,43 @@ export function vdotForRace(a: Activity) {
 }
 
 export { distanceLabel };
+
+export interface Balance {
+  easyPct: number; // share of running time that was easy, last 28 days
+  plannedEasyPct?: number; // what the plan prescribed over the same days
+  phase?: string;
+  verdict: 'good' | 'matches-plan' | 'too-hard';
+  message: string;
+}
+
+const EASY_TYPES = ['easy', 'recovery', 'long', 'runwalk'];
+
+/**
+ * Easy/hard balance that takes the training phase into account: in build and peak weeks the plan itself
+ * prescribes more quality work, so the runner is only warned when they run harder than the plan asked for.
+ */
+export function easyHardBalance(opts: {
+  activities: Activity[]; typeOf: (a: Activity) => string; sessions: { date: string; type: string; durationS: number; phase: string }[]; today: Date;
+}): Balance | undefined {
+  const { activities, typeOf, sessions, today } = opts;
+  const inWindow = (d: Date) => { const x = daysBetween(d, today); return x >= 0 && x < 28; };
+  const runs = activities.filter((a) => inWindow(new Date(a.startTime)));
+  const total = runs.reduce((x, a) => x + a.movingS, 0);
+  if (!total) return undefined;
+  const easy = runs.filter((a) => EASY_TYPES.includes(typeOf(a))).reduce((x, a) => x + a.movingS, 0);
+  const easyPct = Math.round((easy / total) * 100);
+  const planned = sessions.filter((s) => inWindow(parseYmd(s.date)) && s.type !== 'rest' && s.durationS > 0);
+  const plannedTotal = planned.reduce((x, s) => x + s.durationS, 0);
+  if (plannedTotal > 0) {
+    const plannedEasyPct = Math.round((planned.filter((s) => EASY_TYPES.includes(s.type)).reduce((x, s) => x + s.durationS, 0) / plannedTotal) * 100);
+    const phases = planned.map((s) => s.phase);
+    const phase = phases.sort((a, b) => phases.filter((p) => p === b).length - phases.filter((p) => p === a).length)[0];
+    if (easyPct >= plannedEasyPct - 7) {
+      return { easyPct, plannedEasyPct, phase, verdict: easyPct >= 75 ? 'good' : 'matches-plan', message: easyPct >= 75 ? `A healthy balance, in line with the ${plannedEasyPct}% easy your plan set for these weeks.` : `This matches your plan: in the ${phase} phase it prescribes about ${plannedEasyPct}% easy running, with more quality sessions than usual. It will swing back towards easy running afterwards.` };
+    }
+    return { easyPct, plannedEasyPct, phase, verdict: 'too-hard', message: `Your plan set about ${plannedEasyPct}% easy running for these weeks, but you ran ${easyPct}% easy. Slow your easy days down so the hard sessions can count.` };
+  }
+  return easyPct >= 75
+    ? { easyPct, verdict: 'good', message: 'A healthy balance. Most of your running is easy, which lets your hard sessions count.' }
+    : { easyPct, verdict: 'too-hard', message: 'More of your running is hard than ideal. Aim for about 80% easy to keep fatigue in check.' };
+}

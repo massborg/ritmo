@@ -10,7 +10,9 @@ Live: https://ritmo-running.netlify.app
 
 - Splash, first-time setup (upload, import progress, running story, goals), Today, Calendar (day/week/month), training plan with explained adaptations, session analysis and feedback, races (prediction, readiness, pacing, taper, post-race review), Progress, Coach, Profile, data sources, privacy (export and delete).
 - Clearly labelled sample data runs through the same integration layer as real sources.
-- Local-first storage (IndexedDB), mirrored to Supabase when the runner signs in by email link.
+- **Accounts are required.** Email and password sign-up with health-data consent, log in, log out, forgot and reset password (Supabase Auth). Every route except log in, sign up, password reset and privacy needs an account, and returns people to the page they wanted after login.
+- Each account's runs, plans, races, feedback and coach chats are stored in Supabase under row-level security, with a per-user cache on the device that is cleared on logout. Data saved by older versions in a browser is offered to the next new account on that browser.
+- **Beginner path:** "I'm new to running" builds an effort-based run/walk plan (three days a week, building to 30 minutes continuous, then a 5K). "I did it" logs runs by hand. Features unlock in stages: estimated paces after 3 runs; VDOT, race predictions, readiness score and training load after a time trial, race or detailed history.
 
 ## Architecture
 
@@ -26,13 +28,28 @@ Live: https://ritmo-running.netlify.app
 - **Coach** (`src/coach/coach.ts`): answers built only from computed facts. The Supabase `coach` function can phrase answers with Claude when `ANTHROPIC_API_KEY` is set; otherwise the app answers locally.
 - **Supabase** (project RITMO): tables `profiles`, `activities`, `races`, `plans`, `session_feedback`, `sources`, all with row-level security; `delete_my_data()` RPC. Schema in `supabase/migrations`.
 
+## Security
+
+- All seven tables (`profiles`, `activities`, `races`, `plans`, `session_feedback`, `sources`, `coach_messages`) have RLS with select/insert/update/delete limited to `auth.uid() = user_id`; signed-out clients have no table grants.
+- `delete_my_data()` runs as the caller, so RLS limits it to their rows. The `delete-account` function deletes only the user identified by the request's own token (rows cascade). The `coach` function rejects anyone who is not a signed-in user.
+- `supabase/tests/rls_check.sql` verifies this with two temporary users (last run 5 Nov 2026: all checks passed).
+
 ## Development
 
 ```bash
 npm install
 npm run dev
-npm test
+npm test                 # unit tests: plan logic, adaptation rules, fitness stages, analysis, coach
+npm run build && npx vite preview --port 4173 &
+node e2e/flows.cjs       # browser flows at phone and desktop size against a simulated Supabase
+node scripts/phone-fit.cjs   # overflow and 44px tap targets on seven phone sizes
 ```
+
+### Supabase Auth settings (dashboard)
+
+- Authentication > URL Configuration: Site URL `https://ritmo-running.netlify.app`; add `https://ritmo-running.netlify.app/**` to Redirect URLs.
+- Authentication > Providers > Email: keep "Confirm email" on.
+- Authentication > Emails: set up custom SMTP before launch (the built-in sender is rate limited).
 
 ## Build order
 1. Responsive web app with sample data and file uploads (this stage)

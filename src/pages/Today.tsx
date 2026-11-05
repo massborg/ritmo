@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronRight, Clock, Lightbulb, Upload } from 'lucide-react';
+import { ArrowRight, Check, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { Empty, Lanes, ReadinessStatus, ZoneTag } from '../components/ui';
+import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
+import { LogRunSheet } from '../components/LogRun';
 import { addDays, DAY_NAMES, daysBetween, dist, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
+import { RUNS_FOR_PACES } from '../training/stage';
+import type { PlannedSession } from '../lib/types';
 
 function greeting() {
   const h = new Date().getHours();
@@ -14,18 +17,28 @@ function greeting() {
 }
 
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces } = useApp();
   const U = data.profile.units;
   const t = ymd(today);
   const [selected, setSelected] = useState(t);
+  const [logFor, setLogFor] = useState<PlannedSession | 'free' | null>(null);
+  const [planMsg, setPlanMsg] = useState<string>();
+  const logButton = <button className="icon-btn" aria-label="Log a run" onClick={() => setLogFor('free')}><Plus size={24} strokeWidth={2} /></button>;
+  const sheet = logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />;
 
-  if (!data.activities.length) {
+  if (!data.activities.length && !plan) {
     return (
       <div className="stack-lg">
-        <AppHeader title="Today" eyebrow={longDate(today)} right={<Avatar />} />
-        <Empty icon={<Upload size={28} strokeWidth={2} aria-hidden="true" />} title="Bring in your runs" action={<Link to="/profile/data" className="btn btn-primary">Upload my runs</Link>}>
-          Ritmo needs your training history to plan your week. Upload FIT, GPX or TCX files, or your full Garmin export.
+        <AppHeader title="Today" eyebrow={longDate(today)} right={<><SampleChip />{logButton}<Avatar /></>} />
+        <Empty icon={<Sparkles size={28} strokeWidth={2} aria-hidden="true" />} title="Let's get you started"
+          action={<div className="stack-sm" style={{ width: '100%' }}>
+            <Link to="/start" className="btn btn-primary"><Footprints size={18} strokeWidth={2} aria-hidden="true" />I'm new to running</Link>
+            <Link to="/profile/data" className="btn"><Upload size={18} strokeWidth={2} aria-hidden="true" />Upload my runs</Link>
+            <button className="btn btn-ghost" onClick={() => setLogFor('free')}><Plus size={18} strokeWidth={2} aria-hidden="true" />Log a run by hand</button>
+          </div>}>
+          Ritmo plans your week from your running. There is nothing here yet: start a beginner plan, bring in your history, or log a run you have done.
         </Empty>
+        {sheet}
       </div>
     );
   }
@@ -36,24 +49,35 @@ export default function Today() {
   const days = week.map((d) => ({ date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session: plan?.sessions.find((x) => x.date === d), done: ranOn(d), today: d === t }));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
+  const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = data.activities.filter((a) => week.includes(a.startTime.slice(0, 10)) && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0);
-  const plannedM = (plan?.sessions ?? []).filter((x) => week.includes(x.date)).reduce((x, p) => x + p.distanceM, 0);
+  const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
+  const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
   const last = [...data.activities].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
   const lastAn = last ? analysisFor(last) : undefined;
-  const latestChange = plan?.changes.filter((c) => c.id !== 'built').sort((a, b) => b.at.localeCompare(a.at))[0];
   const daysToRace = aRace ? daysBetween(today, parseYmd(aRace.date)) : undefined;
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
   const tsb = series.find((d) => d.date === t)?.tsb ?? 0;
   const gauge = Math.round(readiness.level === 'ready' ? Math.max(65, Math.min(98, 78 + tsb)) : readiness.level === 'easy' ? Math.max(40, Math.min(64, 58 + tsb / 2)) : Math.max(10, Math.min(39, 30 + tsb / 3)));
-  const insight = latestChange && daysBetween(new Date(latestChange.at), today) <= 7
-    ? latestChange.summary
-    : lastAn?.patternNotes[0] ? `${lastAn.patternNotes[0]} ${lastAn.improve[0]}` : lastAn?.wentWell[0];
+  const upcoming = (plan?.sessions ?? []).filter((x) => x.date >= t && x.type !== 'rest');
+  const isStarter = plan?.sessions.some((x) => x.type === 'runwalk' || x.type === 'timetrial');
+
+  // Coaching insight: only recent plan changes (they carry their own date), otherwise a note from the last run, dated
+  const recentChange = plan?.changes.filter((c) => c.id !== 'built' && daysBetween(new Date(c.at), today) <= 2).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const lastRunNote = last && lastAn && daysBetween(new Date(last.startTime), today) <= 7
+    ? `From your run on ${longDate(new Date(last.startTime))}: ${lastAn.patternNotes[0] ? `${lastAn.patternNotes[0]} ${lastAn.improve[0]}` : lastAn.wentWell[0]}`
+    : undefined;
+  const insight = recentChange?.summary ?? lastRunNote;
+
+  const sessionAmount = (x: PlannedSession) => x.distanceM > 0
+    ? <div><span className="stat-xl">{toUnit(x.distanceM, U).toFixed(x.distanceM % 1000 ? 1 : 0)}</span><span className="label"> {U}</span></div>
+    : <div><span className="stat-xl">{Math.round(x.durationS / 60)}</span><span className="label"> min</span></div>;
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Today" eyebrow={`${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}`} right={<><SampleChip /><Avatar /></>} />
+      <AppHeader title="Today" eyebrow={`${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}`} right={<><SampleChip />{logButton}<Avatar /></>} />
 
-      <WeekStrip days={days} selected={selected} onSelect={setSelected} />
+      {plan && <WeekStrip days={days} selected={selected} onSelect={setSelected} />}
 
       {s ? (
         <section className="hero stack" aria-labelledby="session-title">
@@ -66,8 +90,8 @@ export default function Today() {
           {s.type !== 'rest' ? (
             <>
               <div className="row wrap" style={{ gap: 'var(--s5)', alignItems: 'flex-end' }}>
-                <div><span className="stat-xl">{toUnit(s.distanceM, U).toFixed(s.distanceM % 1000 ? 1 : 0)}</span><span className="label"> {U}</span></div>
-                <div className="row label" style={{ gap: 6, paddingBottom: 6 }}><Clock size={16} strokeWidth={2} aria-hidden="true" />{durationWords(s.durationS)}</div>
+                {sessionAmount(s)}
+                {s.distanceM > 0 && <div className="row label" style={{ gap: 6, paddingBottom: 6 }}><Clock size={16} strokeWidth={2} aria-hidden="true" />{durationWords(s.durationS)}</div>}
               </div>
               <WorkoutGraph session={s} onBrand height={64} />
               <ol className="ol-steps body">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
@@ -76,21 +100,40 @@ export default function Today() {
           <div className="row wrap">
             {done
               ? <Link to={`/activity/${done.id}`} className="btn btn-primary">See your feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
-              : <Link to={`/session/${s.id}`} className="btn btn-primary">{s.type === 'rest' ? 'Why rest matters' : 'Session details'} <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>}
-            {isToday && s.type !== 'rest' && !done && <Link to="/coach?q=I only have 30 minutes, what should I do?" className="btn">Short on time?</Link>}
+              : s.type !== 'rest' && selected <= t
+                ? <button className="btn btn-primary" onClick={() => setLogFor(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I did it</button>
+                : null}
+            {!done && <Link to={`/session/${s.id}`} className="btn">{s.type === 'rest' ? 'Why rest matters' : 'Session details'}</Link>}
+            {isToday && s.type !== 'rest' && !done && <Link to="/coach?q=I only have 30 minutes, what should I do?" className="btn btn-ghost">Short on time?</Link>}
           </div>
         </section>
+      ) : plan ? (
+        <Empty title={upcoming.length ? 'Nothing planned' : 'Your plan is complete'} action={!upcoming.length && <button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my next plan</button>}>
+          {upcoming.length ? 'Enjoy the day off. A gentle walk is always fine.' : 'Well done for finishing it. Ritmo can build your next plan from what you have done.'}
+        </Empty>
       ) : (
-        <Empty title={plan ? 'Nothing planned' : 'No plan yet'} action={!plan && <button className="btn btn-primary" onClick={buildMyPlan}>Build my plan</button>}>
-          {plan ? 'Enjoy the day off.' : 'Ritmo builds a plan from your past training, current fitness and goals, then adapts it as you go.'}
+        <Empty title="No plan yet" action={<button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my plan</button>}>
+          Ritmo builds a plan from your past training, current fitness and goals, then adapts it as you go.
         </Empty>
       )}
+      {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
 
-      {s && s.type !== 'rest' && s.type !== 'race' && (s.paceTarget || s.hrZones) && (
+      {isStarter && stage.predictions && (
+        <section className="card stack-sm">
+          <StatusLine kind="success">Full plans unlocked</StatusLine>
+          <p>Your time trial means Ritmo now knows your fitness. You can move on to a plan for a 5K, 10K or longer goal, with pace targets and race predictions.</p>
+          <div className="row wrap"><button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my next plan</button><Link to="/race/new" className="btn">Add a race first</Link></div>
+        </section>
+      )}
+
+      {s && s.type !== 'rest' && s.type !== 'race' && (s.paceTarget || s.hrZones || s.type === 'runwalk') && (
         <section className="card stack-sm" aria-label="Targets">
           <div className="row-between wrap" style={{ gap: 'var(--s4)' }}>
-            {s.paceTarget && <div><p className="caption">Target pace</p><p className="stat" style={{ fontSize: 22, lineHeight: '28px' }}>{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
-            {s.hrZones && <ZoneTag zones={s.hrZones} />}
+            {s.paceTarget && <div><p className="caption">Target pace{stage.stage === 'building' ? ' (estimated from your runs)' : ''}</p><p className="stat" style={{ fontSize: 22, lineHeight: '28px' }}>{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
+            {s.type === 'runwalk' && (paces
+              ? <div><p className="caption">Running parts, estimated from your runs</p><p className="stat" style={{ fontSize: 22, lineHeight: '28px' }}>{paceRange(paces.easy[0], paces.easy[1], U)}</p></div>
+              : <div><p className="caption">Effort</p><p className="label">Easy: you can talk in full sentences</p></div>)}
+            {s.hrZones && data.activities.some((a) => a.avgHr) && <ZoneTag zones={s.hrZones} />}
           </div>
           <p className="caption"><strong style={{ color: 'var(--ink)' }}>Why it matters.</strong> {s.purpose}</p>
         </section>
@@ -99,24 +142,37 @@ export default function Today() {
       <SectionTitle>How you are today</SectionTitle>
       <section className="card stack" aria-label="Readiness">
         <div className="row" style={{ gap: 'var(--s4)' }}>
-          <ReadinessGauge level={readiness.level} value={gauge} label={readiness.label} />
+          {stage.predictions && <ReadinessGauge level={readiness.level} value={gauge} label={readiness.label} />}
           <div className="stack-sm">
             <ReadinessStatus level={readiness.level} label={readiness.label} />
             <p>{readiness.summary}</p>
           </div>
         </div>
+        {!stage.predictions && <p className="caption">A readiness score with training load appears once Ritmo knows your fitness. Until then it is based on how your runs felt and any pain or illness you log.</p>}
         <details>
           <summary className="label row" style={{ cursor: 'pointer', minHeight: 44, gap: 6 }}>What this is based on</summary>
           <ul className="bullets caption">{readiness.basedOn.map((b) => <li key={b}>{b}</li>)}</ul>
         </details>
       </section>
 
+      {!stage.predictions && (
+        <section className="card stack-sm" aria-labelledby="unlock">
+          <h2 id="unlock" className="label">Unlocking your fitness</h2>
+          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}><span className="stat-xl" style={{ fontSize: 32, lineHeight: '36px' }}>{stage.runs}</span><span className="muted label">run{stage.runs === 1 ? '' : 's'} logged</span></div>
+          <div className="progress" role="progressbar" aria-label="Runs towards pace targets" aria-valuemin={0} aria-valuemax={RUNS_FOR_PACES} aria-valuenow={Math.min(RUNS_FOR_PACES, stage.runs)}><span style={{ width: `${Math.min(100, (stage.runs / RUNS_FOR_PACES) * 100)}%` }} /></div>
+          <p className="caption">{stage.next}</p>
+        </section>
+      )}
+
       <SectionTitle action={<Link to="/progress" className="btn btn-ghost btn-small">Progress</Link>}>At a glance</SectionTitle>
       <div className="tiles">
-        <Tile to="/calendar" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={<span className="stack-sm" style={{ gap: 6 }}>of {toUnit(plannedM, U).toFixed(0)} {U} planned<span className="progress" style={{ display: 'block' }}><span style={{ width: `${Math.min(100, (doneM / (plannedM || 1)) * 100)}%` }} /></span></span>} />
+        {durationBased
+          ? <Tile to="/calendar" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
+          : <Tile to="/calendar" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? <span className="stack-sm" style={{ gap: 6 }}>of {toUnit(plannedM, U).toFixed(0)} {U} planned<span className="progress" style={{ display: 'block' }}><span style={{ width: `${Math.min(100, (doneM / (plannedM || 1)) * 100)}%` }} /></span></span> : 'run so far'} />}
         {aRace && daysToRace != null && <Tile to={`/race/${aRace.id}`} accent label={aRace.name} value={daysToRace} unit="days" sub={`${aRace.priority} race`} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
-        {fitness && <Tile to="/progress" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
+        {fitness && stage.predictions && <Tile to="/progress" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
+        {!stage.predictions && <Tile to="/progress" label="Runs logged" value={data.activities.length} sub={data.activities.length ? `${dist(data.activities.reduce((x, a) => x + a.distanceM, 0), U)} in total` : 'Your first one is next'} />}
       </div>
 
       {insight && (
@@ -142,6 +198,7 @@ export default function Today() {
           </div>
         </>
       )}
+      {sheet}
     </div>
   );
 }

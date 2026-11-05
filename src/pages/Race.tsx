@@ -53,8 +53,9 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
 export default function RacePage() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { data, saveRace, deleteRace, fitness, hr, today, buildMyPlan, plan } = useApp();
+  const { data, saveRace, deleteRace, fitness, hr, today, buildMyPlan, plan, stage } = useApp();
   const [editing, setEditing] = useState(id === 'new');
+  const [planMsg, setPlanMsg] = useState<string>();
   const race = data.races.find((r) => r.id === id);
   const U = data.profile.units;
 
@@ -70,7 +71,7 @@ export default function RacePage() {
 
   const past = race.date < ymd(today);
   const days = daysBetween(today, parseYmd(race.date));
-  const rr = fitness ? raceReadiness(race, data.activities, fitness.vdot, today) : undefined;
+  const rr = fitness && stage.predictions ? raceReadiness(race, data.activities, fitness.vdot, today) : undefined;
   const target = race.goalS && rr && race.goalS >= rr.predictedS * 0.98 ? race.goalS : rr?.predictedS;
   const pp = target ? pacingPlan(race, target) : [];
 
@@ -89,6 +90,14 @@ export default function RacePage() {
         <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days} days to go</span>}</div>
       </div>
 
+      {!past && !rr && (
+        <section className="card stack">
+          <StatusLine kind="info">Predictions are not available yet</StatusLine>
+          <p className="muted">To predict your finish time and race readiness, Ritmo needs a timed effort such as a 5K time trial or a race. {stage.next}</p>
+          <p><strong>Taper guidance.</strong> {taperGuidance(race, today)}</p>
+          <div className="row wrap"><Link to="/" className="btn btn-primary">Log a run</Link><Link to="/profile/data" className="btn">Upload files</Link></div>
+        </section>
+      )}
       {!past && rr && (
         <>
           <section className="hero stack">
@@ -102,7 +111,8 @@ export default function RacePage() {
               <ul className="list">{rr.parts.map((p) => <li key={p.label} className="row-between" style={{ padding: '10px 0' }}><span className="caption" style={{ color: 'var(--ink)' }}>{p.label}</span><StatusLine kind={p.ok ? 'success' : 'warning'}>{p.value}</StatusLine></li>)}</ul>
             </section>
             <section className="card stack"><h2 className="title">Taper guidance</h2><p>{taperGuidance(race, today)}</p>
-              {plan?.raceId !== race.id && race.priority === 'A' && <button className="btn btn-primary" onClick={buildMyPlan}>Build my plan for this race</button>}
+              {plan?.raceId !== race.id && race.priority === 'A' && <button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my plan for this race</button>}
+              {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
             </section>
           </div>
           {pp.length > 0 && (

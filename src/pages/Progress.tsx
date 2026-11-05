@@ -1,19 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Award, Flame, Share2 } from 'lucide-react';
+import { Award, Flame, Lock, Share2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
 import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
-import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
-import { monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
+import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { easyHardBalance, monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
+import { PHASE_LABEL } from '../training/plan';
 import { estimateFitness, predictTime } from '../training/fitness';
 import { zoneTime } from '../training/analysis';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function Progress() {
-  const { data, today, typeOf, series, zones, hr, updateProfile } = useApp();
+  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan } = useApp();
   const U = data.profile.units;
   const acts = data.activities;
   const [period, setPeriod] = useState<Period>('week');
@@ -68,10 +69,8 @@ export default function Progress() {
   // Zones and balance over last 4 weeks
   const last28 = acts.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; });
   const zt = last28.filter((a) => a.streams).reduce((acc, a) => zoneTime(a.streams!, zones).map((v, i) => v + acc[i]), [0, 0, 0, 0, 0]);
-  const easyTypes = ['easy', 'recovery', 'long'];
-  const easyS = last28.filter((a) => easyTypes.includes(typeOf(a))).reduce((x, a) => x + a.movingS, 0);
-  const hardS = last28.reduce((x, a) => x + a.movingS, 0) - easyS;
-  const easyPct = easyS + hardS ? Math.round((easyS / (easyS + hardS)) * 100) : 0;
+  const balance = easyHardBalance({ activities: acts, typeOf, sessions: (plan?.sessions ?? []).map((x) => ({ ...x, phase: PHASE_LABEL[x.phase].toLowerCase() })), today });
+  const easyPct = balance?.easyPct ?? 0;
 
   // Training load (last 120 days, weekly samples)
   const loadSlice = series.slice(-120).filter((_, i, arr) => (arr.length - 1 - i) % 7 === 0);
@@ -91,7 +90,17 @@ export default function Progress() {
     return { labels, five, ten, half, mar };
   }, [acts, today, hr]);
 
-  if (!acts.length) return <div className="stack-lg"><h1 className="display-lg">Progress</h1><Empty title="No runs yet" action={<Link className="btn btn-primary" to="/profile/data">Upload my runs</Link>}>Your mileage, trends and personal bests appear here once you bring in your runs.</Empty></div>;
+  if (!acts.length) return (
+    <div className="stack-lg">
+      <AppHeader title="Progress" right={<><SampleChip /><Avatar /></>} />
+      <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/">Log a run on Today</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
+        Your distance, streaks and personal bests appear here after your first run. Log one by hand, or upload files from a watch.
+      </Empty>
+    </div>
+  );
+  const Locked = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <section className="card stack-sm"><div className="row" style={{ gap: 8 }}><Lock size={18} strokeWidth={2} aria-hidden="true" /><h2 className="title">{title}</h2></div><p className="muted">{children}</p><p className="caption">{stage.next}</p></section>
+  );
 
   const fmtU = (v: number) => v.toFixed(0);
   const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
@@ -135,29 +144,34 @@ export default function Progress() {
           <p className="caption">Last 4 weeks, by time</p>
           <div className="row" style={{ alignItems: 'baseline', gap: 8 }}><span className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{easyPct}%</span><span className="label muted">easy</span></div>
           <div className="zone-bar" role="img" aria-label={`${easyPct}% easy, ${100 - easyPct}% hard`}><span className="z2" style={{ width: `${easyPct}%` }} /><span className="z4" style={{ width: `${100 - easyPct}%` }} /></div>
-          <p>{easyPct >= 75 ? 'A healthy balance. Most of your running is easy, which lets your hard sessions count.' : 'More of your running is hard than ideal. Aim for about 80% easy to keep fatigue in check.'}</p>
+          {balance?.plannedEasyPct != null && <p className="caption">Your plan for these weeks: {balance.plannedEasyPct}% easy.</p>}
+          <p>{balance ? balance.message : 'No runs in the last 4 weeks.'}</p>
         </section>
       </div>
 
       <div className="grid-2">
-        <section className="card stack" aria-labelledby="zones"><h2 id="zones" className="title">Time in each zone</h2><p className="caption">Last 4 weeks, runs with heart rate</p>{zt.some((v) => v > 0) ? <ZoneBar seconds={zt} /> : <p className="muted">No heart rate data in the last 4 weeks.</p>}</section>
+        <section className="card stack" aria-labelledby="zones"><h2 id="zones" className="title">Time in each zone</h2><p className="caption">Last 4 weeks, runs with heart rate</p>{zt.some((v) => v > 0) ? <ZoneBar seconds={zt} /> : <p className="muted">{acts.some((a) => a.avgHr) ? 'No heart rate data in the last 4 weeks.' : 'Zones need heart rate from a watch or chest strap. Upload a file from your watch to see them.'}</p>}</section>
         <section className="card stack" aria-labelledby="long"><h2 id="long" className="title">Long-run progress</h2><p className="caption">Longest run each month, {U}</p><LineChart series={[{ name: 'Longest run', values: longRuns.vals, color: 'var(--brand)' }]} labels={longRuns.labels} every={3} /></section>
       </div>
 
+      {stage.predictions ? (
       <section className="card stack" aria-labelledby="load">
         <h2 id="load" className="title">Training load</h2>
         <p className="caption">Fitness is your 6-week average load, fatigue your 1-week average, and form the difference. Form between –10 and –25 is productive training; below that, rest.</p>
         <LineChart labels={loadSlice.map((d) => `${parseYmd(d.date).getDate()}/${parseYmd(d.date).getMonth() + 1}`)} every={3}
           series={[{ name: 'Fitness', values: loadSlice.map((d) => d.ctl), color: 'var(--ink)' }, { name: 'Fatigue', values: loadSlice.map((d) => d.atl), color: 'var(--brand)' }, { name: 'Form', values: loadSlice.map((d) => d.tsb), color: 'var(--info)', dashed: true }]} />
       </section>
+      ) : <Locked title="Training load">Fitness, fatigue and form need a few weeks of runs and a known fitness level. Until then they would only be guesses, so Ritmo keeps them hidden.</Locked>}
 
       <div className="grid-2">
         <section className="card stack" aria-labelledby="pbs">
           <div className="row" style={{ gap: 8 }}><Award size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="pbs" className="title">Personal bests</h2></div>
+          {pbs.length === 0 && <p className="muted">Personal bests appear once you have run 5 km or more in one go.</p>}
           <ul className="list">{pbs.map((p) => (
-            <li key={p.label}><Link to={`/activity/${p.activityId}`} className="list-item row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{p.label}</span><span className="caption">{p.date}{p.fromRace ? ' · race' : ' · in training'}</span></span><span className="stat" style={{ fontSize: 20 }}>{duration(p.timeS)}</span></Link></li>
+            <li key={p.label}><Link to={`/activity/${p.activityId}`} className="list-item row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{p.label}</span><span className="caption">{shortDate(parseYmd(p.date))}{p.fromRace ? ' · race' : ' · in training'}</span></span><span className="stat" style={{ fontSize: 20 }}>{duration(p.timeS)}</span></Link></li>
           ))}</ul>
         </section>
+{stage.predictions ? (
         <section className="card stack" aria-labelledby="est">
           <h2 id="est" className="title">Estimated race times</h2>
           <p className="caption">Minutes, last 24 months. Lower is faster.</p>
@@ -169,6 +183,7 @@ export default function Progress() {
             })}
           </div>
         </section>
+        ) : <Locked title="Estimated race times">Race predictions are based on a timed effort. Run a 5K time trial or a race and Ritmo will predict your 5K, 10K, half marathon and marathon times.</Locked>}
       </div>
 
       <section className="band row-between wrap">
