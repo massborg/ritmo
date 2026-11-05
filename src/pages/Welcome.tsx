@@ -13,7 +13,7 @@ export default function Welcome() {
   const imported = !!importState.result && data.mode === 'real' && data.activities.length > 0;
   return (
     <div className="stack-lg" style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div style={{ padding: 'var(--s5) 0 0' }}><Logo variant="main" width={180} /></div>
+      <div className="welcome-top" style={{ paddingTop: 'calc(var(--s5) + env(safe-area-inset-top))' }}><Logo variant="main" width={180} /></div>
       <section className="hero stack">
         <Lanes />
         <h1 className="display-lg">Train to your own rhythm.</h1>

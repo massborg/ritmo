@@ -398,3 +398,46 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 @media (max-width: 480px) { .pill-long { display: none; } .pill-short { display: inline; } }
 .cal-nav { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: var(--s2); }
 .cal-nav-title { justify-self: center; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: var(--r-pill); border: 0; background: var(--surface-sunken); font: 600 17px/22px var(--font-body); color: var(--ink); cursor: pointer; white-space: nowrap; }
+
+/* =====================================================================
+   Exact phone fit
+   ===================================================================== */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { max-width: 100%; overflow-x: clip; }
+body { overscroll-behavior-y: none; min-height: 100dvh; }
+button, a, [role='button'], input, select, textarea, label { touch-action: manipulation; }
+img, svg, video, canvas { max-width: 100%; }
+
+/* Splash fits the narrowest phones: logo card never wider than the screen */
+.splash .sp-card { padding: clamp(18px, 6vw, 30px) clamp(20px, 7vw, 34px); max-width: calc(100vw - 32px); }
+.splash .sp-card img { width: min(260px, calc(100vw - 32px - 2 * clamp(20px, 7vw, 34px))); height: auto; }
+.sp-lanes { position: absolute; inset: 0; overflow: hidden; }
+
+/* App bar: long titles truncate instead of pushing past the edge */
+.appbar-inner { grid-template-columns: minmax(44px, 1fr) minmax(0, auto) minmax(44px, 1fr); }
+.appbar-title { overflow: hidden; text-overflow: ellipsis; max-width: 60vw; }
+.large-title .display-lg { overflow-wrap: anywhere; }
+
+/* Tap targets of at least 44px */
+.avatar { width: 44px; height: 44px; }
+.segmented button { min-height: 44px; }
+.tag-sample { min-height: 44px !important; display: inline-flex; align-items: center; }
+@media (max-width: 359px) {
+  /* 320px phones: let the week strip use the full width so each day is about 44px wide */
+  .weekstrip { gap: 1px; margin: 0 -12px; }
+  .daychip { border-radius: 12px; }
+  .segmented button { padding: 0 12px; }
+}
+
+/* Safe areas on notched phones (native app overlays the status bar) */
+.native .main { padding-left: max(var(--s4), env(safe-area-inset-left)); padding-right: max(var(--s4), env(safe-area-inset-right)); }
+/* Grid and flex children may shrink below their content width */
+.grid-2 > *, .grid-3 > *, .field, .stack > *, .row > * { min-width: 0; }
+.stepper-input { width: 0; flex: 1 1 auto; }
+.stepper .icon-btn, .stepper .caption { flex: none; }
+/* App bar as flex: side slots keep their size, the title takes what is left */
+.appbar-inner { display: flex; gap: var(--s2); }
+.appbar-side { flex: none; min-width: 44px; }
+.appbar-title { flex: 1 1 auto; min-width: 0; text-align: center; max-width: none; }
+.appbar-right > * { flex: none; }
+@media (max-width: 380px) { .tag-sample { font-size: 12px; padding: 2px 8px; } }
