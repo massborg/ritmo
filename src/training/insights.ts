@@ -1,0 +1,170 @@
+// Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
+import type { Activity, Race } from '../lib/types';
+import { addDays, daysBetween, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
+import { bestEffort, predictTime, vdotFromPerformance } from './fitness';
+
+export function totalsBy(activities: Activity[], key: (a: Activity) => string): Map<string, { m: number; n: number; s: number }> {
+  const m = new Map<string, { m: number; n: number; s: number }>();
+  for (const a of activities) {
+    const k = key(a);
+    const cur = m.get(k) ?? { m: 0, n: 0, s: 0 };
+    cur.m += a.distanceM; cur.n++; cur.s += a.movingS;
+    m.set(k, cur);
+  }
+  return m;
+}
+
+export const weekKey = (a: Activity) => ymd(startOfWeek(new Date(a.startTime)));
+export const monthKey = (a: Activity) => a.startTime.slice(0, 7);
+export const yearKey = (a: Activity) => a.startTime.slice(0, 4);
+
+export interface PB { label: string; m: number; timeS: number; date: string; activityId: string; fromRace: boolean }
+
+export function personalBests(activities: Activity[]): PB[] {
+  const out: PB[] = [];
+  for (const d of RACE_DISTANCES) {
+    let best: PB | undefined;
+    for (const a of activities) {
+      let t: number | undefined;
+      if (a.distanceM >= d.m * 0.99 && a.distanceM <= d.m * 1.03) t = a.movingS * (d.m / a.distanceM);
+      if (a.streams && a.distanceM >= d.m) {
+        const e = bestEffort(a.streams, d.m);
+        if (e && (!t || e < t)) t = e;
+      }
+      if (t && (!best || t < best.timeS)) best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: !!a.isRace };
+    }
+    if (best) out.push(best);
+  }
+  return out;
+}
+
+/** PB progression: best time at each distance, by year */
+export function pbByYear(activities: Activity[]): { year: string; pbs: PB[] }[] {
+  const years = [...new Set(activities.map(yearKey))].sort();
+  return years.map((y) => ({ year: y, pbs: personalBests(activities.filter((a) => yearKey(a) === y)) }));
+}
+
+export interface Story {
+  totalM: number;
+  totalRuns: number;
+  totalS: number;
+  firstDate?: string;
+  years: { year: string; m: number; n: number }[];
+  biggestYear?: { year: string; m: number };
+  biggestMonth?: { month: string; m: number };
+  longest?: Activity;
+  pbs: PB[];
+  activeWeeksPct: number;
+  longestStreakWeeks: number;
+  currentStreakWeeks: number;
+}
+
+export function runningStory(activities: Activity[], today: Date): Story {
+  const years = [...totalsBy(activities, yearKey).entries()].map(([year, v]) => ({ year, m: v.m, n: v.n })).sort((a, b) => a.year.localeCompare(b.year));
+  const months = [...totalsBy(activities, monthKey).entries()].map(([month, v]) => ({ month, m: v.m }));
+  const weeks = new Set(activities.map(weekKey));
+  const first = activities[0]?.startTime.slice(0, 10);
+  let longestStreak = 0, streak = 0, current = 0, totalWeeks = 0;
+  if (first) {
+    for (let w = startOfWeek(parseYmd(first)); w <= today; w = addDays(w, 7)) {
+      totalWeeks++;
+      if (weeks.has(ymd(w))) { streak++; longestStreak = Math.max(longestStreak, streak); } else streak = 0;
+    }
+    // current streak counts back from this week (this week may not have a run yet)
+    let w = startOfWeek(today);
+    if (!weeks.has(ymd(w))) w = addDays(w, -7);
+    while (weeks.has(ymd(w))) { current++; w = addDays(w, -7); }
+  }
+  return {
+    totalM: activities.reduce((x, a) => x + a.distanceM, 0),
+    totalRuns: activities.length,
+    totalS: activities.reduce((x, a) => x + a.movingS, 0),
+    firstDate: first,
+    years,
+    biggestYear: [...years].sort((a, b) => b.m - a.m)[0],
+    biggestMonth: months.sort((a, b) => b.m - a.m)[0],
+    longest: [...activities].sort((a, b) => b.distanceM - a.distanceM)[0],
+    pbs: personalBests(activities),
+    activeWeeksPct: totalWeeks ? Math.round((weeks.size / totalWeeks) * 100) : 0,
+    longestStreakWeeks: longestStreak,
+    currentStreakWeeks: current,
+  };
+}
+
+const LONG_NEEDED = (m: number) => (m >= 40000 ? 30 : m >= 20000 ? 18 : m >= 9000 ? 13 : 9) * 1000;
+const WEEKLY_NEEDED = (m: number) => (m >= 40000 ? 60 : m >= 20000 ? 45 : m >= 9000 ? 35 : 25) * 1000;
+
+export interface RaceReadiness {
+  score: number;
+  predictedS: number;
+  parts: { label: string; value: string; ok: boolean }[];
+  summary: string;
+}
+
+export function raceReadiness(race: Race, activities: Activity[], vdot: number, today: Date): RaceReadiness {
+  const predictedS = predictTime(vdot, race.distanceM) * (race.courseType === 'trail' ? 1.12 : race.courseType === 'cross-country' ? 1.06 : 1);
+  const last42 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d <= 42; });
+  const longest = last42.reduce((x, a) => Math.max(x, a.distanceM), 0);
+  const weekly = last42.reduce((x, a) => x + a.distanceM, 0) / 6;
+  const weeksActive = new Set(last42.map(weekKey));
+  const runs8 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 56; });
+  const consistentWeeks = [...totalsBy(runs8, weekKey).values()].filter((v) => v.n >= 3).length;
+
+  const longScore = Math.min(1, longest / LONG_NEEDED(race.distanceM));
+  const volScore = Math.min(1, weekly / WEEKLY_NEEDED(race.distanceM));
+  const consScore = Math.min(1, consistentWeeks / 7);
+  const goalScore = race.goalS ? Math.min(1, Math.max(0, 1 - (race.goalS < predictedS ? (predictedS - race.goalS) / race.goalS * 8 : 0))) : 1;
+  const score = Math.round((longScore * 0.3 + volScore * 0.25 + consScore * 0.2 + goalScore * 0.25) * 100);
+  const parts = [
+    { label: 'Longest run, last 6 weeks', value: `${(longest / 1000).toFixed(1)} km of ${LONG_NEEDED(race.distanceM) / 1000} km`, ok: longScore >= 0.9 },
+    { label: 'Weekly average, last 6 weeks', value: `${(weekly / 1000).toFixed(0)} km of ${WEEKLY_NEEDED(race.distanceM) / 1000} km`, ok: volScore >= 0.85 },
+    { label: 'Consistent weeks (3+ runs), last 8', value: `${consistentWeeks} of 8`, ok: consScore >= 0.85 },
+  ];
+  if (race.goalS) parts.push({ label: 'Goal compared with prediction', value: race.goalS >= predictedS ? 'Within reach' : `${Math.round((predictedS - race.goalS) / 60)} min quicker than predicted`, ok: race.goalS >= predictedS * 0.99 });
+  const weak = parts.filter((p) => !p.ok).map((p) => p.label.toLowerCase().replace(/, last.*/, ''));
+  void weeksActive;
+  const summary = score >= 85 ? 'You are well prepared. Trust the work and protect your freshness.'
+    : score >= 70 ? `On track. The area to watch is your ${weak[0] ?? 'consistency'}.`
+    : `Some catching up to do on ${weak.slice(0, 2).join(' and ') || 'training'}. A more conservative goal may serve you better.`;
+  return { score, predictedS, parts, summary };
+}
+
+export interface PacingPlanRow { label: string; atM: number; splitPace: number; cumulativeS: number }
+
+/** Even-effort pacing: slightly conservative first 20%, steady middle, small lift at the end. */
+export function pacingPlan(race: Race, targetS: number): PacingPlanRow[] {
+  const step = race.distanceM >= 20000 ? 5000 : 1000;
+  const avg = targetS / (race.distanceM / 1000);
+  const rows: PacingPlanRow[] = [];
+  let cum = 0;
+  for (let at = step; at < race.distanceM + step; at += step) {
+    const end = Math.min(at, race.distanceM);
+    const startM = at - step;
+    const frac = startM / race.distanceM;
+    const adj = frac < 0.2 ? 1.012 : frac > 0.85 ? 0.985 : 0.998;
+    const segKm = (end - startM) / 1000;
+    const p = avg * adj;
+    cum += p * segKm;
+    rows.push({ label: end === race.distanceM ? 'Finish' : `${end / 1000} km`, atM: end, splitPace: p, cumulativeS: cum });
+  }
+  // normalise to target
+  const k = targetS / cum;
+  return rows.map((r) => ({ ...r, splitPace: r.splitPace * k, cumulativeS: r.cumulativeS * k }));
+}
+
+export function taperGuidance(race: Race, today: Date): string {
+  const d = daysBetween(today, parseYmd(race.date));
+  const long = race.distanceM >= 40000;
+  if (d < 0) return 'Race complete. Recover with easy running for about one day per 3 km raced before any hard sessions.';
+  if (d === 0) return 'Race day. Eat a familiar breakfast 3 hours before, warm up gently, and start at your planned pace, not faster.';
+  if (d <= 2) return 'Final days: short easy runs only, plenty of sleep, extra carbohydrate the day before. Lay out your kit tonight.';
+  if (d <= 7) return `Race week: volume drops to about half while a few short race-pace efforts keep you sharp. Feeling restless or sluggish is normal${long ? '. Start carbohydrate loading two days out' : ''}.`;
+  if (d <= (long ? 21 : 10)) return `Taper: ${long ? 'over the last two to three weeks' : 'in the final ten days'} volume falls 30 to 50% while intensity stays. This is when fatigue clears and fitness shows.`;
+  return `Taper starts about ${long ? 'three weeks' : 'ten days'} out. Until then, focus on consistent training.`;
+}
+
+export function vdotForRace(a: Activity) {
+  return vdotFromPerformance(a.distanceM, a.movingS);
+}
+
+export { distanceLabel };

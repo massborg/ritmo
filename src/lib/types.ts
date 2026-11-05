@@ -1,0 +1,165 @@
+// Core domain model for Ritmo. Mirrors the Supabase schema in supabase/migrations.
+
+export type SourceKind =
+  | 'sample'
+  | 'upload'
+  | 'garmin'
+  | 'apple_health'
+  | 'health_connect'
+  | 'strava'
+  | 'coros';
+
+export type SessionType =
+  | 'easy'
+  | 'recovery'
+  | 'long'
+  | 'tempo'
+  | 'threshold'
+  | 'vo2max'
+  | 'speed'
+  | 'hills'
+  | 'race'
+  | 'rest';
+
+export interface StreamPoint {
+  t: number; // seconds from start
+  d: number; // cumulative metres
+  hr?: number;
+  cad?: number; // steps per minute (both feet)
+  alt?: number; // metres
+  lat?: number;
+  lon?: number;
+}
+
+export interface Lap {
+  index: number;
+  startS: number;
+  durationS: number;
+  distanceM: number;
+  avgHr?: number;
+}
+
+export interface Activity {
+  id: string;
+  source: SourceKind;
+  sourceIds: Partial<Record<SourceKind, string>>; // external ids per source, used for de-duplication
+  startTime: string; // ISO
+  name: string;
+  sport: 'run';
+  distanceM: number;
+  durationS: number; // elapsed
+  movingS: number;
+  elevGainM?: number;
+  avgHr?: number;
+  maxHr?: number;
+  avgCadence?: number;
+  laps?: Lap[];
+  streams?: StreamPoint[];
+  isRace?: boolean;
+  detailScore: number; // higher = more detailed, used to choose the best duplicate
+  importedAt: string;
+}
+
+export interface SessionFeedback {
+  activityId: string;
+  feel: 1 | 2 | 3 | 4 | 5; // 1 very hard ... 5 great
+  rpe?: number; // 1-10
+  pain: { area: string; severity: 1 | 2 | 3 }[];
+  notes?: string;
+  loggedAt: string;
+}
+
+export type RacePriority = 'A' | 'B' | 'C';
+export type CourseType = 'road' | 'trail' | 'track' | 'cross-country';
+
+export interface Race {
+  id: string;
+  name: string;
+  date: string; // YYYY-MM-DD
+  distanceM: number;
+  courseType: CourseType;
+  goalS?: number;
+  priority: RacePriority;
+  resultActivityId?: string;
+}
+
+export interface Injury {
+  area: string;
+  status: 'current' | 'past';
+  notes?: string;
+}
+
+export interface Profile {
+  name: string;
+  units: 'km' | 'mi';
+  theme: 'system' | 'giorno' | 'notte' | 'sole';
+  birthYear?: number;
+  maxHr?: number;
+  restHr?: number;
+  goal: string;
+  daysAvailable: number[]; // 0=Mon..6=Sun
+  longRunDay: number; // 0=Mon..6=Sun
+  injuries: Injury[];
+  onboarded: boolean;
+  illnessUntil?: string; // YYYY-MM-DD, set when runner reports illness
+}
+
+export interface SessionStep {
+  label: string; // e.g. "Warm up", "6 x 800 m"
+  detail: string; // e.g. "at 4:05/km, 90 s jog between"
+}
+
+export interface PlannedSession {
+  id: string;
+  date: string; // YYYY-MM-DD
+  type: SessionType;
+  title: string;
+  focus: string; // e.g. "VO2 max"
+  purpose: string; // why it matters
+  howItHelps: string; // link to goal
+  steps: SessionStep[];
+  distanceM: number;
+  durationS: number;
+  paceTarget?: { minSPerKm: number; maxSPerKm: number };
+  hrZones?: number[]; // e.g. [2] or [3,4]
+  phase: Phase;
+  status: 'planned' | 'done' | 'missed' | 'moved' | 'skipped';
+  completedActivityId?: string;
+  movedFrom?: string;
+}
+
+export type Phase = 'base' | 'build' | 'peak' | 'taper' | 'recovery' | 'race';
+
+export interface PlanChange {
+  id: string;
+  at: string; // ISO
+  reason: 'missed' | 'harder' | 'easier' | 'illness' | 'race-date' | 'moved' | 'rebuilt' | 'pain';
+  summary: string; // plain-English explanation shown to the runner
+}
+
+export interface Plan {
+  id: string;
+  raceId?: string;
+  createdAt: string;
+  startDate: string;
+  endDate: string;
+  phases: { phase: Phase; start: string; end: string }[];
+  sessions: PlannedSession[];
+  changes: PlanChange[];
+}
+
+export interface SourceStatus {
+  kind: SourceKind;
+  connected: boolean;
+  lastSyncAt?: string;
+  lastError?: string;
+  activityCount: number;
+}
+
+export interface CoachMessage {
+  id: string;
+  role: 'runner' | 'coach';
+  text: string;
+  at: string;
+  facts?: string[]; // data the answer is grounded on
+}
