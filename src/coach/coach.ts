@@ -111,7 +111,8 @@ export function localReply(q: string, c: CoachContext): CoachReply {
     const r = c.raceReadiness, race = c.race;
     const days = daysBetween(c.today, parseYmd(race.date));
     const goal = race.goalS
-      ? race.goalS >= r.predictedS ? `Your goal of ${duration(race.goalS)} is within reach: your current fitness predicts ${duration(r.predictedS)}.`
+      ? Math.abs(race.goalS - r.predictedS) < 60 ? `Your fitness predicts ${duration(r.predictedS)}, right on your goal of ${duration(race.goalS)}.`
+        : race.goalS >= r.predictedS ? `Your goal of ${duration(race.goalS)} is within reach: your current fitness predicts ${duration(r.predictedS)}.`
         : `Your fitness currently predicts ${duration(r.predictedS)}, ${Math.round((r.predictedS - race.goalS) / 60)} minutes slower than your goal of ${duration(race.goalS)}.`
       : `Your current fitness predicts ${duration(r.predictedS)}.`;
     const weak = r.parts.find((p) => !p.ok);
