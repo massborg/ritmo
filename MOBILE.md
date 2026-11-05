@@ -13,7 +13,7 @@ The iPhone and Android apps share this codebase. [Capacitor](https://capacitorjs
 | Android project | `android/` |
 | CI builds (Android APK, iOS simulator) | `.github/workflows/mobile.yml` |
 
-- **App id:** `com.ritmorunning.app`. This cannot change once the app is published.
+- **App id:** `com.ritmorunning.app`. This cannot change once the app is published. It only has to be unique; no matching domain is needed.
 - **Icon label:** "Ritmo". **Store name:** "Ritmo Running".
 - **Opening:** the native launch screen is plain brand orange, then the animated "Run in" splash plays.
 
@@ -50,6 +50,6 @@ After any change in `src/`, run `npm run cap:sync`.
 
 ## Before store release
 
-- **Sign-in links:** emailed sign-in links currently open the website. Deep links into the app (Universal Links and App Links on a domain you own) are needed before release.
+- **Sign-in links:** emailed sign-in links currently open the website. Ritmo stays on https://ritmo-running.netlify.app (no custom domain). To open links in the app, serve `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` from that address and register it for Universal Links and App Links.
 - **Privacy:** both stores require a privacy policy URL and data-safety forms. Use the in-app Privacy page as the basis.
 - **Screenshots:** both stores need screenshots at their required sizes.
