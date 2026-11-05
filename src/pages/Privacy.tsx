@@ -26,8 +26,17 @@ export default function Privacy() {
         </ul>
         <p>Your data is stored in Ritmo's database in the EU and protected so that only your account can read or change it. It is also kept on your device for speed, and removed from the device when you log out. Files you upload are read on your device.</p>
         <p>When you ask the coach a question, a summary of the relevant numbers is sent to an AI model to write the answer. Your data is never sold and never used to train AI models. Garmin data is never used to train AI models.</p>
+        <h3 className="label">Who processes your data for Ritmo</h3>
+        <ul className="bullets">
+          <li><strong>Supabase</strong> (database and accounts, EU region, Frankfurt).</li>
+          <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
+          <li><strong>Anthropic</strong> (the AI model that writes coach answers; receives only the summary needed for your question, at your request, and does not use it for training).</li>
+        </ul>
+        <p>Data from connected services such as Garmin Connect is used only to give you your own analysis and coaching. It is never sold, shared with other users or used to train AI models. Disconnecting a service stops new data arriving; deleting your account removes everything.</p>
         <p className="caption">Ritmo gives coaching guidance, not medical advice. See a doctor or physio about ongoing pain, and get medical help straight away for chest pain, dizziness or fainting.</p>
       </section>
+
+      <p className="caption"><Link to="/about">About Ritmo</Link> · <Link to="/terms">Terms of service</Link></p>
 
       {!session ? (
         <section className="card stack">

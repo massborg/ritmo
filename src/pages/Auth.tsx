@@ -67,6 +67,7 @@ export function Login() {
       </form>
       <p className="muted">New to Ritmo? <Link to={`/signup${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`} className="label">Create an account</Link></p>
       <p className="caption">Signed in before with an emailed link? Use "Forgot password?" to set a password for your account.</p>
+      <p className="caption"><Link to="/about">About Ritmo</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link></p>
     </AuthLayout>
   );
 }
@@ -114,7 +115,7 @@ export function SignUp() {
         <PasswordField id="su-password" label="Password" value={password} onChange={setPassword} autoComplete="new-password" hint={pwHint} />
         <label className="consent">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span>I agree that Ritmo stores and uses my health data, including heart rate, injuries and how my runs felt, to give me training advice. I have read the <Link to="/privacy" target="_blank" className="label">privacy page</Link>. I can export or delete my data at any time.</span>
+          <span>I agree that Ritmo stores and uses my health data, including heart rate, injuries and how my runs felt, to give me training advice. I have read the <Link to="/privacy" target="_blank" className="label">privacy page</Link> and agree to the <Link to="/terms" target="_blank" className="label">terms</Link>. I can export or delete my data at any time.</span>
         </label>
         {res && !res.ok && <div role="alert"><StatusLine kind="danger">{res.message}</StatusLine></div>}
         {res?.code === 'already_registered' && <div className="row wrap"><Link to="/login" className="btn btn-small">Log in</Link><Link to={`/forgot-password?email=${encodeURIComponent(email)}`} className="btn btn-small btn-ghost">Reset password</Link></div>}

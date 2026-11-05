@@ -25,6 +25,8 @@ const Review = lazy(() => import('./pages/Review'));
 const Goals = lazy(() => import('./pages/Goals'));
 const HealthConnect = lazy(() => import('./pages/HealthConnect'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const About = lazy(() => import('./pages/About'));
+const Terms = lazy(() => import('./pages/Terms'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: Sun },
@@ -35,7 +37,7 @@ const TABS = [
 ];
 
 /** Pages anyone can open without an account */
-const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy'];
+const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy', '/terms', '/about'];
 /** Pages shown without the app's navigation */
 const BARE = ['/welcome', '/start', ...PUBLIC];
 
@@ -166,6 +168,8 @@ function Shell() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/about" element={<About />} />
               <Route path="/" element={<Today />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/calendar/:date" element={<Calendar />} />
