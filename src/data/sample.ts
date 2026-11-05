@@ -61,7 +61,7 @@ function hrFor(pct: number) { return Math.round(REST_HR + pct * (MAX_HR - REST_H
 
 function segmentsFor(type: SessionType, km: number, P: TrainingPaces, r: () => number): Seg[] {
   const easy = (P.easy[0] * 0.55 + P.easy[1] * 0.45) + (r() - 0.5) * 10;
-  const wu: Seg = { m: 2000, pace: easy + 5, hr: hrFor(0.66) };
+  const wu: Seg = { m: 2000, pace: easy + 5, hr: hrFor(0.62) };
   switch (type) {
     case 'threshold': {
       const reps = km > 13 ? 5 : 4;
@@ -95,11 +95,11 @@ function segmentsFor(type: SessionType, km: number, P: TrainingPaces, r: () => n
     case 'speed':
       return [{ m: km * 1000 - 800, pace: easy, hr: hrFor(0.68) }, ...Array.from({ length: 6 }, () => ({ m: 100, pace: P.repetition[0] + 8, hr: hrFor(0.8) })), { m: 200, pace: easy + 10, hr: hrFor(0.7) }];
     case 'long':
-      return [{ m: km * 1000, pace: (P.long[0] * 0.5 + P.long[1] * 0.5) + (r() - 0.5) * 8, hr: hrFor(0.7) }];
+      return [{ m: km * 1000, pace: (P.long[0] * 0.5 + P.long[1] * 0.5) + (r() - 0.5) * 8, hr: hrFor(0.655) }];
     case 'recovery':
-      return [{ m: km * 1000, pace: (P.recovery[0] + P.recovery[1]) / 2, hr: hrFor(0.6) }];
+      return [{ m: km * 1000, pace: (P.recovery[0] + P.recovery[1]) / 2, hr: hrFor(0.56) }];
     default:
-      return [{ m: km * 1000, pace: easy, hr: hrFor(0.68) }];
+      return [{ m: km * 1000, pace: easy, hr: hrFor(0.635) }];
   }
 }
 
@@ -157,7 +157,7 @@ function makeActivity(spec: RunSpec, idx: number, withStreams: boolean): Activit
   const hour = spec.isRace ? 8 : weekday(parseYmd(spec.date)) >= 5 ? 7 : 6 + Math.floor(r() * 2) + (r() > 0.6 ? 12 : 0);
   const start = new Date(`${spec.date}T${String(hour).padStart(2, '0')}:${String(Math.floor(r() * 50)).padStart(2, '0')}:00`);
   const hilly = spec.type === 'hills' || r() > 0.85;
-  const drift = spec.type === 'long' ? 0.04 + r() * 0.05 : spec.isRace ? 0.05 : 0.01;
+  const drift = spec.type === 'long' ? 0.02 + r() * 0.05 : spec.isRace ? 0.05 : 0.01;
   const distanceM = segs.reduce((x, s) => x + s.m, 0);
   let movingS: number, avgHr: number, maxHr: number, elev: number, avgCad: number;
   let streams: StreamPoint[] | undefined, laps: Lap[] | undefined;

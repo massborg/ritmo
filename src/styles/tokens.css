@@ -1,0 +1,58 @@
+/* Ritmo design tokens: Giorno (light, default), Notte (dark), Sole (outdoor high contrast). */
+:root,
+:root[data-theme='giorno'] {
+  --surface: #FAF8F5; --surface-raised: #FFFFFF; --surface-sunken: #F0ECE6;
+  --ink: #171412; --ink-muted: #5C5650; --border: #857D73; --hairline: #E2DCD3;
+  --brand: #E8480C; --on-brand: #0F0A06; --brand-strong: #FF6A2B; --lane: #FF8A5C;
+  --accent: #FFB547; --on-accent: #171412; --accent-mark: #8A5700;
+  --graphite: #1E1A17; --on-graphite: #FAF8F5; --focus: #171412;
+  --success: #1E6E50; --warning: #855400; --danger: #B3261E; --info: #1F6480;
+  --zone-1: #2B8C95; --zone-2: #206F41; --zone-3: #AF7604; --zone-4: #B24314; --zone-5: #711409;
+  --card-border: transparent;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='giorno']):not([data-theme='sole']) {
+    --surface: #141210; --surface-raised: #1F1B18; --surface-sunken: #0C0A09;
+    --ink: #F7F3EE; --ink-muted: #ADA69E; --border: #7F7870; --hairline: #2E2925;
+    --brand: #FF6A2B; --on-brand: #140A04; --brand-strong: #FF8850; --lane: #FF9A70;
+    --accent: #FFB547; --on-accent: #1B1204; --accent-mark: #FFB547;
+    --graphite: #2B2622; --on-graphite: #FFFFFF; --focus: #FFB547;
+    --success: #6FD3A8; --warning: #FFB547; --danger: #FF8A80; --info: #79C2E0;
+    --zone-1: #277E86; --zone-2: #33AE66; --zone-3: #FABF48; --zone-4: #E76229; --zone-5: #F69D93;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='notte'] {
+  --surface: #141210; --surface-raised: #1F1B18; --surface-sunken: #0C0A09;
+  --ink: #F7F3EE; --ink-muted: #ADA69E; --border: #7F7870; --hairline: #2E2925;
+  --brand: #FF6A2B; --on-brand: #140A04; --brand-strong: #FF8850; --lane: #FF9A70;
+  --accent: #FFB547; --on-accent: #1B1204; --accent-mark: #FFB547;
+  --graphite: #2B2622; --on-graphite: #FFFFFF; --focus: #FFB547;
+  --success: #6FD3A8; --warning: #FFB547; --danger: #FF8A80; --info: #79C2E0;
+  --zone-1: #277E86; --zone-2: #33AE66; --zone-3: #FABF48; --zone-4: #E76229; --zone-5: #F69D93;
+  color-scheme: dark;
+}
+
+:root[data-theme='sole'] {
+  --surface: #FFFFFF; --surface-raised: #FFFFFF; --surface-sunken: #F3F0EB;
+  --ink: #000000; --ink-muted: #332F2B; --border: #4A4641; --hairline: #4A4641;
+  --brand: #A02E00; --on-brand: #FFFFFF; --brand-strong: #7F2400; --lane: #D4551F;
+  --accent: #FFB020; --on-accent: #000000; --accent-mark: #6B4300;
+  --graphite: #171412; --on-graphite: #FFFFFF; --focus: #000000;
+  --success: #0B4A34; --warning: #5C3A00; --danger: #8A1510; --info: #0F4257;
+  --zone-1: #2D929B; --zone-2: #206F41; --zone-3: #B07705; --zone-4: #AF4213; --zone-5: #6A1209;
+  --card-border: #4A4641;
+  color-scheme: light;
+}
+
+:root {
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body: 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 80px;
+  --r-input: 6px; --r-card: 12px; --r-hero: 20px; --r-pill: 999px;
+  --dur: 200ms;
+}

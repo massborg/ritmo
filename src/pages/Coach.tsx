@@ -1,0 +1,66 @@
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Send } from 'lucide-react';
+import { useApp } from '../app/AppContext';
+import { SampleBanner } from '../components/ui';
+
+const SUGGESTIONS = ['Why is today easy?', 'Am I on track?', 'I only have 30 minutes, what should I do?', 'How did my last run go?', 'What is threshold pace?'];
+
+export default function Coach() {
+  const { data, sendCoach, coachBusy, clearCoach } = useApp();
+  const [params, setParams] = useSearchParams();
+  const [text, setText] = useState('');
+  const endRef = useRef<HTMLDivElement>(null);
+  const asked = useRef(false);
+
+  useEffect(() => {
+    const q = params.get('q');
+    if (q && !asked.current) { asked.current = true; sendCoach(q); setParams({}, { replace: true }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [data.coach.length, coachBusy]);
+
+  const submit = (q: string) => { if (!q.trim() || coachBusy) return; sendCoach(q.trim()); setText(''); };
+
+  return (
+    <div className="stack-lg">
+      <SampleBanner />
+      <div className="screen-head" style={{ marginBottom: 0 }}>
+        <div className="stack-sm">
+          <h1 className="display-lg">Coach</h1>
+          <p className="muted">Answers come from your own runs and plan. This is coaching guidance, not medical advice.</p>
+        </div>
+        {data.coach.length > 0 && <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear chat</button>}
+      </div>
+
+      <div className="chat" aria-live="polite">
+        {data.coach.length === 0 && (
+          <div className="bubble bubble-coach"><p>Hello{data.profile.name ? ` ${data.profile.name}` : ''}. I know your history, your plan and how your recent runs went. What would you like to know?</p></div>
+        )}
+        {data.coach.map((m) => (
+          <div key={m.id} className={`bubble ${m.role === 'coach' ? 'bubble-coach' : 'bubble-runner'}`}>
+            <p>{m.text}</p>
+            {m.facts && m.facts.length > 0 && (
+              <details style={{ marginTop: 8 }}>
+                <summary className="caption" style={{ cursor: 'pointer', minHeight: 32, display: 'flex', alignItems: 'center' }}>Data used</summary>
+                <ul className="bullets caption" style={{ marginTop: 4 }}>{m.facts.slice(0, 8).map((f) => <li key={f}>{f}</li>)}</ul>
+              </details>
+            )}
+          </div>
+        ))}
+        {coachBusy && <div className="bubble bubble-coach" aria-label="Coach is thinking"><p className="muted">Looking at your data…</p></div>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="row wrap" role="group" aria-label="Suggested questions">
+        {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => submit(s)} disabled={coachBusy}>{s}</button>)}
+      </div>
+
+      <form className="composer" onSubmit={(e) => { e.preventDefault(); submit(text); }}>
+        <label htmlFor="ask" className="sr-only">Ask your coach</label>
+        <input id="ask" className="input" style={{ borderRadius: 'var(--r-pill)', paddingLeft: 20 }} placeholder="Ask about your training" value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" />
+        <button className="btn btn-primary" type="submit" aria-label="Send" disabled={!text.trim() || coachBusy} style={{ padding: '0 18px' }}><Send size={18} strokeWidth={2} aria-hidden="true" /></button>
+      </form>
+    </div>
+  );
+}

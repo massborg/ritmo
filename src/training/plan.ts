@@ -166,7 +166,6 @@ export function buildPlan(input: PlanInput): Plan {
   const taperWeeks = totalWeeks < 4 ? 1 : raceM >= 40000 ? 2 : 1;
   const trainWeeks = Math.max(0, totalWeeks - taperWeeks);
   const baseW = Math.round(trainWeeks * 0.4), buildW = Math.round(trainWeeks * 0.35);
-  const peakW = Math.max(0, trainWeeks - baseW - buildW);
   const ctx: Ctx = { paces, race, goalLabel: race ? race.name : profile.goal };
 
   const cur = Math.max(15, input.recentWeeklyKm);
@@ -198,7 +197,7 @@ export function buildPlan(input: PlanInput): Plan {
       vol = Math.min(peak, w === 0 ? cur : vol * 1.08);
       weekVol = vol;
     }
-    const longTarget = phase === 'taper' ? Math.min(longKm, LONG_CAP(raceM)) * (totalWeeks - w === 1 ? 0 : 0.6)
+    const longTarget = phase === 'taper' ? Math.min(longKm, LONG_CAP(raceM)) * (totalWeeks - w === 1 ? 0 : totalWeeks - w === 2 ? 0.75 : 0.6)
       : recoveryWeek ? longKm * 0.75
       : (longKm = Math.min(LONG_CAP(raceM), longKm + (w === 0 ? 0 : 1.5), weekVol * 0.38));
 
@@ -382,8 +381,9 @@ export function adaptPlan(opts: {
   }
 
   // 6) Load spike check on the coming week
-  const last28 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; });
-  const avgWeek = last28.reduce((x, a) => x + a.distanceM, 0) / 4;
+  // Compare with the biggest of the last four weeks, so a planned recovery week does not make normal training look like a spike
+  const weekTotals = [0, 1, 2, 3].map((w) => activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= w * 7 + 1 && d <= w * 7 + 7; }).reduce((x, a) => x + a.distanceM, 0));
+  const avgWeek = Math.max(weekTotals.reduce((x, y) => x + y, 0) / 4, Math.max(...weekTotals) * 0.95);
   const comingWeek = plan.sessions.filter((s) => { const d = daysBetween(today, parseYmd(s.date)); return d >= 0 && d < 7 && s.status === 'planned'; });
   const comingKm = comingWeek.reduce((x, s) => x + s.distanceM, 0);
   if (avgWeek > 5000 && comingKm > avgWeek * 1.3 && !comingWeek.some((s) => s.type === 'race')) {
@@ -391,7 +391,7 @@ export function adaptPlan(opts: {
     if (!has(id)) {
       const scale = (avgWeek * 1.2) / comingKm;
       for (const s of comingWeek) if (s.type === 'easy' || s.type === 'long') s.distanceM = Math.round((s.distanceM * scale) / 1000) * 1000;
-      log(id, 'rebuilt', `The next 7 days were ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km a week. Jumps above about 30% are linked to higher injury risk, so easy and long runs are trimmed to keep the increase near 20%.`);
+      log(id, 'rebuilt', `The next 7 days were ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km in your recent big weeks. Jumps above about 30% are linked to higher injury risk, so easy and long runs are trimmed to keep the increase near 20%.`);
     }
   }
   return plan;

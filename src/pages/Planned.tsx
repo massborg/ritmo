@@ -1,0 +1,95 @@
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ArrowLeftRight } from 'lucide-react';
+import { useApp } from '../app/AppContext';
+import { Empty, StatusLine, ZoneTag } from '../components/ui';
+import { addDays, DAY_SHORT, durationWords, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
+import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+
+const CONCEPTS: Record<string, string> = {
+  easy: 'Easy running is conversational. It builds your aerobic engine with little fatigue, so around 80% of your running should feel like this.',
+  recovery: 'Recovery runs are slower than easy runs. They keep blood flowing to tired legs without adding stress.',
+  long: 'The long run builds endurance: your body learns to use fat as fuel and your legs learn to keep going.',
+  tempo: 'Tempo, or steady, running sits between easy and threshold. It builds stamina at faster paces.',
+  threshold: 'Threshold is the pace you could race for about an hour. Training here raises the speed you can hold before tiring quickly.',
+  vo2max: 'VO2 max is the most oxygen your body can use. Hard intervals of 2 to 5 minutes push this ceiling up.',
+  speed: 'Strides and short reps train fast, relaxed form. They make every pace more economical.',
+  hills: 'Hill reps build strength and power with less impact than flat speed work.',
+  race: 'Race day. Start controlled and run your plan.',
+  rest: 'Rest is when your body adapts to training. Skipping it makes the hard days less effective.',
+};
+
+export default function Planned() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const { plan, data, moveSession, today } = useApp();
+  const s = plan?.sessions.find((x) => x.id === id);
+  const [moving, setMoving] = useState(false);
+  const U = data.profile.units;
+  if (!s) return <Empty title="Session not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
+
+  const ws = startOfWeek(parseYmd(s.date));
+  const options = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i))).filter((d) => d !== s.date && d >= ymd(today));
+  const done = s.completedActivityId;
+
+  return (
+    <div className="stack-lg">
+      <button className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => nav(-1)}><ArrowLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button>
+      <div className="stack-sm">
+        <p className="caption">{longDate(parseYmd(s.date))} · {PHASE_LABEL[s.phase]} phase{s.movedFrom ? ` · moved from ${DAY_SHORT[weekday(parseYmd(s.movedFrom))]}` : ''}</p>
+        <h1 className="display-lg">{s.title}</h1>
+        <div className="row wrap"><span className="tag">{s.focus}</span>
+          {s.status === 'done' && <StatusLine kind="success">Completed</StatusLine>}
+          {s.status === 'missed' && <StatusLine kind="warning">Missed</StatusLine>}
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <section className="card stack">
+          <h2 className="title">The session</h2>
+          {s.type !== 'rest' && (
+            <div className="row wrap" style={{ gap: 'var(--s5)' }}>
+              <div><p className="caption">Distance</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(1)} {U}</p></div>
+              <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{durationWords(s.durationS)}</p></div>
+            </div>
+          )}
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
+          {s.paceTarget && <div><p className="caption">Target pace</p><p className="stat">{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
+          {s.hrZones && <div className="stack-sm"><p className="caption">Heart rate</p><ZoneTag zones={s.hrZones} /></div>}
+        </section>
+
+        <section className="card stack">
+          <h2 className="title">Why this session</h2>
+          <p><strong>Purpose.</strong> {s.purpose}</p>
+          <p><strong>How it helps your goal.</strong> {s.howItHelps}</p>
+          <p className="muted"><strong>{PHASE_LABEL[s.phase]} phase.</strong> {PHASE_EXPLAIN[s.phase]}</p>
+          <hr className="hairline" />
+          <p className="caption"><strong>In plain terms.</strong> {CONCEPTS[s.type]}</p>
+        </section>
+      </div>
+
+      <div className="row wrap">
+        {done && <Link className="btn btn-primary" to={`/activity/${done}`}>See your feedback</Link>}
+        {!done && s.date >= ymd(today) && options.length > 0 && (
+          <button className="btn" aria-expanded={moving} onClick={() => setMoving((m) => !m)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Move this session</button>
+        )}
+        <Link to="/coach?q=Why is today easy?" className="btn btn-ghost">Ask your coach</Link>
+      </div>
+      {moving && (
+        <section className="card stack" aria-label="Choose a new day">
+          <p className="label">Move to another day this week. If that day has a session, the two swap.</p>
+          <div className="row wrap">
+            {options.map((d) => {
+              const other = plan?.sessions.find((x) => x.date === d);
+              return (
+                <button key={d} className="chip" onClick={() => { moveSession(s.id, d); setMoving(false); nav('/calendar'); }}>
+                  {DAY_SHORT[weekday(parseYmd(d))]} {parseYmd(d).getDate()}<span className="caption">{other ? other.title : 'Free'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
