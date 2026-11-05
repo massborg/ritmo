@@ -28,12 +28,13 @@ export function authError(e: unknown): AuthResult {
 
 const origin = () => window.location.origin;
 
-export async function signUp(email: string, password: string, consentAt: string): Promise<AuthResult> {
+/** Terms and the 18+ confirmation are recorded with the account. Health data consent is asked separately in setup. */
+export async function signUp(email: string, password: string, agreedAt: string): Promise<AuthResult> {
   if (!supabase) return { ok: false, code: 'other', message: 'Accounts are not configured for this build.' };
   const problem = passwordProblem(password);
   if (problem) return { ok: false, code: 'weak_password', message: `That password is too weak. ${problem}` };
   try {
-    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${origin()}/login?confirmed=1`, data: { health_consent_at: consentAt } } });
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${origin()}/login?confirmed=1`, data: { terms_accepted_at: agreedAt, adult_confirmed_at: agreedAt, terms_version: '2026-11' } } });
     if (error) return authError(error);
     // When the email is already registered and confirmed, Supabase returns a user with no identities
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return authError({ code: 'user_already_exists' });

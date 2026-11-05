@@ -11,6 +11,7 @@ const SUPA = 'https://gujuzacfqxbwfpprkgrx.supabase.co';
 const OUT = process.env.OUT_DIR || path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });
 
+const PHOTO = path.join(OUT, 'photo.jpg');
 const results = [];
 async function step(name, fn, page) {
   try { await fn(); results.push(['PASS', name]); }
@@ -38,11 +39,70 @@ async function idbPut(page, key, value) {
   }), [key, value]);
 }
 
+const checkAll = async (page) => { for (const c of await page.locator('.consent input').all()) await c.check(); };
+const cont = (page) => page.getByRole('button', { name: 'Continue', exact: true }).click();
+const fieldset = (page, legend) => page.locator('fieldset').filter({ has: page.locator('legend', { hasText: legend }) });
+
+/** Walks through setup. Stops before the plan preview when stopAt is given. */
+async function doSetup(page, o = {}) {
+  const { level = 'I am new to running', name = 'Sam', year = '1990', goal = 'Run 5K without stopping', weekly, runsFile, photo, ai = false } = o;
+  await page.waitForURL(/\/setup/, { timeout: 10000 });
+  await see(page, 'How Ritmo uses your data');
+  await page.locator('#c-health').check();
+  if (ai) await page.locator('#c-ai').check();
+  await cont(page);
+  await see(page, 'About you');
+  await page.locator('#s-name').fill(name);
+  await page.getByLabel('Day', { exact: true }).selectOption('15');
+  await page.getByLabel('Month', { exact: true }).selectOption('4');
+  await page.getByLabel('Year', { exact: true }).selectOption(year);
+  if (photo) {
+    await page.getByRole('button', { name: 'Add a photo' }).click();
+    await page.locator('input[type=file][accept^="image/jpeg"]').setInputFiles(photo);
+    await page.getByRole('button', { name: 'Save picture' }).click();
+    await page.locator('.setup-body img.avatar-img').first().waitFor({ timeout: 8000 });
+  }
+  await cont(page);
+  await see(page, 'Before you start');
+  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'No', exact: true }).nth(i).click();
+  await cont(page);
+  await see(page, 'Your running so far');
+  await page.getByRole('radio', { name: new RegExp(level) }).click();
+  if (/new to running/.test(level)) {
+    await fieldset(page, 'Can you run for 10 minutes').getByRole('button', { name: 'Not yet' }).click();
+    await fieldset(page, 'Do you walk regularly').getByRole('button', { name: 'Yes' }).click();
+  } else {
+    if (weekly !== undefined) await page.locator('#s-weekly').fill(String(weekly));
+    if (!(await page.locator('#s-weekly').inputValue())) await page.locator('#s-weekly').fill('30');
+    await fieldset(page, 'A recent race').getByRole('button', { name: 'I do not have one' }).click();
+  }
+  await cont(page);
+  await see(page, 'What would you like to achieve?');
+  await page.getByRole('radio', { name: goal }).click();
+  await cont(page);
+  await see(page, 'Your training week');
+  await cont(page);
+  await see(page, 'Any injuries?');
+  await page.getByRole('button', { name: /No injuries/ }).click();
+  await see(page, /Add your past runs|Your first weeks/);
+  if (await page.getByText('Your first weeks').count()) return;
+  if (runsFile) {
+    await page.locator('input[type=file][accept=".fit,.gpx,.tcx,.zip,.json"]').setInputFiles(runsFile);
+    await see(page, /Imported \d+ new runs/, 60000);
+    await page.getByRole('button', { name: /Continue with \d+ runs/ }).click();
+  } else await page.getByRole('button', { name: 'Skip for now' }).click();
+  await see(page, 'Your first weeks');
+}
+async function startPlan(page) {
+  await page.getByRole('button', { name: 'Start my plan' }).click();
+  await page.waitForURL(`${APP}/`, { timeout: 10000 });
+}
+
 async function signUpAndConfirm(page, mock, email, password = 'Runner2026') {
   await page.goto(`${APP}/signup`);
   await page.locator('#su-email').fill(email);
   await page.locator('#su-password').fill(password);
-  await page.locator('.consent input').check();
+  await checkAll(page);
   await page.getByRole('button', { name: 'Create account' }).click();
   await see(page, 'Check your email');
   await page.goto(`${APP}/login?confirmed=1${mock.linkFor(email, 'signup')}`);
@@ -59,14 +119,17 @@ async function logOut(page) {
 }
 
 async function run(label, deviceOpts) {
+  if (!fs.existsSync(PHOTO)) require('child_process').execSync(`convert -size 900x700 gradient:'#E8480C'-'#1E1A17' -set comment 'test' ${PHOTO}`);
   const mock = createMock();
   const browser = await chromium.launch();
   const context = await browser.newContext({ ...deviceOpts });
   await mock.install(context, SUPA);
+  if (process.env.DEBUG) await context.addInitScript(() => { window.__puts = 0; const o = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (...a) { window.__puts++; return o.apply(this, a); }; });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  const A = `a-${label}@test.ritmo`, B = `b-${label}@test.ritmo`, C = `c-${label}@test.ritmo`, D = `d-${label}@test.ritmo`;
+  if (process.env.DEBUG) page.on('console', (m) => { if ((m.type() === 'error' || m.type() === 'warning') && (process.env.DEBUG !== 'C' || globalThis.__inC)) console.log('console', m.type(), m.text().slice(0, 300)); });
+  const A = `a-${label}@test.ritmo`, B = `b-${label}@test.ritmo`, C = `c-${label}@test.ritmo`, D = `d-${label}@test.ritmo`, E = `e-${label}@test.ritmo`;
   const userId = (email) => mock.state.users.get(email)?.id;
   const rows = (table, email) => mock.state.tables[table].filter((r) => r.user_id === userId(email));
   const P = (n) => `[${label}] ${n}`;
@@ -90,26 +153,34 @@ async function run(label, deviceOpts) {
     await page.locator('#su-email').fill(A);
     await page.locator('#su-password').fill('short');
     await see(page, 'Use at least 8 characters.');
-    await page.locator('.consent input').check();
+    await checkAll(page);
     await page.getByRole('button', { name: 'Create account' }).click();
     await see(page, 'That password is too weak');
     await page.locator('#su-password').fill('longenough');
     await page.getByRole('button', { name: 'Create account' }).click();
     await see(page, 'Use a mix of letters and numbers');
   }, page);
-  await step(P('sign-up requires health data consent, with a link to the privacy page'), async () => {
+  await step(P('sign-up requires 18+ and the terms, separately from health consent'), async () => {
     await page.locator('#su-password').fill('Runner2026');
-    await page.locator('.consent input').uncheck();
+    const [adult, terms] = await page.locator('.consent input').all();
+    await adult.uncheck();
     await page.getByRole('button', { name: 'Create account' }).click();
-    await see(page, 'Please agree to how Ritmo uses your health data');
+    await see(page, 'Please confirm you are 18 or over');
+    await adult.check(); await terms.uncheck();
+    await page.getByRole('button', { name: 'Create account' }).click();
+    await see(page, 'Please agree to the terms and privacy notice');
     assert(await page.locator('.consent a[href="/privacy"]').count() === 1, 'no privacy link');
+    assert(await page.locator('.consent a[href="/terms"]').count() === 1, 'no terms link');
+    await notSee(page, 'health data, including heart rate');
   }, page);
-  await step(P('sign-up sends a confirmation email and stores the consent time'), async () => {
-    await page.locator('.consent input').check();
+  await step(P('sign-up sends a confirmation email and records the terms and age confirmation'), async () => {
+    await page.locator('.consent input').nth(1).check();
     await page.getByRole('button', { name: 'Create account' }).click();
     await see(page, 'Check your email');
     assert(mock.state.emails.some((e) => e.to === A && e.type === 'signup'), 'no signup email');
-    assert(mock.state.users.get(A).meta.health_consent_at, 'consent not stored');
+    const meta = mock.state.users.get(A).meta;
+    assert(meta.terms_accepted_at && meta.adult_confirmed_at, 'agreement not stored');
+    assert(!meta.health_consent_at, 'health consent should not be taken at sign-up');
   }, page);
   await step(P('log in before confirming shows the unconfirmed message and can resend'), async () => {
     await page.goto(`${APP}/login`);
@@ -126,36 +197,90 @@ async function run(label, deviceOpts) {
     await page.goto(`${APP}/signup`);
     await page.locator('#su-email').fill(A);
     await page.locator('#su-password').fill('Runner2026');
-    await page.locator('.consent input').check();
+    await checkAll(page);
     await page.getByRole('button', { name: 'Create account' }).click();
     await see(page, 'An account with this email already exists');
   }, page);
-  await step(P('the confirmation link logs the new runner in and starts on the welcome screen'), async () => {
+  await step(P('the confirmation link logs the new runner in and starts setup'), async () => {
     await page.goto(`${APP}/login?confirmed=1${mock.linkFor(A, 'signup')}`);
-    await page.waitForURL(/\/welcome/, { timeout: 10000 });
-    await see(page, 'How would you like to start?');
+    await page.waitForURL(/\/setup/, { timeout: 10000 });
+    await see(page, 'Step 1 of 9');
   }, page);
-
-  // ---------- Empty account ----------
-  await step(P('empty account: every screen explains what is missing, with a next step'), async () => {
-    await page.goto(`${APP}/profile`); await see(page, 'Account and sync');
-    // Using the bottom tabs / sidebar on an empty account goes back to welcome until they choose a start
-    await page.goto(`${APP}/progress`); await page.waitForURL(/\/welcome/);
+  await step(P('setup is required: other pages return to it, health consent is required'), async () => {
+    await page.goto(`${APP}/progress`); await page.waitForURL(/\/setup/);
+    await page.goto(`${APP}/welcome`); await page.waitForURL(/\/setup/);
+    assert(!(await page.locator('#c-health').isChecked()), 'health consent pre-ticked');
+    assert(!(await page.locator('#c-ai').isChecked()), 'AI consent pre-ticked');
+    assert(await page.getByRole('button', { name: 'Continue', exact: true }).isDisabled(), 'can continue without consent');
   }, page);
-
-  // ---------- Beginner path ----------
-  await step(P('beginner questions validate and build a run/walk plan'), async () => {
-    await page.getByRole('link', { name: /new to running/ }).click();
-    await page.waitForURL(/\/start/);
-    await page.getByRole('button', { name: 'Build my starter plan' }).click();
-    await see(page, 'Please answer the first two questions');
-    await page.getByRole('button', { name: 'Not yet' }).click();
+  await step(P('under 18 is blocked and the date of birth is not saved'), async () => {
+    await page.locator('#c-health').check(); await cont(page);
+    await page.locator('#s-name').fill('Sam');
+    await page.getByLabel('Day', { exact: true }).selectOption('1');
+    await page.getByLabel('Month', { exact: true }).selectOption('1');
+    await page.getByLabel('Year', { exact: true }).selectOption(String(new Date().getFullYear() - 15));
+    await cont(page);
+    await see(page, 'Ritmo is for adults 18 and over');
+    await page.waitForTimeout(1500);
+    assert(!rows('profiles', A)[0]?.data?.profile?.dateOfBirth, 'under-18 date of birth saved');
+    assert(rows('profiles', A)[0]?.data?.profile?.consents?.healthData?.granted, 'consent step not saved to the account');
+    await page.getByRole('button', { name: 'I entered the wrong date' }).click();
+  }, page);
+  await step(P('setup resumes on another device at the same step'), async () => {
+    await page.getByLabel('Year', { exact: true }).selectOption('1990');
+    await cont(page);
+    await see(page, 'Before you start');
+    await page.waitForTimeout(1600);
+    const other = await browser.newContext({ ...deviceOpts });
+    await mock.install(other, SUPA);
+    const p2 = await other.newPage();
+    await p2.goto(`${APP}/login`);
+    await logIn(p2, A);
+    await p2.waitForURL(/\/setup/, { timeout: 10000 });
+    await see(p2, 'Before you start');
+    await see(p2, 'Step 1 of 7');
+    await other.close();
+  }, page);
+  await step(P('a "yes" in the health check asks to see a doctor and needs acknowledging; only the outcome is stored'), async () => {
     await page.getByRole('button', { name: 'Yes', exact: true }).nth(1).click();
-    await page.getByRole('button', { name: 'Build my starter plan' }).click();
-    await page.waitForURL(`${APP}/`);
-    await see(page, /Run\/walk: 8 x 1 min|Rest day|Nothing planned/);
+    for (const i of [0, 2, 3, 4, 5]) await page.getByRole('button', { name: 'No', exact: true }).nth(i).click();
+    await see(page, 'Please check with a doctor before you start');
+    assert(await page.getByRole('button', { name: 'Continue', exact: true }).isDisabled(), 'continue allowed without acknowledging');
+    await page.locator('#h-ack').check();
+    await cont(page);
+    await see(page, 'Your running so far');
+    await page.waitForTimeout(1600);
+    const hc = rows('profiles', A)[0].data.profile.healthCheck;
+    assert(hc?.doctorAdvised && hc.acknowledgedAt, 'health outcome not stored');
+    assert(!JSON.stringify(rows('profiles', A)[0].data).includes('chest'), 'individual health answers stored');
   }, page);
-  await step(P('beginner sees no fitness numbers before they exist'), async () => {
+  await step(P('beginner: new to running gets a safer goal offer and a run/walk plan preview'), async () => {
+    await page.getByRole('radio', { name: /new to running/ }).click();
+    await cont(page);
+    await see(page, 'Please say whether you can run for 10 minutes');
+    await fieldset(page, 'Can you run for 10 minutes').getByRole('button', { name: 'Not yet' }).click();
+    await fieldset(page, 'Do you walk regularly').getByRole('button', { name: 'Yes' }).click();
+    await cont(page);
+    await page.getByRole('radio', { name: 'My first 10K' }).click();
+    await cont(page);
+    await see(page, 'A safer option');
+    await page.getByRole('button', { name: 'Run 5K without stopping first' }).click();
+    await see(page, 'Your training week');
+    await cont(page);
+    await page.getByRole('button', { name: /No injuries/ }).click();
+    await page.getByRole('button', { name: 'Skip for now' }).click();
+    await see(page, 'Your first weeks');
+    await see(page, 'Set by effort, no paces yet');
+    await see(page, /new to running/);
+    await startPlan(page);
+    await see(page, /Run\/walk: 8 x 1 min|Rest day|Nothing planned/);
+    await page.waitForTimeout(1600);
+    const prof = rows('profiles', A)[0].data.profile;
+    assert(prof.setupCompletedAt && prof.goalType === '5k' && prof.experience === 'new', 'setup result not saved');
+  }, page);
+  await step(P('beginner sees no fitness numbers before they exist; details sit behind "See more"'), async () => {
+    await notSee(page, 'Unlocking your fitness');
+    await page.getByRole('button', { name: /See more/ }).click();
     await see(page, 'Unlocking your fitness');
     await notSee(page, 'Fitness (VDOT)');
     await notSee(page, 'Predicted finish');
@@ -173,6 +298,7 @@ async function run(label, deviceOpts) {
   }, page);
   await step(P('Today counts the run and the cloud has it, private to this account'), async () => {
     await page.goto(`${APP}/`);
+    await page.getByRole('button', { name: /See more/ }).click();
     await see(page, '1 run logged', 8000).catch(async () => see(page, 'runs logged'));
     await page.waitForTimeout(1600);
     assert(rows('activities', A).length === 1, `expected 1 cloud run, got ${rows('activities', A).length}`);
@@ -188,6 +314,18 @@ async function run(label, deviceOpts) {
     assert(await page.getByRole('button', { name: 'Why is today easy?' }).count() === 0, 'easy-day suggestion on a non-easy day');
     await page.waitForTimeout(1500);
     assert(rows('coach_messages', A).length >= 2, 'coach chat not saved to the account');
+  }, page);
+  await step(P('the AI coach is only used with consent, and the usage limit falls back politely'), async () => {
+    const coachCalls = () => mock.state.calls.filter((c) => c.includes('/functions/v1/coach')).length;
+    assert(coachCalls() === 0, 'AI coach called without consent');
+    await see(page, "Answers come from Ritmo's built-in coach only");
+    await page.getByRole('button', { name: 'Use the AI coach' }).click();
+    mock.state.coachStatus = 429;
+    await page.locator('#ask').fill('How was my week?');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await see(page, 'You have asked the AI coach a lot of questions recently');
+    assert(coachCalls() === 1, 'AI coach not called after consent');
+    mock.state.coachStatus = undefined;
   }, page);
   await step(P('Progress and race pages explain locked predictions'), async () => {
     await page.goto(`${APP}/progress`);
@@ -215,19 +353,24 @@ async function run(label, deviceOpts) {
   }, page);
   await step(P('a second person on the same device sees none of the first person\'s data'), async () => {
     await signUpAndConfirm(page, mock, B);
-    await page.waitForURL(/\/welcome/);
+    await page.waitForURL(/\/setup/);
     await page.getByRole('button', { name: /Look around with sample data/ }).click();
     await page.waitForURL(`${APP}/`);
+    await page.waitForTimeout(1500); // let the choice save before the next full page load
     await notSee(page, 'Run/walk: 8 x 1 min');
     await page.goto(`${APP}/coach`);
     await notSee(page, 'You have logged 1 run');
     assert(rows('activities', B).length === 0, 'sample runs uploaded');
     assert(rows('coach_messages', B).length === 0, 'B sees A chat');
+    assert(rows('profiles', B)[0]?.data?.mode === 'sample', 'sample choice not saved');
   }, page);
   await step(P('switching back to the first account restores only their data'), async () => {
     await logOut(page);
     await logIn(page, A);
     await page.waitForURL(`${APP}/`);
+    await page.waitForTimeout(1500);
+    if (process.env.DEBUG) console.log('A cloud setupCompletedAt', rows('profiles', A)[0]?.data?.profile?.setupCompletedAt, 'url', page.url());
+    await page.getByRole('button', { name: /See more/ }).click();
     await see(page, 'Unlocking your fitness');
     await notSee(page, 'Valencia Marathon');
   }, page);
@@ -270,27 +413,52 @@ async function run(label, deviceOpts) {
   }, page);
 
   // ---------- Full Garmin import ----------
-  await step(P('a full Garmin export imports, removes duplicates and unlocks everything'), async () => {
+  await step(P('a regular runner with a Garmin export: runs fill in setup, plan uses measured paces, photo saved'), async () => {
     const { buffer, runCount } = await makeGarminExport();
     const file = path.join(OUT, `garmin-${label}.zip`);
     fs.writeFileSync(file, buffer);
+    globalThis.__inC = true;
     await signUpAndConfirm(page, mock, C);
-    await page.waitForURL(/\/welcome/);
-    await page.locator('input[type=file]').setInputFiles(file);
-    await see(page, /Imported \d+ new runs/, 60000);
-    const text = await page.getByText(/Imported \d+ new runs/).first().textContent();
-    assert(new RegExp(`Imported ${runCount} new runs, upgraded 4`).test(text), `unexpected import summary: ${text}`);
-    await page.getByRole('button', { name: 'See your running story' }).click();
-    await see(page, 'Your running story');
+    await doSetup(page, { level: 'I run regularly', goal: 'Get faster', name: 'Cara', runsFile: file, photo: PHOTO });
+    await see(page, 'Paces measured from your runs');
+    await startPlan(page);
+    assert(await page.locator('.avatar-photo img').count() === 1, 'photo not in the top bar');
     await page.goto(`${APP}/progress`);
     await see(page, 'Estimated race times');
-    await notSee(page, 'Race predictions are based on a timed effort');
-    await page.goto(`${APP}/calendar`);
-    await page.getByRole('button', { name: /Build my plan|Rebuild/ }).first().click();
-    await page.waitForTimeout(500);
-    await notSee(page, 'Ritmo needs');
+    if (process.env.DEBUG) { const a = await page.evaluate(() => window.__puts); await page.waitForTimeout(3000); console.log('puts in 3s', (await page.evaluate(() => window.__puts)) - a, 'tsb'); }
     await page.waitForTimeout(4000);
-    assert(rows('activities', C).length === runCount, `cloud has ${rows('activities', C).length} of ${runCount} runs`);
+    assert(rows('activities', C).length === runCount, `cloud has ${rows('activities', C).length} of ${runCount} runs; calls: ${mock.state.calls.slice(mock.state.calls.lastIndexOf('POST /auth/v1/signup 200')).join(', ')} banner: ${await page.locator('.sync-banner').textContent().catch(() => 'none')}`);
+    assert(mock.state.files.has(`avatars/${userId(C)}/avatar.jpg`), 'photo not stored in the private folder');
+    const jpg = mock.state.files.get(`avatars/${userId(C)}/avatar.jpg`);
+    assert(jpg.indexOf(Buffer.from('Exif')) < 0, 'photo still has EXIF data');
+  }, page);
+  await step(P('a runner with no history gets estimated paces, clearly labelled'), async () => {
+    await logOut(page);
+    await signUpAndConfirm(page, mock, E);
+    await doSetup(page, { level: 'I run regularly', goal: 'Get faster', weekly: 30 });
+    await see(page, 'Paces are an estimate for now');
+    await see(page, /estimated from your typical 30 km a week/);
+    await startPlan(page);
+  }, page);
+  await step(P('two accounts with photos only ever see their own'), async () => {
+    await page.goto(`${APP}/profile`);
+    await page.getByRole('button', { name: 'Add a photo' }).click();
+    await page.locator('input[type=file][accept^="image/jpeg"]').setInputFiles(PHOTO);
+    await page.getByRole('button', { name: 'Save picture' }).click();
+    await page.locator('.card img.avatar-img').first().waitFor();
+    assert(mock.state.files.has(`avatars/${userId(E)}/avatar.jpg`) && mock.state.files.has(`avatars/${userId(C)}/avatar.jpg`), 'photos missing');
+    // E's session cannot fetch C's photo
+    const res = await page.evaluate(async ([u, key]) => {
+      const tok = JSON.parse(localStorage.getItem('ritmo-auth')).access_token;
+      const r = await fetch(`${u}/storage/v1/object/sign/avatars/${key}`, { method: 'POST', headers: { Authorization: `Bearer ${tok}`, apikey: 'x', 'content-type': 'application/json' }, body: '{"expiresIn":60}' });
+      return r.status;
+    }, [SUPA, `${userId(C)}/avatar.jpg`]);
+    assert(res >= 400, `other user's photo was reachable (${res})`);
+    await page.getByRole('button', { name: 'Change or remove photo' }).click();
+    await page.getByRole('button', { name: 'Remove picture' }).click();
+    await page.waitForTimeout(500);
+    assert(!mock.state.files.has(`avatars/${userId(E)}/avatar.jpg`), 'removed photo still stored');
+    assert(await page.locator('.card img.avatar-img').count() === 0, 'removed photo still shown');
   }, page);
 
   // ---------- Data from before accounts ----------
@@ -311,7 +479,14 @@ async function run(label, deviceOpts) {
   }, page);
 
   // ---------- Delete account ----------
-  await step(P('deleting the account removes the account and all cloud data'), async () => {
+  await step(P('a user who brought runs with them skips the runs question'), async () => {
+    await page.goto(`${APP}/setup`);
+    await see(page, 'Step 1 of 8');
+    await doSetup(page, { level: 'I run regularly', goal: 'Get faster', weekly: 20 });
+    await notSee(page, 'Skip for now');
+    await startPlan(page);
+  }, page);
+  await step(P('deleting the account removes the account, photo and all cloud data'), async () => {
     await page.goto(`${APP}/profile/privacy`);
     await see(page, 'Delete your account');
     await page.locator('#del').fill('DELETE');
@@ -327,9 +502,10 @@ async function run(label, deviceOpts) {
   await browser.close();
 }
 
-(async () => {
+module.exports = { doSetup, startPlan, signUpAndConfirm, see, PHOTO, APP, SUPA, OUT };
+if (require.main === module) (async () => {
   await run('phone', devices['iPhone 13']);
-  await run('desktop', { viewport: { width: 1280, height: 900 } });
+  if (!process.env.PHONE_ONLY) await run('desktop', { viewport: { width: 1280, height: 900 } });
   const failed = results.filter((r) => r[0] === 'FAIL');
   for (const r of results) console.log(r.join('  '));
   console.log(`\n${results.length - failed.length} passed, ${failed.length} failed`);

@@ -4,7 +4,7 @@ const { createMock } = require('../e2e/mock-supabase.cjs');
 const SUPA = 'https://gujuzacfqxbwfpprkgrx.supabase.co';
 const B = 'http://localhost:4173';
 const DEV = ['iPhone SE', 'iPhone 13 mini', 'iPhone 15', 'iPhone 15 Pro Max', 'Pixel 7', 'Galaxy S9+', 'Galaxy A55'];
-const ROUTES = ['/login', '/signup', '/forgot-password', '/start', '/', '/calendar', '/progress', '/coach', '/profile', '/profile/data', '/profile/privacy', '/profile/health', '/goals', '/story', '/review/2026-10', '/race/race-valencia', '/race/new', '/welcome'];
+const ROUTES = ['/login', '/signup', '/forgot-password', '/setup', '/', '/calendar', '/progress', '/coach', '/profile', '/profile/data', '/profile/privacy', '/profile/health', '/goals', '/story', '/review/2026-10', '/race/race-valencia', '/race/new', '/terms', '/about'];
 (async () => {
   const b = await chromium.launch();
   const out = [];
@@ -16,9 +16,9 @@ const ROUTES = ['/login', '/signup', '/forgot-password', '/start', '/', '/calend
     const p = await c.newPage();
     const email = `fit-${name.replace(/\W/g, '')}@test.ritmo`;
     await p.goto(B + '/signup'); await p.waitForTimeout(2600);
-    await p.locator('#su-email').fill(email); await p.locator('#su-password').fill('Runner2026'); await p.locator('.consent input').check();
+    await p.locator('#su-email').fill(email); await p.locator('#su-password').fill('Runner2026'); for (const x of await p.locator('.consent input').all()) await x.check();
     await p.getByRole('button', { name: 'Create account' }).click(); await p.getByText('Check your email').waitFor();
-    await p.goto(B + '/login?confirmed=1' + mock.linkFor(email, 'signup')); await p.waitForURL(/welcome/);
+    await p.goto(B + '/login?confirmed=1' + mock.linkFor(email, 'signup')); await p.waitForURL(/setup/);
     await p.getByRole('button', { name: /Look around with sample data/ }).click(); await p.waitForTimeout(1800);
     const routes = [...ROUTES];
     // add an activity and a session page

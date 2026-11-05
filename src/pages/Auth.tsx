@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, EyeOff, MailCheck } from 'lucide-react';
+import { Check, Eye, EyeOff, MailCheck } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { Lanes, Logo, StatusLine } from '../components/ui';
+import { Logo, StatusLine } from '../components/ui';
 import { logIn, PASSWORD_RULE, passwordProblem, resendConfirmation, sendPasswordReset, setNewPassword, signUp, type AuthResult } from '../app/auth';
 
 function AuthLayout({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
@@ -78,7 +78,8 @@ export function SignUp() {
   const next = safeNext(params.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [consent, setConsent] = useState(false);
+  const [terms, setTerms] = useState(false);
+  const [adult, setAdult] = useState(false);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<AuthResult>();
   const [sentTo, setSentTo] = useState<string>();
@@ -101,22 +102,35 @@ export function SignUp() {
 
   return (
     <AuthLayout title="Create your account" intro="Your account keeps your runs, plan and coaching private to you and available on every device.">
-      <div className="hero" style={{ padding: 'var(--s4) var(--s5)' }}><Lanes /><p className="label">Train to your own rhythm.</p></div>
+      <section className="hero stack-sm" style={{ padding: 'var(--s5)' }}>
+        <p className="title">Train to your own rhythm.</p>
+        <ul className="value-list">
+          <li><Check size={18} strokeWidth={2} aria-hidden="true" />A plan built around your week, your goal and your fitness</li>
+          <li><Check size={18} strokeWidth={2} aria-hidden="true" />Clear feedback after every run: what went well and what to change</li>
+          <li><Check size={18} strokeWidth={2} aria-hidden="true" />A plan that adapts when you are tired, ill or short of time</li>
+        </ul>
+      </section>
       <form className="card stack" onSubmit={async (e) => {
         e.preventDefault();
-        if (!consent) { setRes({ ok: false, message: 'Please agree to how Ritmo uses your health data to continue.' }); return; }
+        if (!adult) { setRes({ ok: false, message: 'Ritmo is for adults. Please confirm you are 18 or over.' }); return; }
+        if (!terms) { setRes({ ok: false, message: 'Please agree to the terms and privacy notice to continue.' }); return; }
         setBusy(true);
         const r = await signUp(email.trim(), password, new Date().toISOString());
         setBusy(false); setRes(r);
         if (r.ok && r.needsConfirmation) setSentTo(email.trim());
-        else if (r.ok) nav(next === '/' ? '/welcome' : next, { replace: true });
+        else if (r.ok) nav(next === '/' ? '/setup' : next, { replace: true });
       }}>
         <div className="field"><label htmlFor="su-email">Email</label><input id="su-email" className="input" type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
         <PasswordField id="su-password" label="Password" value={password} onChange={setPassword} autoComplete="new-password" hint={pwHint} />
         <label className="consent">
-          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span>I agree that Ritmo stores and uses my health data, including heart rate, injuries and how my runs felt, to give me training advice. I have read the <Link to="/privacy" target="_blank" className="label">privacy page</Link> and agree to the <Link to="/terms" target="_blank" className="label">terms</Link>. I can export or delete my data at any time.</span>
+          <input type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} />
+          <span>I am 18 or over.</span>
         </label>
+        <label className="consent">
+          <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+          <span>I agree to the <Link to="/terms" target="_blank" className="label">terms</Link> and have read the <Link to="/privacy" target="_blank" className="label">privacy notice</Link>.</span>
+        </label>
+        <p className="caption">Next, Ritmo asks your permission to use your health and training data, then a few questions to build your plan.</p>
         {res && !res.ok && <div role="alert"><StatusLine kind="danger">{res.message}</StatusLine></div>}
         {res?.code === 'already_registered' && <div className="row wrap"><Link to="/login" className="btn btn-small">Log in</Link><Link to={`/forgot-password?email=${encodeURIComponent(email)}`} className="btn btn-small btn-ghost">Reset password</Link></div>}
         <button className="btn btn-primary btn-block" type="submit" disabled={busy}>{busy ? 'Creating your account…' : 'Create account'}</button>

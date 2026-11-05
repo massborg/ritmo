@@ -165,7 +165,7 @@ export default function Calendar() {
           <div className="row-between"><h2 id="plan" className="title">Training plan</h2>
             <button className="btn btn-small" onClick={() => setPlanMsg(buildMyPlan())}><RefreshCw size={18} strokeWidth={2} aria-hidden="true" />{plan ? 'Rebuild' : 'Build my plan'}</button></div>
           {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
-          {!plan ? <p className="muted">No plan yet. {data.activities.length ? 'Build one from your history, fitness, races and available days.' : <>New to running? <Link to="/start" className="label">Start a beginner plan</Link>. Already running? <Link to="/profile/data" className="label">Upload your runs</Link> first.</>}</p> : (
+          {!plan ? <p className="muted">No plan yet. {data.activities.length ? 'Build one from your history, fitness, races and available days.' : <><Link to="/setup" className="label">Answer a few questions</Link> to get a plan that fits you, or <Link to="/profile/data" className="label">upload your runs</Link> first.</>}</p> : (
             <>
               <div className="row" style={{ gap: 2 }} role="img" aria-label={plan.phases.map((p) => `${PHASE_LABEL[p.phase]} from ${p.start}`).join(', ')}>
                 {plan.phases.map((p) => {

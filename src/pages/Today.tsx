@@ -5,6 +5,7 @@ import { useApp } from '../app/AppContext';
 import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
+import { SeeMore } from '../components/setup-ui';
 import { addDays, DAY_NAMES, daysBetween, dist, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
@@ -32,11 +33,11 @@ export default function Today() {
         <AppHeader title="Today" eyebrow={longDate(today)} right={<><SampleChip />{logButton}<Avatar /></>} />
         <Empty icon={<Sparkles size={28} strokeWidth={2} aria-hidden="true" />} title="Let's get you started"
           action={<div className="stack-sm" style={{ width: '100%' }}>
-            <Link to="/start" className="btn btn-primary"><Footprints size={18} strokeWidth={2} aria-hidden="true" />I'm new to running</Link>
+            <Link to="/setup" className="btn btn-primary"><Footprints size={18} strokeWidth={2} aria-hidden="true" />Get my plan</Link>
             <Link to="/profile/data" className="btn"><Upload size={18} strokeWidth={2} aria-hidden="true" />Upload my runs</Link>
             <button className="btn btn-ghost" onClick={() => setLogFor('free')}><Plus size={18} strokeWidth={2} aria-hidden="true" />Log a run by hand</button>
           </div>}>
-          Ritmo plans your week from your running. There is nothing here yet: start a beginner plan, bring in your history, or log a run you have done.
+          Ritmo plans your week from your running. There is nothing here yet: answer a few questions for a plan, bring in your history, or log a run you have done.
         </Empty>
         {sheet}
       </div>
@@ -94,7 +95,7 @@ export default function Today() {
                 {s.distanceM > 0 && <div className="row label" style={{ gap: 6, paddingBottom: 6 }}><Clock size={16} strokeWidth={2} aria-hidden="true" />{durationWords(s.durationS)}</div>}
               </div>
               <WorkoutGraph session={s} onBrand height={64} />
-              <ol className="ol-steps body">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
+              <p className="body hero-why"><strong>Why: </strong>{s.purpose}</p>
             </>
           ) : <p className="body">{s.purpose}</p>}
           <div className="row wrap">
@@ -126,8 +127,8 @@ export default function Today() {
         </section>
       )}
 
-      {s && s.type !== 'rest' && s.type !== 'race' && (s.paceTarget || s.hrZones || s.type === 'runwalk') && (
-        <section className="card stack-sm" aria-label="Targets">
+      {s && s.type !== 'rest' && s.type !== 'race' && (
+        <section className="card stack-sm" aria-label="How to run it">
           <div className="row-between wrap" style={{ gap: 'var(--s4)' }}>
             {s.paceTarget && <div><p className="caption">Target pace{stage.stage === 'building' ? ' (estimated from your runs)' : ''}</p><p className="stat" style={{ fontSize: 22, lineHeight: '28px' }}>{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
             {s.type === 'runwalk' && (paces
@@ -135,19 +136,27 @@ export default function Today() {
               : <div><p className="caption">Effort</p><p className="label">Easy: you can talk in full sentences</p></div>)}
             {s.hrZones && data.activities.some((a) => a.avgHr) && <ZoneTag zones={s.hrZones} />}
           </div>
-          <p className="caption"><strong style={{ color: 'var(--ink)' }}>Why it matters.</strong> {s.purpose}</p>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
         </section>
       )}
 
+      <section className="card stack-sm" aria-label="Readiness">
+        <ReadinessStatus level={readiness.level} label={readiness.label} />
+        <p>{readiness.summary}</p>
+      </section>
+
+      {insight && (
+        <section className="card stack-sm" aria-labelledby="insight">
+          <div className="row" style={{ gap: 8 }}><Lightbulb size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="insight" className="label">Coach</h2></div>
+          <p>{insight}</p>
+          <Link to="/coach" className="label row" style={{ gap: 4, textDecoration: 'none', minHeight: 44 }}>Ask your coach <ChevronRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
+        </section>
+      )}
+
+      <SeeMore label="See more: readiness, this week and last run">
       <SectionTitle>How you are today</SectionTitle>
-      <section className="card stack" aria-label="Readiness">
-        <div className="row" style={{ gap: 'var(--s4)' }}>
-          {stage.predictions && <ReadinessGauge level={readiness.level} value={gauge} label={readiness.label} />}
-          <div className="stack-sm">
-            <ReadinessStatus level={readiness.level} label={readiness.label} />
-            <p>{readiness.summary}</p>
-          </div>
-        </div>
+      <section className="card stack" aria-label="Readiness details">
+        {stage.predictions && <div className="row" style={{ gap: 'var(--s4)' }}><ReadinessGauge level={readiness.level} value={gauge} label={readiness.label} /><p className="caption">Readiness combines your recent training load with how your runs felt.</p></div>}
         {!stage.predictions && <p className="caption">A readiness score with training load appears once Ritmo knows your fitness. Until then it is based on how your runs felt and any pain or illness you log.</p>}
         <details>
           <summary className="label row" style={{ cursor: 'pointer', minHeight: 44, gap: 6 }}>What this is based on</summary>
@@ -175,14 +184,6 @@ export default function Today() {
         {!stage.predictions && <Tile to="/progress" label="Runs logged" value={data.activities.length} sub={data.activities.length ? `${dist(data.activities.reduce((x, a) => x + a.distanceM, 0), U)} in total` : 'Your first one is next'} />}
       </div>
 
-      {insight && (
-        <section className="card stack-sm" aria-labelledby="insight">
-          <div className="row" style={{ gap: 8 }}><Lightbulb size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="insight" className="label">Coach</h2></div>
-          <p>{insight}</p>
-          <Link to="/coach" className="label row" style={{ gap: 4, textDecoration: 'none', minHeight: 44 }}>Ask your coach <ChevronRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
-        </section>
-      )}
-
       {last && lastAn && (
         <>
           <SectionTitle>Last run</SectionTitle>
@@ -198,6 +199,7 @@ export default function Today() {
           </div>
         </>
       )}
+      </SeeMore>
       {sheet}
     </div>
   );

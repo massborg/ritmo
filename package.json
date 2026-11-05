@@ -24,6 +24,7 @@
     "@capgo/capacitor-health": "8.11.14",
     "@supabase/supabase-js": "^2.119.0",
     "fit-file-parser": "^6.2.7",
+    "heic2any": "0.0.4",
     "idb-keyval": "^6.3.0",
     "jszip": "^3.10.2",
     "lucide-react": "^1.69.0",

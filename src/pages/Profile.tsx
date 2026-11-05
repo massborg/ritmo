@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Database, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
+import { Camera, ChevronRight, Database, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
 import { AppHeader, SampleChip } from '../components/app';
 import { Stepper } from '../components/inputs';
+import { AvatarEditor, AvatarImage } from '../components/AvatarEditor';
 import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/format';
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
@@ -14,6 +15,7 @@ export default function Profile() {
   const nav = useNavigate();
   const p = data.profile;
   const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string }>();
+  const [photo, setPhoto] = useState(false);
   const goalText = aRace?.goalS ? `${aRace.name} in ${duration(aRace.goalS)}` : p.goal;
   const hasHr = data.activities.some((a) => a.avgHr);
   const ill = p.illnessUntil && p.illnessUntil >= today.toISOString().slice(0, 10);
@@ -23,12 +25,20 @@ export default function Profile() {
       <AppHeader title="Profile" right={<SampleChip />} />
 
       <section className="card stack">
+        <div className="row" style={{ gap: 'var(--s4)' }}>
+          <AvatarImage size={72} />
+          <div className="stack-sm" style={{ gap: 4 }}>
+            <button className="btn btn-small" onClick={() => setPhoto(true)} disabled={data.mode === 'sample'}><Camera size={18} strokeWidth={2} aria-hidden="true" />{p.avatar ? 'Change or remove photo' : 'Add a photo'}</button>
+            <span className="caption">{data.mode === 'sample' ? 'Available with your own data' : 'Private to you'}</span>
+          </div>
+        </div>
+        <AvatarEditor open={photo} onClose={() => setPhoto(false)} />
         <div className="field"><label htmlFor="pname">Your name</label><input id="pname" className="input" value={p.name} onChange={(e) => updateProfile({ name: e.target.value })} autoComplete="given-name" /></div>
         <div className="row-between wrap"><span className="label">Units</span><Segmented label="Units" value={p.units} onChange={(u) => updateProfile({ units: u })} options={[{ value: 'km', label: 'Kilometres' }, { value: 'mi', label: 'Miles' }]} /></div>
         <div className="stack-sm">
           <span className="label">Appearance</span>
-          <Segmented<P['theme']> label="Theme" value={p.theme} onChange={(theme) => updateProfile({ theme })} options={[{ value: 'system', label: 'System' }, { value: 'giorno', label: 'Giorno' }, { value: 'notte', label: 'Notte' }, { value: 'sole', label: 'Sole' }]} />
-          <p className="caption">Giorno is light and Notte is dark. Sole is high contrast for bright sunshine outdoors.</p>
+          <Segmented<P['theme']> label="Theme" value={p.theme} onChange={(theme) => updateProfile({ theme })} options={[{ value: 'system', label: 'System' }, { value: 'giorno', label: 'Light' }, { value: 'notte', label: 'Dark' }, { value: 'sole', label: 'High contrast' }]} />
+          <p className="caption">Light (Giorno), Dark (Notte), or High contrast (Sole) for bright sunshine outdoors. System follows your phone.</p>
         </div>
       </section>
 

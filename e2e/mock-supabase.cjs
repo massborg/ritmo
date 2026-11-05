@@ -9,7 +9,7 @@ function jwt(user) {
 }
 
 function createMock() {
-  const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [] };
+  const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
   const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages'];
   TABLES.forEach((t) => (state.tables[t] = []));
   const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'] };
@@ -111,11 +111,40 @@ function createMock() {
   function functions(name, req) {
     const u = userFromReq(req);
     if (!u) return { status: 401, body: { error: 'not_signed_in' } };
-    if (name === 'coach') return { status: 503, body: { error: 'not_configured' } };
+    if (name === 'coach') return state.coachStatus ? { status: state.coachStatus, body: { error: 'rate_limited' } } : { status: 503, body: { error: 'not_configured' } };
     if (name === 'delete-account') {
       for (const t of TABLES) state.tables[t] = state.tables[t].filter((r) => r.user_id !== u.id);
+      for (const k of [...state.files.keys()]) if (k.startsWith(`avatars/${u.id}/`)) state.files.delete(k);
       state.users.delete(u.email);
       return { status: 200, body: { deleted: true } };
+    }
+    return { status: 404, body: null };
+  }
+
+  // Storage: private "avatars" bucket where each user may only touch avatars/<their id>/...
+  function storage(path, method, req, body) {
+    const own = (p) => { const u = userFromReq(req); return u && p.split('/')[0] === u.id ? u : undefined; };
+    let m;
+    if ((m = path.match(/^\/object\/sign\/avatars\/(.+)$/)) && method === 'POST') {
+      if (!own(m[1]) || !state.files.has(`avatars/${m[1]}`)) return { status: 400, body: { statusCode: '404', error: 'not_found', message: 'Object not found' } };
+      const token = crypto.randomUUID(); state.signed.set(token, `avatars/${m[1]}`);
+      return { status: 200, body: { signedURL: `/object/sign/avatars/${m[1]}?token=${token}` } };
+    }
+    if ((m = path.match(/^\/object\/sign\/avatars\/(.+)$/)) && method === 'GET') {
+      const key = state.signed.get(new URL(req.url()).searchParams.get('token'));
+      return key && state.files.has(key) ? { status: 200, raw: state.files.get(key), type: 'image/jpeg' } : { status: 400, body: { error: 'invalid' } };
+    }
+    if ((m = path.match(/^\/object\/avatars\/(.+)$/)) && (method === 'POST' || method === 'PUT')) {
+      if (!own(m[1])) return { status: 403, body: { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' } };
+      const buf = req.postDataBuffer() || Buffer.alloc(0);
+      const a = buf.indexOf(Buffer.from([0xff, 0xd8, 0xff])), b = buf.lastIndexOf(Buffer.from([0xff, 0xd9]));
+      state.files.set(`avatars/${m[1]}`, a >= 0 && b > a ? buf.subarray(a, b + 2) : buf);
+      return { status: 200, body: { Key: `avatars/${m[1]}`, Id: crypto.randomUUID() } };
+    }
+    if (path === '/object/avatars' && method === 'DELETE') {
+      const out = [];
+      for (const p of body.prefixes || []) if (own(p) && state.files.delete(`avatars/${p}`)) out.push({ name: p });
+      return { status: 200, body: out };
     }
     return { status: 404, body: null };
   }
@@ -133,11 +162,13 @@ function createMock() {
       try { body = req.postDataJSON() ?? {}; } catch { body = {}; }
       let res;
       if (url.pathname.startsWith('/auth/v1')) res = auth(url.pathname.slice(8), method, url, body, req);
-      else if (url.pathname.startsWith('/rest/v1/rpc/')) res = { status: 204, body: null };
+      else if (url.pathname.startsWith('/rest/v1/rpc/')) { state.rpc.push(url.pathname.slice(12)); res = { status: 204, body: null }; }
+      else if (url.pathname.startsWith('/storage/v1')) res = storage(url.pathname.slice(11), method, req, body);
       else if (url.pathname.startsWith('/rest/v1/')) res = rest(url.pathname.slice(9), method, url, body, req, req.headers());
       else if (url.pathname.startsWith('/functions/v1/')) res = functions(url.pathname.slice(14), req);
       else res = { status: 404, body: null };
       state.calls.push(`${method} ${url.pathname} ${res.status}`);
+      if (res.raw) return route.fulfill({ status: res.status, headers: { ...cors, 'content-type': res.type }, body: res.raw });
       return route.fulfill({ status: res.status, headers: { ...cors, 'content-type': 'application/json' }, body: res.body == null ? '' : JSON.stringify(res.body) });
     });
   }

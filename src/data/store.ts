@@ -143,7 +143,7 @@ export function markPulled(ps: PushState, d: AppData) {
 }
 
 export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promise<void> {
-  if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt) return;
+  if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt && !d.profile.consents && !d.profile.setupStep) return;
   const profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
   if (profileJson !== ps.profileJson) {
     const r = await supabase.from('profiles').upsert({ user_id: uid, data: JSON.parse(profileJson), updated_at: new Date().toISOString() });

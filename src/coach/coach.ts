@@ -174,13 +174,19 @@ export function localReply(q: string, c: CoachContext): CoachReply {
 }
 
 /** Try the Claude-backed coach (Supabase function); fall back to local, grounded answers. */
-export async function ask(q: string, c: CoachContext, history: { role: string; text: string }[]): Promise<CoachReply & { source: 'ai' | 'local' }> {
+/**
+ * Answers from the built-in coach, optionally rewritten by the AI coach. The AI is used only when the
+ * person has agreed to it (useAi). Only training facts are sent: never the profile picture, name or email.
+ */
+export async function ask(q: string, c: CoachContext, history: { role: string; text: string }[], useAi = false): Promise<CoachReply & { source: 'ai' | 'local' }> {
   const local = localReply(q, c);
-  if (!supabase || !c.hasData || PAIN.test(q)) return { ...local, source: 'local' };
+  if (!supabase || !useAi || !c.hasData || PAIN.test(q)) return { ...local, source: 'local' };
   try {
     const { data, error } = await supabase.functions.invoke('coach', {
       body: { question: q, facts: local.facts, draft: local.text, history: history.slice(-6) },
     });
+    const status = (error as { context?: Response } | null)?.context?.status;
+    if (status === 429) return { ...local, text: `${local.text}\n\nYou have asked the AI coach a lot of questions recently, so this answer comes from Ritmo's built-in coach. AI answers will be back shortly.`, source: 'local' };
     if (error || !data?.text) return { ...local, source: 'local' };
     return { text: data.text as string, facts: local.facts, source: 'ai' };
   } catch {

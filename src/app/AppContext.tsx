@@ -9,7 +9,8 @@ import {
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge } from '../data/integration';
 import { parseFiles } from '../data/parsers';
-import { supabase } from '../data/supabase';
+import { setClosing, supabase } from '../data/supabase';
+import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { estimateFitness, type FitnessEstimate, hrSetup, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
@@ -40,7 +41,6 @@ export interface ManualRun {
   sessionId?: string;
 }
 
-export interface StarterAnswers { canRun10: boolean; walksRegularly: boolean; goal: string; days: number[]; injuries: Profile['injuries'] }
 
 interface Derived {
   today: Date;
@@ -76,7 +76,8 @@ interface Ctx extends Derived {
   dismissLegacy: (discard: boolean) => Promise<void>;
   loadSample: () => void;
   startFresh: () => void;
-  startBeginner: (a: StarterAnswers) => void;
+  /** End of setup: save the plan (if any) and mark setup complete */
+  finishSetup: (plan?: Plan) => void;
   importFiles: (files: File[]) => Promise<void>;
   logManualRun: (r: ManualRun) => string;
   updateProfile: (p: Partial<Profile>) => void;
@@ -88,9 +89,9 @@ interface Ctx extends Derived {
   reportIllness: (days: number) => void;
   clearIllness: () => void;
   analysisFor: (a: Activity) => Analysis;
-  sendCoach: (text: string) => Promise<void>;
+  sendCoach: (text: string, useAi?: boolean) => Promise<void>;
   clearCoach: () => void;
-  exportData: () => void;
+  exportData: () => Promise<void>;
   deleteEverything: () => Promise<string | undefined>;
   disconnectSource: (k: SourceKind) => void;
   connectHealth: () => Promise<string | undefined>;
@@ -98,6 +99,10 @@ interface Ctx extends Derived {
   healthSyncing: boolean;
   signOut: () => Promise<void>;
   finishRecovery: () => void;
+  /** Signed link to the person's own profile picture, if they have one */
+  avatarSrc?: string;
+  saveAvatar: (jpeg: Blob) => Promise<void>;
+  deleteAvatar: () => Promise<void>;
 }
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -127,7 +132,7 @@ function mergeDeviceChanges(cloud: AppData, device: AppData): AppData {
 }
 
 /** Settings that belong to the person, not to the data set */
-const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt } : {});
+const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt, consents: p.consents, dateOfBirth: p.dateOfBirth, avatar: p.avatar } : {});
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(!supabase);
@@ -142,6 +147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [coachBusy, setCoachBusy] = useState(false);
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [avatarSrc, setAvatarSrc] = useState<string>();
   const userId = session?.user.id;
   const currentUid = useRef<string | undefined>(undefined);
   const cloudLoaded = useRef(false);
@@ -191,7 +197,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (cached?.mode === 'real') next = mergeDeviceChanges(next, cached);
           }
         } else {
-          next = cached && cached.mode !== 'empty' ? cached : { ...emptyData(), profile: { ...emptyData().profile, healthConsentAt: (session?.user.user_metadata?.health_consent_at as string | undefined) } };
+          next = cached && cached.mode !== 'empty' ? cached : emptyData();
           const legacy = await loadLegacy();
           if (legacy && !stale()) setLegacyOffer({ runs: legacy.activities.length, races: legacy.races.length });
         }
@@ -199,7 +205,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         markPulled(pushState.current, cloud.found && cloud.data ? ({ ...emptyData(), ...cloud.data } as AppData) : next);
         if (!cloud.found) pushState.current = newPushState();
         cloudLoaded.current = true;
-        setData(next);
+        // Always a new object, so the save effect runs even when the device copy is reused unchanged
+        // (e.g. the app closed before its first save reached the account).
+        setData({ ...next });
         setReady(true);
       } catch (e) {
         if (stale()) return;
@@ -238,7 +246,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const flush = () => {
       if (!ready || !cloudLoaded.current || currentUid.current !== userId) return;
       window.clearTimeout(pushTimer.current);
-      void pushToCloud(userId, dataRef.current, pushState.current).catch(() => {});
+      setClosing(true);
+      void pushToCloud(userId, dataRef.current, pushState.current).catch(() => {}).finally(() => setClosing(false));
     };
     const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
     document.addEventListener('visibilitychange', onVis);
@@ -341,16 +350,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadSample = () => setData((d) => sampleBundle(d.profile));
   const startFresh = () => setData((d) => ({ ...emptyData(), mode: 'real', profile: { ...emptyData().profile, ...pickPrefs(d.profile) } }));
 
-  const startBeginner = (a: StarterAnswers) => setData((d) => {
-    const today = new Date();
-    const profile: Profile = {
-      ...emptyData().profile, ...pickPrefs(d.profile), name: d.mode === 'sample' ? '' : d.profile.name,
-      experience: 'new', goal: a.goal, daysAvailable: a.days, longRunDay: a.days[a.days.length - 1] ?? 6, injuries: a.injuries, onboarded: true,
-      starter: { canRun10: a.canRun10, walksRegularly: a.walksRegularly, startedAt: ymd(today) },
-    };
-    const base = d.mode === 'real' ? d : { ...emptyData(), mode: 'real' as const };
-    return { ...base, mode: 'real', profile, plan: buildStarterPlan({ today, profile, canRun10: a.canRun10, walksRegularly: a.walksRegularly }) };
-  });
+  const finishSetup = (plan?: Plan) => {
+    setData((d) => {
+      const bg = d.profile.background;
+      const beginner = !!bg && (bg.level === 'new' || (bg.level === 'returning' && !d.activities.length));
+      const profile: Profile = {
+        ...d.profile, onboarded: true, setupCompletedAt: new Date().toISOString(), setupStep: 'done',
+        experience: beginner ? 'new' : 'runner',
+        starter: beginner ? { canRun10: !!bg?.canRun10, walksRegularly: bg?.walksRegularly ?? true, startedAt: plan?.startDate ?? ymd(new Date()) } : d.profile.starter,
+      };
+      const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const } : d;
+      return { ...base, mode: 'real', profile, plan: plan ?? base.plan };
+    });
+    if (plan) void deleteOtherPlans(plan.id).catch(() => {});
+  };
 
   const importFiles = async (files: File[]) => {
     setImportState({ running: true, done: 0, total: files.length, label: 'Reading files' });
@@ -457,7 +470,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reportIllness = (days: number) => updateProfile({ illnessUntil: ymd(addDays(derived.today, days - 1)) });
   const clearIllness = () => updateProfile({ illnessUntil: undefined });
 
-  const sendCoach = async (text: string) => {
+  const sendCoach = async (text: string, useAi?: boolean) => {
     const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString() };
     setData((d) => ({ ...d, coach: [...d.coach, msg] }));
     setCoachBusy(true);
@@ -481,7 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
         hasData: data.activities.length > 0 || !!derived.plan,
       };
-      const reply = await ask(text, ctx, data.coach.map((m) => ({ role: m.role, text: m.text })));
+      const reply = await ask(text, ctx, data.coach.map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString() }] }));
@@ -495,8 +508,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     clearCoachInCloud().catch((e) => setSyncError(`The chat was cleared here but not in your account. ${friendlyError(e)}`));
   };
 
-  const exportData = () => {
-    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', account: session?.user.email, ...data }, null, 2)], { type: 'application/json' });
+  const exportData = async () => {
+    const picture = data.profile.avatar ? await avatarDataUrl(data.profile.avatar.path) : undefined;
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', account: { email: session?.user.email, createdAt: session?.user.created_at }, profilePicture: picture, ...data }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `ritmo-export-${ymd(new Date())}.json`;
@@ -567,6 +581,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => remove?.();
   }, [ready]);
 
+  // ---- Profile picture (private; never sent to the coach) ----
+  const avatarPath = data.profile.avatar?.path;
+  const avatarStamp = data.profile.avatar?.updatedAt;
+  useEffect(() => {
+    if (!avatarPath || !userId) { setAvatarSrc(undefined); return; }
+    let live = true;
+    avatarUrl(avatarPath).then((u) => { if (live) setAvatarSrc(u ? `${u}&v=${encodeURIComponent(avatarStamp ?? '')}` : undefined); });
+    return () => { live = false; };
+  }, [avatarPath, avatarStamp, userId]);
+  const saveAvatar = async (jpeg: Blob) => {
+    if (!userId) throw new Error('Log in to add a profile picture.');
+    let path: string;
+    try { path = await uploadAvatar(userId, jpeg); } catch (e) { throw new Error(friendlyError(e)); }
+    setAvatarSrc(URL.createObjectURL(jpeg));
+    updateProfile({ avatar: { path, updatedAt: new Date().toISOString() } });
+  };
+  const deleteAvatar = async () => {
+    const path = dataRef.current.profile.avatar?.path;
+    if (path) { try { await removeAvatar(path); } catch (e) { throw new Error(friendlyError(e)); } }
+    setAvatarSrc(undefined);
+    updateProfile({ avatar: undefined });
+  };
+
   /** Log out: clear this device, keep everything in the account. */
   const signOut = async () => {
     const uid = userId;
@@ -578,9 +615,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, startBeginner, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
-    signOut, finishRecovery: () => setRecovering(false),
+    signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

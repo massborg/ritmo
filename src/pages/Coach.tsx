@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Send } from 'lucide-react';
+import { Send, Sparkles } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, SampleChip } from '../components/app';
 import { suggestions } from '../coach/coach';
+import { Sheet } from '../components/inputs';
 
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach, todaySession } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile } = useApp();
+  const ai = data.profile.consents?.aiCoach;
+  const [pending, setPending] = useState<string>();
   const SUGGESTIONS = suggestions(todaySession, data.activities.length > 0);
   const [params, setParams] = useSearchParams();
   const [text, setText] = useState('');
@@ -16,12 +19,23 @@ export default function Coach() {
 
   useEffect(() => {
     const q = params.get('q');
-    if (q && !asked.current) { asked.current = true; sendCoach(q); setParams({}, { replace: true }); }
+    if (q && !asked.current) { asked.current = true; submit(q); setParams({}, { replace: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [data.coach.length, coachBusy]);
 
-  const submit = (q: string) => { if (!q.trim() || coachBusy) return; sendCoach(q.trim()); setText(''); };
+  // The first question asks whether answers may use the AI coach. Declining keeps answers on the device's built-in coach.
+  const submit = (q: string) => {
+    if (!q.trim() || coachBusy) return;
+    setText('');
+    if (!ai && data.mode !== 'sample') { setPending(q.trim()); return; }
+    sendCoach(q.trim());
+  };
+  const decide = (granted: boolean) => {
+    updateProfile({ consents: { ...data.profile.consents, aiCoach: { granted, at: new Date().toISOString() } } });
+    const q = pending; setPending(undefined);
+    if (q) sendCoach(q, granted);
+  };
 
   return (
     <div className="stack-lg">
@@ -49,6 +63,27 @@ export default function Coach() {
       <div className="row wrap" role="group" aria-label="Suggested questions">
         {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => submit(s)} disabled={coachBusy}>{s}</button>)}
       </div>
+
+      {ai && (
+        <p className="caption">
+          {ai.granted ? 'Answers use the AI coach. ' : 'Answers come from Ritmo\'s built-in coach only. '}
+          <button className="link-btn" onClick={() => updateProfile({ consents: { ...data.profile.consents, aiCoach: { granted: !ai.granted, at: new Date().toISOString() } } })}>{ai.granted ? 'Stop using AI' : 'Use the AI coach'}</button>
+        </p>
+      )}
+
+      <Sheet open={!!pending} onClose={() => setPending(undefined)} title="Use the AI coach?"
+        footer={<div className="stack"><button className="btn btn-primary" onClick={() => decide(true)}>Yes, use the AI coach</button><button className="btn" onClick={() => decide(false)}>No, built-in answers only</button></div>}>
+        <div className="stack">
+          <p><Sparkles size={18} strokeWidth={2} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6, color: 'var(--brand)' }} />Ritmo can send your question and a summary of your training to an AI service so the answer reads more naturally.</p>
+          <ul className="bullets">
+            <li>Sent: your question, recent chat, and training facts such as paces, distances, readiness and your plan.</li>
+            <li>Never sent: your email, profile picture, date of birth or health check answers.</li>
+            <li>The AI service does not use it to train its models. Garmin data is never used to train AI.</li>
+            <li>Without it, the built-in coach still answers from the same data.</li>
+          </ul>
+          <p className="caption">You can change this at any time on this screen or in Privacy.</p>
+        </div>
+      </Sheet>
 
       <form className="composer" onSubmit={(e) => { e.preventDefault(); submit(text); }}>
         <label htmlFor="ask" className="sr-only">Ask your coach</label>

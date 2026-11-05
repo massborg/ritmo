@@ -91,10 +91,10 @@ export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, 
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <div className="stepper">
-        <button type="button" className="icon-btn" aria-label={`Decrease ${label}`} onClick={() => set((v ?? Number(placeholder) ?? min) - step)}><Minus size={20} strokeWidth={2} /></button>
+        <button type="button" className="icon-btn" aria-label={`Decrease ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) - step)}><Minus size={20} strokeWidth={2} /></button>
         <input id={id} inputMode="numeric" className="stepper-input" value={v ?? ''} placeholder={placeholder} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value.replace(/\D/g, '')))} />
         {unit && <span className="caption">{unit}</span>}
-        <button type="button" className="icon-btn" aria-label={`Increase ${label}`} onClick={() => set((v ?? Number(placeholder) ?? min) + step)}><Plus size={20} strokeWidth={2} /></button>
+        <button type="button" className="icon-btn" aria-label={`Increase ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) + step)}><Plus size={20} strokeWidth={2} /></button>
       </div>
     </div>
   );

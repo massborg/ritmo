@@ -18,8 +18,7 @@ const Privacy = lazy(() => import('./pages/Privacy'));
 const ActivityPage = lazy(() => import('./pages/Activity'));
 const PlannedPage = lazy(() => import('./pages/Planned'));
 const RacePage = lazy(() => import('./pages/Race'));
-const Welcome = lazy(() => import('./pages/Welcome'));
-const Start = lazy(() => import('./pages/Start'));
+const Setup = lazy(() => import('./pages/Setup'));
 const Story = lazy(() => import('./pages/Story'));
 const Review = lazy(() => import('./pages/Review'));
 const Goals = lazy(() => import('./pages/Goals'));
@@ -39,7 +38,9 @@ const TABS = [
 /** Pages anyone can open without an account */
 const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy', '/terms', '/about'];
 /** Pages shown without the app's navigation */
-const BARE = ['/welcome', '/start', ...PUBLIC];
+const BARE = ['/setup', ...PUBLIC];
+/** Pages a signed-in person can open before finishing setup */
+const BEFORE_SETUP = ['/setup', '/profile/privacy', '/reset-password', ...PUBLIC];
 
 function ThemeSync() {
   const { data } = useApp();
@@ -114,8 +115,8 @@ function Gate({ children }: { children: ReactNode }) {
     );
   }
   if (!ready) return <Loading />;
-  // A new account starts on the welcome screen
-  if (data.mode === 'empty' && !data.profile.onboarded && !BARE.includes(loc.pathname) && !['/profile', '/profile/privacy', '/profile/data'].includes(loc.pathname)) return <Navigate to="/welcome" replace />;
+  // Everyone answers the setup questions first (existing accounts only see what is missing). Sample data skips it.
+  if (data.mode !== 'sample' && !data.profile.setupCompletedAt && !BEFORE_SETUP.includes(loc.pathname)) return <Navigate to="/setup" replace />;
   return <>{children}</>;
 }
 
@@ -183,8 +184,9 @@ function Shell() {
               <Route path="/profile/privacy" element={<Privacy />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/profile/health" element={<HealthConnect />} />
-              <Route path="/welcome" element={<Welcome />} />
-              <Route path="/start" element={<Start />} />
+              <Route path="/setup" element={<Setup />} />
+              <Route path="/welcome" element={<Navigate to="/setup" replace />} />
+              <Route path="/start" element={<Navigate to="/setup" replace />} />
               <Route path="/story" element={<Story />} />
               <Route path="/review/:period" element={<Review />} />
               <Route path="*" element={<NotFound />} />

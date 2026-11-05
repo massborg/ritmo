@@ -40,9 +40,11 @@ export function SampleChip() {
 }
 
 export function Avatar() {
-  const { data, session } = useApp();
+  const { data, session, avatarSrc } = useApp();
   const initials = (data.profile.name ? data.profile.name.split(' ').map((x) => x[0]).join('') : (session?.user.email ?? 'R')[0]).slice(0, 2).toUpperCase();
-  return <Link to="/profile" className="avatar" aria-label="Profile">{initials}</Link>;
+  return avatarSrc
+    ? <Link to="/profile" className="avatar avatar-photo" aria-label="Profile"><img src={avatarSrc} alt="" /></Link>
+    : <Link to="/profile" className="avatar" aria-label="Profile">{initials}</Link>;
 }
 
 export const ZONE_OF: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, runwalk: 2, tempo: 3, threshold: 4, hills: 4, timetrial: 4, vo2max: 5, speed: 5, race: 4 };

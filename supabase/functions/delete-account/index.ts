@@ -19,6 +19,12 @@ Deno.serve(async (req) => {
   const { data, error } = await asUser.auth.getUser();
   if (error || !data.user) return json({ error: 'not_signed_in' }, 401);
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+  // Remove stored files first (profile picture). Rows go with the account below.
+  const files = await admin.storage.from('avatars').list(data.user.id, { limit: 100 });
+  if (files.data?.length) {
+    const rm = await admin.storage.from('avatars').remove(files.data.map((f) => `${data.user.id}/${f.name}`));
+    if (rm.error) return json({ error: 'delete_failed', message: `Your profile picture could not be removed: ${rm.error.message}` }, 500);
+  }
   const del = await admin.auth.admin.deleteUser(data.user.id);
   if (del.error) return json({ error: 'delete_failed', message: del.error.message }, 500);
   return json({ deleted: true });

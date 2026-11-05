@@ -23,6 +23,10 @@ Deno.serve(async (req) => {
   if (!who?.user) return new Response(JSON.stringify({ error: 'not_signed_in' }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } });
   const key = Deno.env.get('ANTHROPIC_API_KEY');
   if (!key) return new Response(JSON.stringify({ error: 'not_configured' }), { status: 503, headers: { ...cors, 'Content-Type': 'application/json' } });
+  // Usage limit (30 an hour, 100 a day per person), enforced in the database. Over the limit, the app answers locally.
+  const quota = await asUser.rpc('take_coach_quota');
+  if (quota.error) console.error('coach quota check failed', quota.error.message);
+  else if (quota.data === false) return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { ...cors, 'Content-Type': 'application/json' } });
   try {
     const { question, facts, draft, history } = await req.json();
     if (typeof question !== 'string' || question.length > 1000 || !Array.isArray(facts)) {

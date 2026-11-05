@@ -109,6 +109,51 @@ export interface Profile {
   experience?: 'new' | 'runner';
   starter?: { canRun10: boolean; walksRegularly: boolean; startedAt: string };
   healthConsentAt?: string; // when the runner agreed to health data processing
+  // ---- Athlete setup (Phase 1). Only what the app uses is stored. ----
+  dateOfBirth?: string; // YYYY-MM-DD, used for the 18+ rule and age-aware load limits
+  consents?: Consents;
+  /** Health check: only the outcome is stored, never the individual answers */
+  healthCheck?: { completedAt: string; doctorAdvised: boolean; acknowledgedAt?: string };
+  background?: RunningBackground;
+  goalType?: GoalType;
+  schedule?: TrainingSchedule;
+  injuriesAnswered?: boolean;
+  avatar?: { path: string; updatedAt: string };
+  setupStep?: string; // last completed setup step, to resume on any device
+  setupStepsDone?: string[]; // optional steps already seen (e.g. "runs" skipped)
+  setupCompletedAt?: string;
+}
+
+export interface Consents {
+  /** Required: processing health and training data to coach the runner */
+  healthData?: { granted: boolean; at: string; version: string };
+  /** Optional: send summaries of training data to the AI coach service */
+  aiCoach?: { granted: boolean; at: string };
+}
+
+export type BackgroundLevel = 'new' | 'returning' | 'sometimes' | 'regular' | 'racer';
+
+export interface RunningBackground {
+  level: BackgroundLevel;
+  // new or returning
+  canRun10?: boolean;
+  walksRegularly?: boolean;
+  monthsSinceLastRan?: number; // returning only
+  exerciseDaysPerWeek?: number;
+  exerciseTypes?: string[];
+  // regular, racer (and "sometimes")
+  weeklyKm?: number;
+  longestRecentKm?: number;
+  recentRace?: { distanceM: number; timeS: number; date?: string } | 'unknown';
+  filledFromRuns?: boolean;
+}
+
+export type GoalType = 'start' | '5k' | 'first10k' | 'faster' | 'further' | 'fit' | 'race';
+
+export interface TrainingSchedule {
+  sessionMinutes: number; // typical time available per session
+  startDate: string; // plan start
+  timeOff: { from: string; to: string; label?: string }[];
 }
 
 export interface SessionStep {
@@ -146,6 +191,9 @@ export interface PlanChange {
 
 export interface Plan {
   id: string;
+  /** Why this plan was chosen, and how confident its numbers are, in plain words */
+  basis?: string;
+  paceConfidence?: 'measured' | 'estimated' | 'none';
   raceId?: string;
   createdAt: string;
   startDate: string;

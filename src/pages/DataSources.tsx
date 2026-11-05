@@ -135,7 +135,7 @@ export default function DataSources() {
         <h2 className="title">Start over</h2>
         <div className="row wrap">
           <button className="btn" onClick={() => { loadSample(); nav('/'); }}>Explore sample data</button>
-          {data.mode === 'sample' && <button className="btn" onClick={() => { startFresh(); nav('/welcome'); }}>Start with my own data</button>}
+          {data.mode === 'sample' && <button className="btn" onClick={() => { startFresh(); nav('/setup'); }}>Start with my own data</button>}
           <Link to="/profile/privacy" className="btn btn-ghost">Privacy and deletion</Link>
         </div>
       </section>
