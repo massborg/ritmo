@@ -15,11 +15,8 @@ export const SPLASH_OPTIONS: { value: SplashVariant; label: string; description:
 
 export const SPLASH_DURATION: Record<SplashVariant, number> = { run: 2300, track: 2400, rhythm: 2400, countdown: 2700, trail: 2400, reveal: 2000 };
 
+/** Ritmo opens with "Run in". The other variants are kept for future use. */
 export function getSplashVariant(): SplashVariant {
-  try {
-    const v = localStorage.getItem('ritmo:splash') as SplashVariant | null;
-    if (v && SPLASH_OPTIONS.some((o) => o.value === v)) return v;
-  } catch { /* ignore */ }
   return 'run';
 }
 

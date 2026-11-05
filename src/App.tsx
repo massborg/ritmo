@@ -5,6 +5,7 @@ import { AppProvider, useApp } from './app/AppContext';
 import { Logo } from './components/ui';
 import Today from './pages/Today';
 import { getSplashVariant, Splash } from './components/Splash';
+import { syncStatusBar, tapHaptic } from './native';
 
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Progress = lazy(() => import('./pages/Progress'));
@@ -19,7 +20,7 @@ const Welcome = lazy(() => import('./pages/Welcome'));
 const Story = lazy(() => import('./pages/Story'));
 const Review = lazy(() => import('./pages/Review'));
 const Goals = lazy(() => import('./pages/Goals'));
-const SplashPicker = lazy(() => import('./pages/SplashPicker'));
+const HealthConnect = lazy(() => import('./pages/HealthConnect'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: Sun },
@@ -35,6 +36,7 @@ function ThemeSync() {
     const t = data.profile.theme;
     if (t === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
+    void syncStatusBar(t);
   }, [data.profile.theme]);
   return null;
 }
@@ -96,8 +98,9 @@ function Shell() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
               <Route path="/profile/privacy" element={<Privacy />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/goals" element={<Goals />} />
-              <Route path="/profile/opening" element={<SplashPicker />} />
+              <Route path="/profile/health" element={<HealthConnect />} />
               <Route path="/welcome" element={<Welcome />} />
               <Route path="/story" element={<Story />} />
               <Route path="/review/:period" element={<Review />} />
@@ -108,7 +111,7 @@ function Shell() {
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">
-          {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="tab"><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+          {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="tab" onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
         </nav>
       )}
     </div>

@@ -7,6 +7,7 @@ import { generateSample, SAMPLE_TODAY } from '../data/sample';
 import { merge } from '../data/integration';
 import { parseFiles } from '../data/parsers';
 import { supabase } from '../data/supabase';
+import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { estimateFitness, type FitnessEstimate, hrSetup, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
@@ -64,6 +65,9 @@ interface Ctx extends Derived {
   exportData: () => void;
   deleteAll: () => Promise<void>;
   disconnectSource: (k: SourceKind) => void;
+  connectHealth: () => Promise<string | undefined>;
+  syncHealthNow: (justConnected?: boolean) => Promise<void>;
+  healthSyncing: boolean;
   signIn: (email: string) => Promise<string | undefined>;
   signOut: () => Promise<void>;
 }
@@ -83,6 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cloudError, setCloudError] = useState<string>();
   const [importState, setImportState] = useState<ImportState>({ running: false, done: 0, total: 0, label: '' });
   const [coachBusy, setCoachBusy] = useState(false);
+  const [healthSyncing, setHealthSyncing] = useState(false);
   const firstLoad = useRef(true);
 
   // ---- Load ----
@@ -297,6 +302,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const disconnectSource = (k: SourceKind) => setData((d) => ({ ...d, sources: d.sources.map((s) => (s.kind === k ? { ...s, connected: false } : s)) }));
 
+  // ---- Apple Health / Health Connect (phone app only) ----
+  const syncHealthNow = async (justConnected = false) => {
+    const kind = healthKind();
+    if (!kind) return;
+    const src = data.sources.find((x) => x.kind === kind);
+    if (!justConnected && !src?.connected) return;
+    setHealthSyncing(true);
+    try {
+      // overlap by 2 days so late-arriving runs are not missed; duplicates are merged
+      const since = src?.lastSyncAt ? new Date(new Date(src!.lastSyncAt!).getTime() - 2 * 86400000).toISOString() : undefined;
+      const runs = await syncHealth(since);
+      setData((d) => {
+        const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...d.profile, onboarded: false, name: '' } } : d;
+        const m = merge(base.activities, runs);
+        const sources = base.sources.filter((x) => x.kind !== kind && x.kind !== 'sample');
+        sources.push({ kind, connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds[kind]).length });
+        return { ...base, mode: 'real', activities: m.activities, sources };
+      });
+    } catch (e) {
+      setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === kind ? { ...x, lastError: `Sync failed: ${(e as Error).message}` } : x)) }));
+    } finally {
+      setHealthSyncing(false);
+    }
+  };
+
+  const connectHealth = async () => {
+    const kind = healthKind();
+    if (!kind) return 'Available in the iPhone and Android apps.';
+    try {
+      const r = await requestHealthAccess();
+      if (!r.granted) return r.message;
+      setData((d) => ({ ...d, sources: [...d.sources.filter((x) => x.kind !== kind), { kind, connected: true, activityCount: 0 }] }));
+      void syncHealthNow(true);
+      return r.message;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+  const syncHealthNowRef = useRef(syncHealthNow);
+  syncHealthNowRef.current = syncHealthNow;
+
+  // Sync when the app comes back to the foreground
+  useEffect(() => {
+    if (!isNative()) return;
+    let remove: (() => void) | undefined;
+    import('@capacitor/app').then(({ App }) => {
+      App.addListener('resume', () => { void syncHealthNowRef.current(); }).then((h) => { remove = () => h.remove(); });
+    });
+    if (ready) void syncHealthNowRef.current();
+    return () => remove?.();
+  }, [ready]);
+
   const signIn = async (email: string) => {
     if (!supabase) return 'Cloud sync is not configured for this build.';
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + '/profile' } });
@@ -307,7 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, ready, data, session, cloudError, importState, coachBusy,
     loadSample, startFresh, importFiles, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
-    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteAll, disconnectSource, signIn, signOut,
+    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteAll, disconnectSource, connectHealth, syncHealthNow, healthSyncing, signIn, signOut,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

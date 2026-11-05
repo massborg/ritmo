@@ -5,6 +5,7 @@ import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { SOURCES } from '../data/integration';
+import { healthKind } from '../data/health';
 import { relTime } from '../lib/format';
 
 export function UploadPanel({ onDone }: { onDone?: () => void }) {
@@ -121,9 +122,9 @@ export default function DataSources() {
                 </span>
                 {s.kind === 'upload' ? (st?.connected ? <StatusLine kind="success">Active</StatusLine> : <span className="caption">Ready</span>)
                   : s.availability === 'stage-2' ? <span className="tag">Coming soon</span>
-                  : s.availability === 'stage-3' ? <span className="tag">In the phone app</span>
+                  : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="tag">In the phone app</Link>)
                   : <span className="tag">Planned</span>}
-                {st?.connected && s.kind !== 'upload' && <button className="btn btn-small" onClick={() => disconnectSource(s.kind)}>Disconnect</button>}
+                {st?.connected && s.kind !== 'upload' && s.availability !== 'stage-3' && <button className="btn btn-small" onClick={() => disconnectSource(s.kind)}>Disconnect</button>}
               </li>
             );
           })}

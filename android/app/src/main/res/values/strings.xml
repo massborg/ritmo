@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ritmo</string>
+    <string name="title_activity_main">Ritmo</string>
+    <string name="package_name">com.ritmorunning.app</string>
+    <string name="custom_url_scheme">com.ritmorunning.app</string>
+    <string name="health_connect_privacy_policy_url">https://ritmo-running.netlify.app/privacy</string>
+</resources>

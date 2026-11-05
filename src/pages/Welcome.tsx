@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { isNative } from '../data/health';
 import { Watch, Smartphone } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Lanes, Logo } from '../components/ui';
@@ -37,7 +38,7 @@ export default function Welcome() {
         <h2 className="title">Other ways to connect</h2>
         <ul className="list">
           <li className="list-item row-between wrap"><span className="row"><Watch size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Connect Garmin</span><span className="caption">Automatic sync is coming once Garmin approves access.</span></span></span><span className="tag">Coming soon</span></li>
-          <li className="list-item row-between wrap"><span className="row"><Smartphone size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Apple Health and Health Connect</span><span className="caption">In the iPhone and Android apps.</span></span></span><span className="tag">Coming soon</span></li>
+          <li className="list-item row-between wrap"><span className="row"><Smartphone size={20} strokeWidth={2} aria-hidden="true" /><span className="stack-sm" style={{ gap: 0 }}><span className="label">Apple Health and Health Connect</span><span className="caption">In the iPhone and Android apps.</span></span></span>{isNative() ? <Link to="/profile/health" className="btn btn-small btn-primary">Connect</Link> : <span className="tag">In the phone app</span>}</li>
         </ul>
       </section>
 

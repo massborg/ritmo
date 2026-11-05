@@ -26,7 +26,6 @@ export default function Profile() {
           <span className="label">Appearance</span>
           <Segmented<P['theme']> label="Theme" value={p.theme} onChange={(theme) => updateProfile({ theme })} options={[{ value: 'system', label: 'System' }, { value: 'giorno', label: 'Giorno' }, { value: 'notte', label: 'Notte' }, { value: 'sole', label: 'Sole' }]} />
           <p className="caption">Giorno is light and Notte is dark. Sole is high contrast for bright sunshine outdoors.</p>
-          <Link to="/profile/opening" className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Opening animation</Link>
         </div>
       </section>
 
