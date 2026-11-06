@@ -2,10 +2,36 @@
 import type { Activity, Lap, StreamPoint } from '../lib/types';
 import { detailScore } from './integration';
 
+/** Why a file was not imported, grouped for the import report */
+export type SkipCategory = 'wellness' | 'cycling' | 'swimming' | 'walking' | 'gym' | 'other-sport' | 'unreadable' | 'unsupported';
+export const SKIP_LABEL: Record<SkipCategory, string> = {
+  wellness: 'wellness and monitoring (sleep, steps, heart rate)', cycling: 'cycling', swimming: 'swimming', walking: 'walking and hiking',
+  gym: 'gym and strength', 'other-sport': 'other sports', unreadable: 'could not be read', unsupported: 'not an activity file',
+};
+
 export interface ParsedFile {
   activities: Activity[];
-  skipped: { file: string; reason: string }[];
+  skipped: { file: string; reason: string; category: SkipCategory }[];
 }
+
+/** A file that is not a run: the sport it was, for the import report */
+export class NotARun {
+  category: SkipCategory;
+  sport?: string;
+  constructor(category: SkipCategory, sport?: string) { this.category = category; this.sport = sport; }
+}
+
+const sportCategory = (sport: string): SkipCategory => {
+  const s = sport.toLowerCase();
+  if (/cycl|bik|ride/.test(s)) return 'cycling';
+  if (/swim/.test(s)) return 'swimming';
+  if (/walk|hik/.test(s)) return 'walking';
+  if (/train|strength|fitness|gym|yoga|pilates|cardio|hiit/.test(s)) return 'gym';
+  return 'other-sport';
+};
+
+/** Garmin export files that are never activities (recognised by name, so they are not even opened) */
+const WELLNESS_FILE = /(_WELLNESS|_SLEEP|_METRICS|_HRV|_MONITOR|_SPO2|_STRESS|_RESPIRATION|_BODY_BATTERY|_SETTINGS|_TOTALS|_GOALS|_SEGMENT|_COURSE|_SCHEDULE|_LOCATION|_RECORD)[^/]*\.fit$/i;
 
 const R = 6371000;
 function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
@@ -76,7 +102,7 @@ export function parseGpx(text: string, fileName: string): Activity | undefined {
   const pts = byLocal(doc, 'trkpt');
   if (pts.length < 2) return undefined;
   const type = (childText(doc.documentElement, 'type') ?? '').toLowerCase();
-  if (type && !/run|9|1/.test(type)) return undefined; // Strava/Garmin export runs as "running" or "9"
+  if (type && !/run|9|1/.test(type)) return new NotARun(sportCategory(type), type) as unknown as undefined; // Strava/Garmin export runs as "running" or "9"
   const t0 = new Date(childText(pts[0], 'time') ?? '');
   if (isNaN(t0.getTime())) return undefined;
   const streams: StreamPoint[] = [];
@@ -106,7 +132,7 @@ export function parseTcx(text: string, fileName: string): Activity | undefined {
   const act = byLocal(doc, 'Activity')[0];
   if (!act) return undefined;
   const sport = (act.getAttribute('Sport') ?? '').toLowerCase();
-  if (sport && sport !== 'running') return undefined;
+  if (sport && sport !== 'running') return new NotARun(sportCategory(sport), sport) as unknown as undefined;
   const tps = byLocal(act, 'Trackpoint');
   const t0 = new Date(childText(act, 'Id') ?? childText(tps[0], 'Time') ?? '');
   if (isNaN(t0.getTime())) return undefined;
@@ -151,14 +177,17 @@ interface FitData {
   laps?: { start_time?: string | Date; total_elapsed_time?: number; total_distance?: number; avg_heart_rate?: number }[];
 }
 
-export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Activity | undefined> {
+export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Activity | NotARun | undefined> {
   const mod = await import('fit-file-parser');
   const FitParser = (mod as unknown as { default: new (o: object) => { parse: (b: ArrayBuffer, cb: (e: unknown, d: FitData) => void) => void } }).default;
   const parser = new FitParser({ force: true, speedUnit: 'm/s', lengthUnit: 'm', elapsedRecordField: true, mode: 'list' });
   const data = await new Promise<FitData>((res, rej) => parser.parse(buf, (e, d) => (e ? rej(e) : res(d))));
   const sess = data.sessions?.[0];
-  if (sess?.sport && !/running/i.test(String(sess.sport))) return undefined;
+  // Any running file counts: road, treadmill, track, trail, indoor and virtual runs (sport "running", any sub-sport)
+  if (sess?.sport && !/running|^1$/i.test(String(sess.sport))) return new NotARun(sportCategory(String(sess.sport)), String(sess.sport));
   const recs = data.records ?? [];
+  // No activity session and no distance: a wellness or monitoring file, not a run
+  if (!sess && !recs.some((r) => (r.distance ?? 0) > 0)) return new NotARun('wellness');
   const t0 = new Date(sess?.start_time ?? recs[0]?.timestamp ?? '');
   if (isNaN(t0.getTime())) return undefined;
   const streams: StreamPoint[] = recs
@@ -187,12 +216,14 @@ export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Acti
 /** Garmin's summarizedActivities JSON from the account export: summaries only, no streams. */
 interface GarminSummary { activityId?: number; name?: string; activityType?: string; sportType?: string; beginTimestamp?: number; startTimeGmt?: number; distance?: number; duration?: number; movingDuration?: number; elevationGain?: number; avgHr?: number; maxHr?: number; avgRunCadence?: number; avgDoubleCadence?: number }
 
-function parseGarminSummaries(json: unknown): Activity[] {
+function parseGarminSummaries(json: unknown): { runs: Activity[]; others: { name: string; type: string; category: SkipCategory }[] } {
   const arr = Array.isArray(json) ? (json[0]?.summarizedActivitiesExport ?? json) : [];
   const out: Activity[] = [];
+  const others: { name: string; type: string; category: SkipCategory }[] = [];
   for (const g of arr as GarminSummary[]) {
     const type = (g.activityType ?? g.sportType ?? '').toLowerCase();
-    if (!type.includes('run')) continue;
+    // treadmill_running, track_running, trail_running, indoor_running, virtual_run, street_running all count
+    if (!type.includes('run')) { others.push({ name: g.name ?? 'Activity', type: type.replace(/_/g, ' ') || 'unknown', category: sportCategory(type) }); continue; }
     const start = new Date(g.beginTimestamp ?? g.startTimeGmt ?? 0);
     // Garmin export uses centimetres for distance and milliseconds for duration
     const distanceM = (g.distance ?? 0) / 100;
@@ -210,7 +241,7 @@ function parseGarminSummaries(json: unknown): Activity[] {
     a.detailScore = detailScore(a);
     out.push(a);
   }
-  return out;
+  return { runs: out, others };
 }
 
 export type Progress = (done: number, total: number, label: string) => void;
@@ -218,6 +249,10 @@ export type Progress = (done: number, total: number, label: string) => void;
 export async function parseFiles(files: File[], onProgress: Progress = () => {}): Promise<ParsedFile> {
   const activities: Activity[] = [];
   const skipped: ParsedFile['skipped'] = [];
+  const skip = (file: string, x: unknown, fallback: SkipCategory = 'unreadable') => {
+    if (x instanceof NotARun) skipped.push({ file, category: x.category, reason: x.category === 'wellness' ? 'Wellness or monitoring data, not an activity' : `Not a run${x.sport ? ` (${x.sport.replace(/_/g, ' ')})` : ''}` });
+    else skipped.push({ file, category: fallback, reason: fallback === 'unreadable' ? 'No track points or summary in this file' : 'Not an activity file' });
+  };
   const queue: { name: string; get: () => Promise<ArrayBuffer> }[] = files.map((f) => ({ name: f.name, get: () => f.arrayBuffer() }));
   let total = queue.length;
   let done = 0;
@@ -230,27 +265,38 @@ export async function parseFiles(files: File[], onProgress: Progress = () => {})
         const JSZip = (await import('jszip')).default;
         const zip = await JSZip.loadAsync(await item.get());
         const entries = Object.values(zip.files).filter((e) => !e.dir && /\.(fit|gpx|tcx|zip|json)$/i.test(e.name));
+        let queued = 0;
         for (const e of entries) {
           if (/\.json$/i.test(e.name) && !/summarizedActivities/i.test(e.name)) continue;
+          if (WELLNESS_FILE.test(e.name)) { skipped.push({ file: e.name, category: 'wellness', reason: 'Wellness or monitoring data, not an activity' }); continue; }
           queue.push({ name: e.name, get: () => e.async('arraybuffer') });
+          queued++;
         }
-        total += entries.length;
+        // Everything else in the export (photos, settings, other data) is not an activity file
+        const others = Object.values(zip.files).filter((e) => !e.dir && !/\.(fit|gpx|tcx|zip|json)$/i.test(e.name));
+        for (const e of others) skipped.push({ file: e.name, category: 'unsupported', reason: 'Not an activity file' });
+        total += queued;
       } else if (lower.endsWith('.fit')) {
-        const a = await parseFit(await item.get(), item.name.split('/').pop()!);
-        if (a) activities.push(a); else skipped.push({ file: item.name, reason: 'Not a run' });
+        if (WELLNESS_FILE.test(item.name)) skipped.push({ file: item.name, category: 'wellness', reason: 'Wellness or monitoring data, not an activity' });
+        else {
+          const a = await parseFit(await item.get(), item.name.split('/').pop()!);
+          if (a && !(a instanceof NotARun)) activities.push(a); else skip(item.name, a);
+        }
       } else if (lower.endsWith('.gpx')) {
-        const a = parseGpx(new TextDecoder().decode(await item.get()), item.name.split('/').pop()!);
-        if (a) activities.push(a); else skipped.push({ file: item.name, reason: 'Not a run, or no track points' });
+        const a = parseGpx(new TextDecoder().decode(await item.get()), item.name.split('/').pop()!) as Activity | NotARun | undefined;
+        if (a && !(a instanceof NotARun)) activities.push(a); else skip(item.name, a);
       } else if (lower.endsWith('.tcx')) {
-        const a = parseTcx(new TextDecoder().decode(await item.get()), item.name.split('/').pop()!);
-        if (a) activities.push(a); else skipped.push({ file: item.name, reason: 'Not a run' });
+        const a = parseTcx(new TextDecoder().decode(await item.get()), item.name.split('/').pop()!) as Activity | NotARun | undefined;
+        if (a && !(a instanceof NotARun)) activities.push(a); else skip(item.name, a);
       } else if (lower.endsWith('.json')) {
-        activities.push(...parseGarminSummaries(JSON.parse(new TextDecoder().decode(await item.get()))));
+        const res = parseGarminSummaries(JSON.parse(new TextDecoder().decode(await item.get())));
+        activities.push(...res.runs);
+        for (const o of res.others) skipped.push({ file: `${item.name.split('/').pop()} · ${o.name}`, category: o.category, reason: `Not a run (${o.type})` });
       } else {
-        skipped.push({ file: item.name, reason: 'Unsupported file type. Use FIT, GPX, TCX or a ZIP export.' });
+        skipped.push({ file: item.name, category: 'unsupported', reason: 'Unsupported file type. Use FIT, GPX, TCX or a ZIP export.' });
       }
     } catch (e) {
-      skipped.push({ file: item.name, reason: `Could not read this file (${(e as Error).message ?? 'unknown error'})` });
+      skipped.push({ file: item.name, category: 'unreadable', reason: `Could not read this file (${(e as Error).message ?? 'unknown error'})` });
     }
     done++;
     if (done % 20 === 0) await new Promise((r) => setTimeout(r, 0)); // keep the UI responsive

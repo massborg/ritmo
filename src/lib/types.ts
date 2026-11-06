@@ -60,8 +60,20 @@ export interface Activity {
   streams?: StreamPoint[];
   isRace?: boolean;
   isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
+  /** Stored summary (best efforts, structure), so history works without loading every run's streams */
+  derived?: ActivityDerived;
   detailScore: number; // higher = more detailed, used to choose the best duplicate
   importedAt: string;
+}
+
+export interface ActivityDerived {
+  v: number;
+  /** best effort seconds by distance in metres (rounded) */
+  be?: Record<string, number>;
+  /** lap or 400 m segment paces, only for structured runs */
+  segs?: number[];
+  /** seconds per 5 bpm heart-rate band */
+  hrh?: Record<string, number>;
 }
 
 export interface SessionFeedback {

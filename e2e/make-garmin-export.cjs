@@ -32,6 +32,10 @@ async function makeGarminExport() {
   }
   // a cycling ride that must be ignored
   runs.push({ activityId: id++, name: 'Ride', activityType: 'cycling', beginTimestamp: start + 5 * 86400000, distance: 3000000, duration: 3600000 });
+  // a pool swim that must be ignored; treadmill and trail runs that must be imported
+  runs.push({ activityId: id++, name: 'Pool Swim', activityType: 'lap_swimming', beginTimestamp: start + 9 * 86400000, distance: 200000, duration: 2400000 });
+  runs.push({ activityId: id++, name: 'Treadmill Run', activityType: 'treadmill_running', beginTimestamp: start + 12 * 86400000 + 3 * 3600000, distance: 800000, duration: 2640000, avgHr: 150 });
+  runs.push({ activityId: id++, name: 'Trail Run', activityType: 'trail_running', beginTimestamp: start + 15 * 86400000 + 4 * 3600000, distance: 1200000, duration: 4800000, avgHr: 148 });
   const zip = new JSZip();
   zip.file('DI_CONNECT/DI-Connect-Fitness/user@example.com_0_summarizedActivities.json', JSON.stringify([{ summarizedActivitiesExport: runs }]));
   const inner = new JSZip();
@@ -39,7 +43,10 @@ async function makeGarminExport() {
   for (const r of recent) inner.file(`${r.activityId}.gpx`, gpx(new Date(r.beginTimestamp).toISOString(), r.distance / 100000, r.duration / 1000 / (r.distance / 100000), r.avgHr));
   zip.file('DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip', await inner.generateAsync({ type: 'nodebuffer' }));
   zip.file('DI_CONNECT/DI-Connect-User/user_profile.json', '{}');
-  return { buffer: await zip.generateAsync({ type: 'nodebuffer' }), runCount: runs.filter((r) => r.activityType === 'running').length };
+  // wellness data (never opened) and a broken activity file (reported as unreadable)
+  zip.file('DI_CONNECT/DI-Connect-Wellness/2026-01-01_WELLNESS.fit', Buffer.from('not really a fit file'));
+  zip.file('DI_CONNECT/DI-Connect-Uploaded-Files/broken_ACTIVITY.fit', Buffer.from('corrupt'));
+  return { buffer: await zip.generateAsync({ type: 'nodebuffer' }), runCount: runs.filter((r) => r.activityType.includes('run')).length };
 }
 
 module.exports = { makeGarminExport };

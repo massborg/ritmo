@@ -2,6 +2,7 @@
 import type { Activity, PlannedSession, SessionFeedback, SessionType, StreamPoint } from '../lib/types';
 import { duration, pace as fmtPace, type Units } from '../lib/format';
 import { type TrainingPaces, zoneOf } from './fitness';
+import { segmentPaces } from './derive-core';
 
 export type Zones = { zone: number; min: number; max: number }[];
 
@@ -89,9 +90,6 @@ export function zoneTime(streams: StreamPoint[], zones: Zones): number[] {
 }
 
 /** 400 m segment paces, used to detect structured sessions without laps */
-function segmentPaces(streams: StreamPoint[], seg = 400): number[] {
-  return splits(streams, seg).filter((s) => s.distanceM > seg * 0.7).map((s) => s.paceS);
-}
 
 export interface Classification {
   type: SessionType;
@@ -107,7 +105,7 @@ export function classify(a: Activity, paces: TrainingPaces, zones: Zones | undef
 
   // Structured efforts from laps or 400 m segments
   const lapPaces = (a.laps ?? []).filter((l) => l.distanceM > 150).map((l) => l.durationS / (l.distanceM / 1000));
-  const segs = lapPaces.length >= 5 ? lapPaces : a.streams ? segmentPaces(a.streams) : [];
+  const segs = lapPaces.length >= 5 ? lapPaces : a.streams ? segmentPaces(a.streams) : a.derived?.segs ?? [];
   if (segs.length >= 6) {
     const sorted = [...segs].sort((x, y) => x - y);
     const fastQ = sorted[Math.floor(sorted.length * 0.25)];

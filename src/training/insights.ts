@@ -1,7 +1,8 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
 import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
-import { bestEffort, predictRace, vdotFromPerformance } from './fitness';
+import { predictRace, vdotFromPerformance } from './fitness';
+import { effortOf } from './derive';
 
 export function totalsBy(activities: Activity[], key: (a: Activity) => string): Map<string, { m: number; n: number; s: number }> {
   const m = new Map<string, { m: number; n: number; s: number }>();
@@ -27,8 +28,8 @@ export function personalBests(activities: Activity[]): PB[] {
     for (const a of activities) {
       let t: number | undefined;
       if (a.distanceM >= d.m * 0.99 && a.distanceM <= d.m * 1.03) t = a.movingS * (d.m / a.distanceM);
-      if (a.streams && a.distanceM >= d.m) {
-        const e = bestEffort(a.streams, d.m);
+      if (a.distanceM >= d.m) {
+        const e = effortOf(a, d.m);
         if (e && (!t || e < t)) t = e;
       }
       if (t && (!best || t < best.timeS)) best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: !!a.isRace };
