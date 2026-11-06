@@ -13,12 +13,13 @@ qualified lawyer (EU/Malta, GDPR) before public launch. Nothing here is legal ad
 | 4 | Health check | Setup step 3 | Our own six questions (adapted in spirit from common pre-exercise screening, not copied). Only outcome stored | Is the wording appropriate? Any liability concerns with "acknowledge and continue" after a "yes"? |
 | 5 | Profile pictures | Profile, setup | Private bucket, owner-only access, EXIF removed on device, deleted with account | Biometric concerns? (We do no face recognition.) Retention wording |
 | 6 | Processors list | Privacy | Supabase (EU), Netlify, Anthropic | DPAs signed with each? Netlify sees IP addresses in logs |
-| 7 | Terms | /terms | Liability limited to fees paid in 12 months; "as is" | Enforceability for EU consumers; governing law clause missing; contact details missing (`src/lib/contact.ts` is empty) |
+| 7 | Terms | /terms | Liability limited to fees paid in 12 months; "as is" | Enforceability for EU consumers; governing law clause missing; contact details now set (TriCore Consult Ltd, Cyprus) |
 | 8 | Garmin | Privacy, Terms | No AI training on Garmin data; not affiliated | Check against the Garmin Connect Developer Program agreement once received |
 
 ## Still missing (needs a decision or information from you)
 
-- Company name, registered address and contact email for the privacy notice and terms (`src/lib/contact.ts`).
+- Registered address for the privacy notice and terms. Company (TriCore Consult Ltd, Cyprus) and contact email (info@tricoreconsult.eu) are now set in `src/lib/contact.ts` and shown on About, Privacy and Terms.
+- Governing law: the provider is a Cyprus company serving EU consumers; confirm which law and courts to name.
 - Data Protection Officer or privacy contact, if required.
 - Governing law and jurisdiction clause.
 - Cookie/storage notice: the app uses only essential storage (login session, device cache). Confirm no banner is needed.

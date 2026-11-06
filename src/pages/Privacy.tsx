@@ -4,6 +4,7 @@ import { Download, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
+import { COMPANY_COUNTRY, COMPANY_NAME, CONTACT_EMAIL } from '../lib/contact';
 
 export default function Privacy() {
   const nav = useNavigate();
@@ -35,11 +36,13 @@ export default function Privacy() {
         <ul className="bullets">
           <li><strong>Supabase</strong> (database and accounts, EU region, Frankfurt).</li>
           <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
-          <li><strong>Anthropic</strong> (the AI model that writes coach answers; receives only the summary needed for your question, at your request, and does not use it for training).</li>
+          <li><strong>Anthropic</strong> (the AI model that writes coach answers and reads laps from screenshots; receives only the summary needed for your question, or the screenshots you ask it to read, at your request, and does not use them for training).</li>
         </ul>
         <h3 className="label">Sharing runs on the Hub (optional, off unless you turn it on)</h3>
         <p>The Hub lets you share runs with other runners. It stays off until you agree to it separately, and Ritmo records when you did. Nothing is ever posted automatically: you choose each run, who can see it (everyone, your followers, or only you), and whether to show the route and heart rate. Routes on the Hub leave out the first and last part, so your start and finish (often your home) are not shown. Other runners see the name you choose for the Hub, never your email, date of birth, health check or how runs felt. Pain, injuries and Body check-ins are never shown on the Hub. You can delete a post at any time, and turning sharing off hides your posts.</p>
         <p>Data from connected services such as Garmin Connect is used only to give you your own analysis and coaching, and on the Hub only for runs you choose to post. It is never sold or used to train AI models. Disconnecting a service stops new data arriving; deleting your account removes everything.</p>
+        <h3 className="label">Who is responsible for your data</h3>
+        <p>Ritmo Running is provided by {COMPANY_NAME}, a company registered in {COMPANY_COUNTRY}, which is responsible for your data under the GDPR. You can ask for a copy of your data, ask us to correct or delete it, object to how it is used, or withdraw your consent at any time by writing to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. You can also export or delete everything yourself below. If you are unhappy with how we handle your data, you can complain to your local data protection authority.</p>
         <p className="caption">Ritmo gives coaching guidance, not medical advice. See a doctor or physio about ongoing pain, and get medical help straight away for chest pain, dizziness or fainting.</p>
       </section>
 
