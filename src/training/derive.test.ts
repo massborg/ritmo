@@ -145,3 +145,20 @@ describe('feedback report', () => {
     expect(r.breakdown.find((b) => b.key === 'consistency')!.value).toBeGreaterThan(90);
   });
 });
+
+describe('Hub and share privacy', () => {
+  it('shared routes leave out the first and last 200 m', async () => {
+    const { shareableRoute } = await import('../data/hub');
+    const pts = Array.from({ length: 100 }, (_, i) => ({ d: i * 50, lat: 35.9 + (i * 50) / 111195, lon: 14.5 }));
+    const r = shareableRoute(pts)!;
+    expect(r[0][0]).toBeGreaterThanOrEqual(Math.round((35.9 + 200 / 111195) * 1e5) / 1e5);
+    expect(r[r.length - 1][0]).toBeLessThanOrEqual(Math.round((35.9 + (4950 - 200) / 111195) * 1e5) / 1e5);
+  });
+  it('ritmo wording', async () => {
+    const { ritmoCount, giversLine, notificationText } = await import('../data/hub');
+    expect(ritmoCount(1)).toBe('1 ritmo');
+    expect(ritmoCount(24)).toBe('24 ritmos');
+    expect(giversLine(['Marco', 'Elena'], 24)).toBe('Marco, Elena and 22 others gave a ritmo');
+    expect(notificationText('ritmo', ['Marco', 'A', 'B', 'C', 'D', 'E'])).toBe('Marco and 5 others gave your run a ritmo');
+  });
+});
