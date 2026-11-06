@@ -1,5 +1,5 @@
 // Training load (TRIMP-based), fitness/fatigue/form and readiness.
-import type { Activity, Profile, SessionFeedback } from '../lib/types';
+import type { Activity, LogEntry, Profile, SessionFeedback } from '../lib/types';
 import { addDays, parseYmd, ymd } from '../lib/format';
 import type { HrSetup } from './fitness';
 
@@ -18,6 +18,18 @@ export function activityLoad(a: Activity, hr: HrSetup, thresholdPace?: number): 
   return (a.movingS / 3600) * 55;
 }
 
+/** How much of a cross-training session's effort counts as running load. Non-impact sports build the
+ *  heart and lungs but load the legs less, so they count partly. */
+const CROSS_TRANSFER: Record<string, number> = { Bike: 0.7, Elliptical: 0.8, Swim: 0.5, Gym: 0.5, Walk: 0.4, Other: 0.6 };
+
+/** Load for one cross-training entry from minutes and effort (1 easy, 10 all out), on the same scale
+ *  as runs: an hour at effort 7 (about threshold) of running is about 100. */
+export function crossLoad(e: LogEntry): number {
+  if (e.kind !== 'cross' || !e.minutes) return 0;
+  const rpe = Math.min(10, Math.max(1, e.rpe ?? 4));
+  return (e.minutes / 60) * 100 * (rpe / 7) ** 2 * (CROSS_TRANSFER[e.sport ?? 'Other'] ?? 0.6);
+}
+
 export interface LoadDay {
   date: string;
   load: number;
@@ -26,11 +38,15 @@ export interface LoadDay {
   tsb: number; // form, yesterday's ctl - atl
 }
 
-export function loadSeries(activities: Activity[], hr: HrSetup, thresholdPace: number | undefined, to: Date, days = 365): LoadDay[] {
+export function loadSeries(activities: Activity[], hr: HrSetup, thresholdPace: number | undefined, to: Date, days = 365, log: LogEntry[] = []): LoadDay[] {
   const byDay = new Map<string, number>();
   for (const a of activities) {
     const k = a.startTime.slice(0, 10);
     byDay.set(k, (byDay.get(k) ?? 0) + activityLoad(a, hr, thresholdPace));
+  }
+  for (const e of log) {
+    const l = crossLoad(e);
+    if (l > 0) byDay.set(e.date, (byDay.get(e.date) ?? 0) + l);
   }
   // warm up the averages with 120 extra days
   const start = addDays(parseYmd(ymd(to)), -(days + 120));
@@ -70,6 +86,8 @@ export interface Readiness {
   basedOn: string[]; // bullet reasons with numbers
 }
 
+const daysApart = (a: string, b: string) => Math.round((parseYmd(b).getTime() - parseYmd(a).getTime()) / 86400000);
+
 export function readiness(opts: {
   today: Date;
   profile: Profile;
@@ -88,6 +106,9 @@ export function readiness(opts: {
   if (day && !simple) basedOn.push(`Form ${tsb >= 0 ? '+' : ''}${tsb.toFixed(0)} (fitness ${day.ctl.toFixed(0)}, fatigue ${day.atl.toFixed(0)})`);
   if (ratio.chronicWeekly > 0 && !simple)
     basedOn.push(`Last 7 days ${(ratio.acute / 1000).toFixed(0)} km against a 4-week average of ${(ratio.chronicWeekly / 1000).toFixed(0)} km (ratio ${ratio.ratio.toFixed(2)})`);
+
+  const cross = (profile.log ?? []).filter((e) => e.kind === 'cross' && e.minutes && e.date <= t && daysApart(e.date, t) < 7);
+  if (cross.length && !simple) basedOn.push(`Cross-training in the last 7 days: ${cross.reduce((n, e) => n + (e.minutes ?? 0), 0)} min, counted in fitness and fatigue`);
 
   const recentFb = feedback
     .filter((f) => (today.getTime() - new Date(f.loggedAt).getTime()) / 86400000 <= 3)

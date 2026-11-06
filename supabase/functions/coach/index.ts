@@ -77,6 +77,7 @@ Deno.serve(async (req) => {
       messages: [...prior, { role: 'user', content: prompt }],
     };
     // deno-lint-ignore no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await client.beta.messages.create(params as any);
     if (res.stop_reason === 'refusal') return json({ error: 'declined' }, 502);
     let text = '';

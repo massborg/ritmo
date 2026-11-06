@@ -276,7 +276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fitness = estimateFitness(acts, hr, today, data.races);
     const stage = fitnessStage(acts, fitness, today);
     const paces = fitness && stage.paces ? trainingPaces(fitness.vdot) : undefined;
-    const series = loadSeries(acts, hr, paces?.threshold[1], today, 400);
+    const series = loadSeries(acts, hr, paces?.threshold[1], today, 400, data.profile.log);
 
     const monthPaces = new Map<string, TrainingPaces>();
     const pacesAt = (iso: string) => {

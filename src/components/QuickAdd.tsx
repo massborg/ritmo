@@ -53,7 +53,7 @@ function LogOther({ kind, onClose }: { kind: 'cross' | 'note'; onClose: () => vo
           <Chips label="What" value={sport} onChange={setSport} options={['Bike', 'Swim', 'Gym', 'Elliptical', 'Walk', 'Other'].map((x) => ({ value: x, label: x }))} />
           <Stepper id="lo-min" label="Minutes" value={minutes} onChange={setMinutes} min={5} max={600} step={5} unit="min" />
           <Chips label="How hard (1 easy, 10 all out)" value={rpe} onChange={setRpe} options={[2, 4, 6, 8, 10].map((x) => ({ value: x, label: String(x) }))} />
-          <p className="caption">Cross-training is shown on your calendar. Ritmo does not count it as running volume.</p>
+          <p className="caption">Cross-training counts toward your fitness and fatigue, scaled by how hard it was and how much it carries over to running. It does not count as running distance.</p>
         </>}
         <div className="field"><label htmlFor="lo-text">{kind === 'note' ? 'Note' : 'Note (optional)'}</label><textarea id="lo-text" className="input" rows={3} value={text} onChange={(e) => setText(e.target.value)} /></div>
       </div>
