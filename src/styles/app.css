@@ -500,3 +500,10 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .week-preview .stat { font-size: 15px; }
 .chart .axis-value { font-size: 10px; fill: var(--ink-muted); }
 .chip { min-width: 44px; justify-content: center; }
+
+/* Drag and drop on the calendar */
+[data-draggable] { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.drop-ok { outline: 2px dashed var(--brand); outline-offset: -2px; border-radius: var(--r-input); }
+.drop-over { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: var(--r-input); background: var(--surface-sunken); }
+.drop-no { outline: 2px solid var(--border); outline-offset: -2px; border-radius: var(--r-input); opacity: 0.6; }
+.drag-ghost { position: fixed; z-index: 1000; pointer-events: none; transform: translate(-50%, calc(-100% - 12px)); background: var(--ink); color: var(--surface); padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; white-space: nowrap; box-shadow: 0 6px 20px rgb(0 0 0 / 0.25); }

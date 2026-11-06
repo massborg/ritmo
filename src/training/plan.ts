@@ -236,6 +236,21 @@ export function adaptPlan(opts: {
 }
 
 /** Swap two sessions' dates, or move one onto a rest day. */
+/** Days a session can move to: another day in the same week, not in the past. Done sessions stay put. */
+export function moveTargets(s: PlannedSession, today: Date): string[] {
+  if (s.completedActivityId || s.date < ymd(today)) return [];
+  const ws = startOfWeek(parseYmd(s.date));
+  return Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i))).filter((d) => d !== s.date && d >= ymd(today));
+}
+
+/** True when moving a hard session to toDate puts it next to another hard day (the runner may still choose to). */
+export function moveClash(plan: Plan, s: PlannedSession, toDate: string): boolean {
+  if (!KEY.includes(s.type)) return false;
+  const near = [ymd(addDays(parseYmd(toDate), -1)), ymd(addDays(parseYmd(toDate), 1))]
+    .map((x) => plan.sessions.find((y) => y.date === x && y.id !== s.id && y.date !== s.date));
+  return near.some((y) => y && KEY.includes(y.type));
+}
+
 export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan {
   const sessions = plan.sessions.map((s) => ({ ...s }));
   const a = sessions.find((s) => s.id === sessionId);

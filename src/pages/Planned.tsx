@@ -5,8 +5,8 @@ import { useApp } from '../app/AppContext';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
-import { addDays, DAY_SHORT, durationWords, localise, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
-import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+import { DAY_SHORT, durationWords, localise, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
+import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 
 const CONCEPTS: Record<string, string> = {
   easy: 'Easy running is conversational. It builds your aerobic engine with little fatigue, so around 80% of your running should feel like this.',
@@ -34,8 +34,7 @@ export default function Planned() {
   const U = data.profile.units;
   if (!s) return <Empty title="Session not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
 
-  const ws = startOfWeek(parseYmd(s.date));
-  const options = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i))).filter((d) => d !== s.date && d >= ymd(today));
+  const options = plan ? moveTargets(s, today) : [];
   const done = s.completedActivityId;
 
   return (
@@ -106,9 +105,7 @@ export default function Planned() {
               const other = plan?.sessions.find((x) => x.date === d);
               return (
                 <button key={d} className="chip" onClick={() => {
-                  const HARD = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race'];
-                  const near = [ymd(addDays(parseYmd(d), -1)), ymd(addDays(parseYmd(d), 1))].map((x) => plan?.sessions.find((y) => y.date === x && y.id !== s.id && y.date !== s.date));
-                  const clash = HARD.includes(s.type) && near.some((y) => y && HARD.includes(y.type));
+                  const clash = !!plan && moveClash(plan, s, d);
                   if (clash && warnMove !== d) { setWarnMove(d); return; }
                   moveSession(s.id, d); setMoving(false); setWarnMove(undefined); nav('/calendar');
                 }}>

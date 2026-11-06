@@ -6,7 +6,8 @@ import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { Segmented, StatusLine } from '../components/ui';
 import { addDays, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
-import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+import { useDragMove } from '../lib/useDragMove';
 import { TYPE_LABEL } from '../training/analysis';
 import { QuickAdd } from '../components/QuickAdd';
 import type { PlannedSession, SessionType } from '../lib/types';
@@ -22,7 +23,7 @@ const typeStyle = (t: SessionType): React.CSSProperties => {
 export default function Calendar() {
   const { date } = useParams();
   const nav = useNavigate();
-  const { data, plan, today, typeOf, buildMyPlan, removeLog } = useApp();
+  const { data, plan, today, typeOf, buildMyPlan, removeLog, moveSession } = useApp();
   const [view, setView] = useState<View>(date ? 'day' : 'week');
   const [cursor, setCursor] = useState<Date>(date ? parseYmd(date) : today);
   const [picking, setPicking] = useState(false);
@@ -30,6 +31,33 @@ export default function Calendar() {
   const [adding, setAdding] = useState(false);
   const U = data.profile.units;
   const t = ymd(today);
+  const [askMove, setAskMove] = useState<{ id: string; to: string }>();
+  const [moveMsg, setMoveMsg] = useState<{ text: string; undo?: { id: string; to: string } }>();
+  const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
+
+  // Drag and drop uses the same rules as the "Move this session" day buttons
+  const doMove = (id: string, to: string) => {
+    const s = plan?.sessions.find((x) => x.id === id);
+    if (!s) return;
+    moveSession(id, to);
+    setAskMove(undefined);
+    setMoveMsg({ text: `Moved ${s.title.toLowerCase()} to ${dayName(to)}.`, undo: { id, to: s.date } });
+  };
+  const onDrop = (id: string, to: string) => {
+    const s = plan?.sessions.find((x) => x.id === id);
+    if (!plan || !s || to === s.date) return;
+    if (!moveTargets(s, today).includes(to)) {
+      setMoveMsg({ text: to < t ? 'Sessions cannot move into the past.' : 'Sessions can move to another day in the same week.' });
+      return;
+    }
+    if (moveClash(plan, s, to)) { setAskMove({ id, to }); return; }
+    doMove(id, to);
+  };
+  const { drag, handle, swallowClick } = useDragMove(onDrop);
+  const dragged = drag ? plan?.sessions.find((x) => x.id === drag.id) : undefined;
+  const targets = new Set(dragged ? moveTargets(dragged, today) : []);
+  const dropClass = (d: string) => (!drag ? '' : d === drag.over ? (targets.has(d) ? ' drop-over' : ' drop-no') : targets.has(d) ? ' drop-ok' : '');
+  const canDrag = (s: PlannedSession | undefined, acts: number) => !!s && s.type !== 'rest' && !acts && moveTargets(s, today).length > 0;
 
   const sessionOn = (d: string) => plan?.sessions.find((s) => s.date === d);
   const actsOn = (d: string) => data.activities.filter((a) => a.startTime.slice(0, 10) === d);
@@ -99,6 +127,15 @@ export default function Calendar() {
           <button className="icon-btn" aria-label="Next" onClick={() => shift(1)}><ChevronRight size={22} strokeWidth={2} /></button>
         </div>
 
+        {moveMsg && (
+          <div role="status" className="row-between card" style={{ padding: 'var(--s2) var(--s3)' }}>
+            <span>{moveMsg.text}</span>
+            <span className="row" style={{ gap: 4 }}>
+              {moveMsg.undo && <button className="btn btn-ghost btn-small" onClick={() => { moveSession(moveMsg.undo!.id, moveMsg.undo!.to); setMoveMsg(undefined); }}>Undo</button>}
+              <button className="btn btn-ghost btn-small" onClick={() => setMoveMsg(undefined)}>Dismiss</button>
+            </span>
+          </div>
+        )}
         {view === 'day' && <DayDetail d={ymd(cursor)} />}
 
         {view === 'week' && (
@@ -109,14 +146,15 @@ export default function Calendar() {
               const target = plan?.weeks?.find((w) => w.start === weekDays[0])?.targetKm;
               return planned + done > 0 ? <p className="caption" style={{ marginBottom: 8 }}>This week: <strong style={{ color: 'var(--ink)' }}>{dist(done, U)}</strong> done{planned ? ` · ${dist(planned, U, 0)} planned` : ''}{target ? ` · target ${dist(target * 1000, U, 0)}` : ''}</p> : null;
             })()}
-            <ul className="list">
+            <ul className="list" onClickCapture={swallowClick}>
               {weekDays.map((d, i) => {
                 const s = sessionOn(d);
                 const acts = actsOn(d);
                 const race = raceOn(d);
                 return (
-                  <li key={d}>
-                    <button className="week-row" style={{ width: '100%', background: 'none', border: 0, textAlign: 'left', cursor: 'pointer' }} onClick={() => { setCursor(parseYmd(d)); setView('day'); }}>
+                  <li key={d} data-drop-date={d} className={dropClass(d).trim() || undefined}>
+                    <button className="week-row" style={{ width: '100%', background: 'none', border: 0, textAlign: 'left', cursor: 'pointer' }} onClick={() => { setCursor(parseYmd(d)); setView('day'); }}
+                      {...(canDrag(s, acts.length) ? handle(s!.id, s!.title) : {})}>
                       <span className="stack-sm" style={{ gap: 0 }}>
                         <span className="label" style={{ color: d === t ? 'var(--brand)' : undefined }}>{DAY_SHORT[i]}</span>
                         <span className="caption">{parseYmd(d).getDate()}</span>
@@ -137,14 +175,15 @@ export default function Calendar() {
         {view === 'month' && (
           <div className="stack-sm">
             <div className="cal-month" aria-hidden="true">{DAY_SHORT.map((d) => <span key={d} className="caption" style={{ textAlign: 'center' }}>{d}</span>)}</div>
-            <div className="cal-month" role="grid" aria-label={title}>
+            <div className="cal-month" role="grid" aria-label={title} onClickCapture={swallowClick}>
               {monthDays.map((d) => {
                 const k = ymd(d);
                 const s = sessionOn(k);
                 const acts = actsOn(k);
                 const race = raceOn(k);
                 return (
-                  <button key={k} role="gridcell" className={`cal-cell${d.getMonth() !== cursor.getMonth() ? ' other' : ''}${k === t ? ' today' : ''}`}
+                  <button key={k} role="gridcell" data-drop-date={k} className={`cal-cell${d.getMonth() !== cursor.getMonth() ? ' other' : ''}${k === t ? ' today' : ''}${dropClass(k)}`}
+                    {...(canDrag(s, acts.length) && !race ? handle(s!.id, s!.title) : {})}
                     aria-label={`${longDate(d)}: ${race ? race.name : s ? s.title : 'nothing planned'}${acts.length ? ', run done' : ''}`}
                     onClick={() => { setCursor(d); setView('day'); }}>
                     <span className="caption" style={{ color: 'var(--ink)' }}>{d.getDate()}</span>
@@ -158,7 +197,13 @@ export default function Calendar() {
             </div>
           </div>
         )}
+        {view !== 'day' && plan && <p className="caption">Drag a session to another day in the same week. On a phone, press and hold it first. You can also tap a session and choose a day.</p>}
       </section>
+      {drag && <div className="drag-ghost" style={{ left: drag.x, top: drag.y }} aria-hidden="true">{drag.label}{drag.over && drag.over !== dragged?.date ? ` → ${dayName(drag.over)}` : ''}</div>}
+      <Sheet open={!!askMove} onClose={() => setAskMove(undefined)} title="Two hard days in a row?"
+        footer={<div className="row" style={{ gap: 8 }}><button className="btn btn-block" onClick={() => setAskMove(undefined)}>Keep it where it is</button><button className="btn btn-primary btn-block" onClick={() => askMove && doMove(askMove.id, askMove.to)}>Move anyway</button></div>}>
+        <p>That puts two hard days back to back. Hard sessions work best with an easier day between them. If you move it anyway, take the second one a little easier.</p>
+      </Sheet>
 
       <div className="grid-2">
         <section className="card stack" aria-labelledby="races">
