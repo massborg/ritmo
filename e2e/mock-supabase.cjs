@@ -25,9 +25,9 @@ function jwt(user) {
 
 function createMock() {
   const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
-  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags'];
+  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags', 'hub_profiles', 'posts', 'ritmos', 'comments', 'notifications', 'follows', 'blocks', 'reports'];
   TABLES.forEach((t) => (state.tables[t] = []));
-  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'] };
+  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'], hub_profiles: ['user_id'], posts: ['id'], ritmos: ['post_id', 'user_id'], comments: ['id'], notifications: ['id'], follows: ['follower_id', 'followee_id'], blocks: ['blocker_id', 'blocked_id'], reports: ['reporter_id', 'created_at'] };
   let clock = 0;
   const stamp = () => { const t = Math.max(Date.now(), clock + 1); clock = t; return new Date(t).toISOString(); };
 
@@ -136,7 +136,8 @@ function createMock() {
     const rows = state.tables[table];
     if (!rows) return { status: 404, body: { message: 'no table' } };
     const filters = [...url.searchParams.entries()].filter(([k]) => !RESERVED.includes(k));
-    const match = (r) => r.user_id === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
+    const owner = (r) => r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id;
+    const match = (r) => owner(r) === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     if (method === 'GET' || method === 'HEAD') {
       let out = rows.filter(match);
       const total = out.length;
@@ -160,11 +161,16 @@ function createMock() {
     if (method === 'POST') {
       const list = Array.isArray(body) ? body : [body];
       for (const r of list) {
-        if (r.user_id !== u.id) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
+        if ((r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id) !== u.id) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
         const k = keyOf[table];
         const i = rows.findIndex((x) => k.every((c) => String(x[c]) === String(r[c])));
         const t = table === 'activities' ? { updated_at: stamp() } : {};
-        if (i >= 0) rows[i] = { ...rows[i], ...r, ...t }; else rows.push({ ...r, ...t });
+        if (i >= 0) rows[i] = { ...rows[i], ...r, ...t }; else {
+          rows.push({ ...r, ...t, ...(table === 'posts' ? { ritmo_count: 0, comment_count: 0, created_at: new Date().toISOString() } : {}), ...(table === 'comments' ? { created_at: new Date().toISOString() } : {}) });
+          const post = state.tables.posts.find((p) => p.id === r.post_id);
+          if (post && table === 'ritmos') post.ritmo_count++;
+          if (post && table === 'comments') post.comment_count++;
+        }
       }
       return { status: 201, body: null };
     }
@@ -174,6 +180,9 @@ function createMock() {
     }
     if (method === 'DELETE') {
       for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) {
+        const post = state.tables.posts.find((p) => p.id === rows[i].post_id);
+        if (post && table === 'ritmos') post.ritmo_count = Math.max(0, post.ritmo_count - 1);
+        if (post && table === 'comments') post.comment_count = Math.max(0, post.comment_count - 1);
         if (table === 'activities') {
           const d = state.tables.activity_deletions;
           const j = d.findIndex((x) => x.user_id === u.id && x.id === rows[i].id);

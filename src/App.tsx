@@ -3,7 +3,7 @@ import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, LineChart, MessageCircle, Play, Sun, User } from 'lucide-react';
+import { CalendarDays, LineChart, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo, StatusLine } from './components/ui';
 import Today from './pages/Today';
@@ -30,6 +30,7 @@ const NotFound = lazyPage(() => import('./pages/NotFound'));
 const About = lazyPage(() => import('./pages/About'));
 const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
+const HubPage = lazyPage(() => import('./pages/Hub'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** Desktop sidebar: everything */
@@ -195,8 +196,10 @@ function Shell() {
   const { pathname } = useLocation();
   const { session, hasFlag } = useApp();
   // Run (centre, orange) appears for accounts with the run_tab flag
-  const mobile: Tab[] = hasFlag('run_tab') ? [MOBILE[0], MOBILE[1], { to: '/run', label: 'Run', icon: Play }, MOBILE[2]] : MOBILE;
-  const sidebar: Tab[] = hasFlag('run_tab') ? [SIDEBAR[0], SIDEBAR[1], { to: '/run', label: 'Run', icon: Play }, ...SIDEBAR.slice(2)] : SIDEBAR;
+  // Run (centre, orange) and Hub appear for accounts with those flags: Training · Calendar · Run · Hub · You
+  const extra: Tab[] = [...(hasFlag('run_tab') ? [{ to: '/run', label: 'Run', icon: Play }] : []), ...(hasFlag('hub') ? [{ to: '/hub', label: 'Hub', icon: Users }] : [])];
+  const mobile: Tab[] = [MOBILE[0], MOBILE[1], ...extra, MOBILE[2]];
+  const sidebar: Tab[] = [SIDEBAR[0], SIDEBAR[1], ...extra, ...SIDEBAR.slice(2)];
   const bare = BARE.includes(pathname) || !session;
   return (
     <div className={`app${bare ? ' app-bare' : ''}`}>
@@ -231,6 +234,7 @@ function Shell() {
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/progress" element={<Progress />} />
               <Route path="/run" element={<RunPage />} />
+              <Route path="/hub" element={<HubPage />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />

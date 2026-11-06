@@ -188,6 +188,8 @@ export interface Consents {
   healthData?: { granted: boolean; at: string; version: string };
   /** Optional: send summaries of training data to the AI coach service */
   aiCoach?: { granted: boolean; at: string };
+  /** Optional, off by default: share runs the runner chooses with other runners on the Hub */
+  hubSharing?: { granted: boolean; at: string; version: string };
 }
 
 export type BackgroundLevel = 'new' | 'returning' | 'sometimes' | 'regular' | 'racer';

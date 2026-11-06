@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Award, Check, MessageCircle, TrendingUp, X } from 'lucide-react';
+import { Award, Check, MessageCircle, Share2, TrendingUp, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
@@ -13,6 +13,7 @@ import { ROLE_LABEL } from '../training/sessions';
 import { DayRuns } from '../components/DayRuns';
 import { Breakdown, RepChart, Sparkline } from '../components/ReportParts';
 import { buildReport } from '../training/report';
+import { PostToHub } from '../components/PostToHub';
 import type { SessionFeedback } from '../lib/types';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
@@ -84,7 +85,8 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag } = useApp();
+  const [posting, setPosting] = useState(false);
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
   const an = analysisFor(a);
@@ -185,7 +187,11 @@ export default function ActivityPage() {
           {rep.trend && <><h2 className="label">Compared with your recent {TYPE_LABEL[an.type].toLowerCase()}s</h2><Sparkline values={rep.trend.paces} labels={rep.trend.labels} units={U} /><p className="caption">Average pace, the dot is this run. Lower is faster.</p></>}
         </section>
       )}
-      <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(a.startTime))} go?`)}`} className="btn" style={{ alignSelf: 'flex-start' }}><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask the coach about this run</Link>
+      <div className="row wrap">
+        <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(a.startTime))} go?`)}`} className="btn"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask the coach about this run</Link>
+        {hasFlag('hub') && data.profile.consents?.hubSharing?.granted && <button className="btn" onClick={() => setPosting(true)}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Post to Hub</button>}
+      </div>
+      {posting && <PostToHub run={a} type={an.type} badges={rep.badges} compliance={rep.breakdown.find((b) => b.key === 'pace' && b.value === 100) ? 'All reps on target' : undefined} onClose={() => setPosting(false)} />}
 
       <details className="full-analysis">
         <summary className="btn btn-ghost">Show full analysis</summary>
