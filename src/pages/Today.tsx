@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
+import { DayRuns } from '../components/DayRuns';
 import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
@@ -21,7 +22,7 @@ function greeting() {
 }
 
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete } = useApp();
   const U = data.profile.units;
   const t = ymd(today);
   const [selected, setSelected] = useState(t);
@@ -63,7 +64,7 @@ export default function Today() {
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
-  const doneM = data.activities.filter((a) => week.includes(a.startTime.slice(0, 10)) && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0);
+  const doneM = athlete.weekM;
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
   const lastAn = last ? analysisFor(last) : undefined;
@@ -138,14 +139,7 @@ export default function Today() {
       {runsHere.length > 0 && (
         <section className="card stack-sm" aria-labelledby="ran-here">
           <h2 id="ran-here" className="label">{isToday ? 'Your runs today' : `Your runs on ${longDate(parseYmd(selected))}`}: {dist(runsHere.reduce((x, a) => x + a.distanceM, 0), U)}</h2>
-          <ul className="list">
-            {runsHere.map((a) => (
-              <li key={a.id}><Link to={`/activity/${a.id}`} className="list-item row-between">
-                <span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}{!s || s.type === 'rest' ? ' · unplanned' : ''}</span></span>
-                <span className="stat">{dist(a.distanceM, U)} · {duration(a.movingS)}</span>
-              </Link></li>
-            ))}
-          </ul>
+          <DayRuns runs={runsHere} unplanned={!s || s.type === 'rest'} />
         </section>
       )}
 
@@ -210,7 +204,7 @@ export default function Today() {
       {!stage.predictions && (
         <section className="card stack-sm" aria-labelledby="unlock">
           <h2 id="unlock" className="label">Unlocking your fitness</h2>
-          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}><span className="stat-xl" style={{ fontSize: 32, lineHeight: '36px' }}>{stage.runs}</span><span className="muted label">run{stage.runs === 1 ? '' : 's'} logged</span></div>
+          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}><span className="stat-xl" style={{ fontSize: 32, lineHeight: '36px' }}>{stage.runs}</span><span className="muted label">run{stage.runs === 1 ? '' : 's'} in the last 3 months</span></div>
           <div className="progress" role="progressbar" aria-label="Runs towards pace targets" aria-valuemin={0} aria-valuemax={RUNS_FOR_PACES} aria-valuenow={Math.min(RUNS_FOR_PACES, stage.runs)}><span style={{ width: `${Math.min(100, (stage.runs / RUNS_FOR_PACES) * 100)}%` }} /></div>
           <p className="caption">{stage.next}</p>
         </section>
@@ -224,7 +218,7 @@ export default function Today() {
         {aRace && daysToRace != null && <Tile to={`/race/${aRace.id}`} accent label={aRace.name} value={daysToRace} unit="days" sub={`${aRace.priority} race`} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
         {fitness && stage.predictions && <Tile to="/progress" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
-        {!stage.predictions && <Tile to="/progress" label="Runs logged" value={data.activities.length} sub={data.activities.length ? `${dist(data.activities.reduce((x, a) => x + a.distanceM, 0), U)} in total` : 'Your first one is next'} />}
+        {!stage.predictions && <Tile to="/progress" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}
       </div>
 
       {last && lastAn && (

@@ -1,7 +1,7 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
 import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
-import { predictRace, vdotFromPerformance } from './fitness';
+import { predictRace, raceEvidence, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 
 export function totalsBy(activities: Activity[], key: (a: Activity) => string): Map<string, { m: number; n: number; s: number }> {
@@ -19,11 +19,21 @@ export const weekKey = (a: Activity) => ymd(startOfWeek(new Date(a.startTime)));
 export const monthKey = (a: Activity) => a.startTime.slice(0, 7);
 export const yearKey = (a: Activity) => a.startTime.slice(0, 4);
 
-export interface PB { label: string; m: number; timeS: number; date: string; activityId: string; fromRace: boolean }
+export type PbKind = 'race' | 'timetrial' | 'training';
+/** Distances with personal bests (best efforts inside runs count) */
+export const PB_DISTANCES: { label: string; m: number }[] = [
+  { label: '1 km', m: 1000 }, { label: '1 mile', m: 1609.344 }, { label: '3K', m: 3000 }, ...RACE_DISTANCES.slice(0, 1),
+  { label: '5 miles', m: 8046.72 }, ...RACE_DISTANCES.slice(1, 2), { label: '15K', m: 15000 }, { label: '10 miles', m: 16093.44 },
+  ...RACE_DISTANCES.slice(2, 3), { label: '30K', m: 30000 }, ...RACE_DISTANCES.slice(3, 4),
+];
+export const PB_KIND_LABEL: Record<PbKind, string> = { race: 'race', timetrial: 'time trial', training: 'training effort' };
+export interface PB { label: string; m: number; timeS: number; date: string; activityId: string; fromRace: boolean; kind: PbKind }
 
-export function personalBests(activities: Activity[]): PB[] {
+/** Best times at race distances: whole runs of that distance and best efforts inside longer runs.
+ *  `races` (the runner's calendar) helps label which PBs were set in races. */
+export function personalBests(activities: Activity[], races: Race[] = []): PB[] {
   const out: PB[] = [];
-  for (const d of RACE_DISTANCES) {
+  for (const d of PB_DISTANCES) {
     let best: PB | undefined;
     for (const a of activities) {
       let t: number | undefined;
@@ -32,11 +42,38 @@ export function personalBests(activities: Activity[]): PB[] {
         const e = effortOf(a, d.m);
         if (e && (!t || e < t)) t = e;
       }
-      if (t && (!best || t < best.timeS)) best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: !!a.isRace };
+      if (t && (!best || t < best.timeS)) {
+        const kind: PbKind = a.isTimeTrial ? 'timetrial' : raceEvidence(a, races) ? 'race' : 'training';
+        best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: kind === 'race', kind };
+      }
     }
     if (best) out.push(best);
   }
   return out;
+}
+
+/** Every time a new best was set at a distance, oldest first (whole runs and best efforts inside runs). */
+export function pbHistory(activities: Activity[], m: number, races: Race[] = []): Omit<PB, 'label'>[] {
+  const sorted = [...activities].filter((a) => a.distanceM >= m * 0.99).sort((x, y) => x.startTime.localeCompare(y.startTime));
+  const out: Omit<PB, 'label'>[] = [];
+  let best = Infinity;
+  for (const a of sorted) {
+    let t: number | undefined;
+    if (a.distanceM <= m * 1.03) t = a.movingS * (m / a.distanceM);
+    const e = effortOf(a, m);
+    if (e && (!t || e < t)) t = e;
+    if (t && t < best - 0.5) {
+      best = t;
+      const kind: PbKind = a.isTimeTrial ? 'timetrial' : raceEvidence(a, races) ? 'race' : 'training';
+      out.push({ m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: kind === 'race', kind });
+    }
+  }
+  return out;
+}
+
+/** Runs that look like races (by name or calendar date) but the runner has not confirmed or rejected yet. */
+export function racesToReview(activities: Activity[], races: Race[] = []): Activity[] {
+  return activities.filter((a) => !a.isRace && !a.notRace && !a.isTimeTrial && raceEvidence(a, races)).sort((x, y) => y.startTime.localeCompare(x.startTime));
 }
 
 /** PB progression: best time at each distance, by year */

@@ -105,7 +105,20 @@ export interface FitnessEstimate {
 const EFFORT_DISTANCES = [5000, 10000, 21097.5];
 /** Distances people race, for spotting races in imported files (which rarely say "race") */
 const RACE_DISTANCES_M = [3000, 5000, 8000, 10000, 15000, 16093.4, 21097.5, 42195];
-const RACE_NAME = /\b(race|parkrun|gara|corsa|marathon|half|10 ?k|5 ?k|xc|cross country|championship)\b/i;
+// Race words in English, Italian and Maltese (race, gara, maratona, mezza, tiġrija), plus race distances in names
+const RACE_NAME = /\b(race|racing|parkrun|gara|corsa campestre|maratona|mezza|marathon|half|10 ?k|5 ?k|xc|cross country|championships?|tiġrija|tigrija)\b/i;
+
+/** Why a run counts as a race for labels (not for fitness): the runner said so, or its name or calendar says so.
+ *  Hard heart rate alone is not enough to call a run a race in what the runner sees. */
+export function raceEvidence(a: Activity, races: Race[] = []): 'confirmed' | 'name' | 'calendar' | undefined {
+  if (a.isRace) return 'confirmed';
+  if (a.notRace) return undefined;
+  if (!raceDistanceOf(a.distanceM) && a.distanceM < 3000) return undefined;
+  const day = a.startTime.slice(0, 10);
+  if (races.some((r) => r.date === day && Math.abs(r.distanceM - a.distanceM) / r.distanceM <= 0.1)) return 'calendar';
+  if (RACE_NAME.test(a.name) && raceDistanceOf(a.distanceM)) return 'name';
+  return undefined;
+}
 
 /** The standard race distance a run matches (GPS distances are allowed about 4% either way), if any */
 export function raceDistanceOf(distanceM: number): number | undefined {
@@ -118,6 +131,7 @@ export function raceDistanceOf(distanceM: number): number | undefined {
  */
 export function likelyRace(a: Activity, hr: HrSetup, races: Race[] = []): boolean {
   if (a.isRace || a.isTimeTrial) return true;
+  if (a.notRace) return false;
   const d = raceDistanceOf(a.distanceM);
   if (!d) return false;
   const day = a.startTime.slice(0, 10);

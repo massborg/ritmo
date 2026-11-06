@@ -7,8 +7,10 @@ import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
 import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
-import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
-import { easyHardBalance, monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
+import { addDays, daysBetween, dist, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { easyHardBalance, monthKey, type PB, PB_KIND_LABEL, pbHistory, personalBests, racesToReview, runningStory, totalsBy, weekKey } from '../training/insights';
+import { Sheet } from '../components/inputs';
+import type { Activity } from '../lib/types';
 import { PHASE_LABEL } from '../training/plan';
 import { estimateFitness, predictRace, trainingPaces, zoneOf } from '../training/fitness';
 import { Shoes } from '../components/Shoes';
@@ -17,7 +19,7 @@ import { zoneTime } from '../training/analysis';
 type Period = 'week' | 'month' | 'year';
 
 export default function Progress() {
-  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness } = useApp();
+  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness, athlete } = useApp();
   const U = data.profile.units;
   const acts = data.activities;
   const [period, setPeriod] = useState<Period>('week');
@@ -34,7 +36,9 @@ export default function Progress() {
   }, [data.mode, since, acts.length]);
 
   const story = useMemo(() => runningStory(acts, today), [acts, today]);
-  const pbs = useMemo(() => personalBests(acts), [acts]);
+  const pbs = useMemo(() => personalBests(acts, data.races), [acts, data.races]);
+  const toReview = useMemo(() => racesToReview(acts, data.races), [acts, data.races]);
+  const [reviewing, setReviewing] = useState(false);
 
   // Mileage bars
   const bars = useMemo(() => {
@@ -144,7 +148,7 @@ export default function Progress() {
         <BarChart bars={bars} format={(v) => `${v.toFixed(0)} ${U}`} valueLabel={period === 'year' ? `${U} per year` : period === 'month' ? year : 'This year'} compareLabel={period === 'year' ? undefined : period === 'month' ? String(Number(year) - 1) : 'Same week last year'} every={period === 'week' ? 2 : 1} />
         <div className="grid-3">
           <Kpi label={`${today.getFullYear()} so far`} value={`${fmtU(toUnit(thisYtd, U))} ${U}`} sub={lastYtd ? `${thisYtd >= lastYtd ? '+' : ''}${Math.round(((thisYtd - lastYtd) / lastYtd) * 100)}% on the same point last year` : undefined} />
-          <Kpi label="Lifetime" value={`${fmtU(toUnit(story.totalM, U))} ${U}`} sub={`${story.totalRuns} runs`} />
+          <Kpi label="Lifetime" value={`${fmtU(toUnit(athlete.totalM, U))} ${U}`} sub={`${athlete.runCount} runs`} />
           <Kpi label="Biggest year" value={story.biggestYear ? `${fmtU(toUnit(story.biggestYear.m, U))} ${U}` : '–'} sub={story.biggestYear?.year} />
         </div>
       </section>
@@ -194,10 +198,16 @@ export default function Progress() {
       <div className="grid-2">
         <section className="card stack" aria-labelledby="pbs">
           <div className="row" style={{ gap: 8 }}><Award size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="pbs" className="title">Personal bests</h2></div>
-          {pbs.length === 0 && <p className="muted">Personal bests appear once you have run 5 km or more in one go.</p>}
-          <ul className="list">{pbs.map((p) => (
-            <li key={p.label}><Link to={`/activity/${p.activityId}`} className="list-item row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{p.label}</span><span className="caption">{shortDate(parseYmd(p.date))}{p.fromRace ? ' · race' : ' · in training'}</span></span><span className="stat" style={{ fontSize: 20 }}>{duration(p.timeS)}</span></Link></li>
-          ))}</ul>
+          {pbs.length === 0 && <p className="muted">Personal bests appear once you have run 1 km or more with GPS.</p>}
+          <p className="caption">Best times anywhere inside your runs, not only whole runs of that distance.</p>
+          <ul className="list">{pbs.map((p) => <PbRow key={p.label} pb={p} />)}</ul>
+          {toReview.length > 0 && (
+            <div className="stack-sm">
+              <p className="caption">Ritmo found {toReview.length} run{toReview.length === 1 ? '' : 's'} that look{toReview.length === 1 ? 's' : ''} like {toReview.length === 1 ? 'a race' : 'races'}. Confirming them labels your PBs correctly.</p>
+              <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setReviewing(true)}>Review races</button>
+            </div>
+          )}
+          {reviewing && <RaceReview runs={toReview} onClose={() => setReviewing(false)} />}
         </section>
 {stage.predictions ? (
         <section className="card stack" aria-labelledby="est">
@@ -223,5 +233,52 @@ export default function Progress() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** One PB, with its history (every time it was improved) folded underneath. */
+function PbRow({ pb }: { pb: PB }) {
+  const { data } = useApp();
+  const [open, setOpen] = useState(false);
+  const history = useMemo(() => (open ? pbHistory(data.activities, pb.m, data.races).reverse() : []), [open, data.activities, data.races, pb.m]);
+  return (
+    <li>
+      <div className="row-between" style={{ gap: 8 }}>
+        <Link to={`/activity/${pb.activityId}`} className="list-item row-between" style={{ flex: 1 }}>
+          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{pb.label}</span><span className="caption">{shortDate(parseYmd(pb.date))} · {PB_KIND_LABEL[pb.kind]}</span></span>
+          <span className="stat" style={{ fontSize: 20 }}>{duration(pb.timeS)}</span>
+        </Link>
+        <button className="btn btn-ghost btn-small" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Hide' : 'History'}</button>
+      </div>
+      {open && (
+        <ol className="pb-history caption">
+          {history.map((h) => <li key={h.activityId}><Link to={`/activity/${h.activityId}`}>{duration(h.timeS)}</Link> · {shortDate(parseYmd(h.date))} · {PB_KIND_LABEL[h.kind]}</li>)}
+        </ol>
+      )}
+    </li>
+  );
+}
+
+/** Confirm or reject the runs Ritmo thinks were races. */
+function RaceReview({ runs, onClose }: { runs: Activity[]; onClose: () => void }) {
+  const { setRaceFlag, data } = useApp();
+  const U = data.profile.units;
+  return (
+    <Sheet open onClose={onClose} title="Were these races?"
+      footer={<div className="row" style={{ gap: 8 }}><button className="btn btn-block" onClick={onClose}>Done</button><button className="btn btn-primary btn-block" onClick={() => { setRaceFlag(runs.map((r) => r.id), true); onClose(); }}>All were races</button></div>}>
+      <p className="caption">Races count fully towards your fitness and are labelled as races in your PBs. You can change this later on each run.</p>
+      <ul className="list">
+        {runs.map((a) => (
+          <li key={a.id} className="row-between wrap" style={{ padding: 'var(--s2) 0', gap: 8 }}>
+            <span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{shortDate(new Date(a.startTime))} · {dist(a.distanceM, U)} · {duration(a.movingS)}</span></span>
+            <span className="row" style={{ gap: 4 }}>
+              <button className="btn btn-small btn-primary" onClick={() => setRaceFlag([a.id], true)}>Race</button>
+              <button className="btn btn-small" onClick={() => setRaceFlag([a.id], false)}>Not a race</button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {!runs.length && <p className="muted">All done.</p>}
+    </Sheet>
   );
 }

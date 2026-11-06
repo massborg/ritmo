@@ -22,6 +22,7 @@ export type SessionType =
   | 'race'
   | 'runwalk'
   | 'timetrial'
+  | 'strides' // short strides or drills file (often part of a warm-up)
   | 'rest';
 
 export interface StreamPoint {
@@ -60,6 +61,8 @@ export interface Activity {
   streams?: StreamPoint[];
   isRace?: boolean;
   isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
+  /** The runner said this was not a race (so race detection leaves it alone) */
+  notRace?: boolean;
   /** Stored summary (best efforts, structure), so history works without loading every run's streams */
   derived?: ActivityDerived;
   detailScore: number; // higher = more detailed, used to choose the best duplicate
@@ -286,4 +289,6 @@ export interface CoachMessage {
   proposal?: { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string; applied?: boolean };
   /** Who wrote the answer: the AI coach, or Ritmo's built-in coach */
   source?: 'ai' | 'local';
+  /** Why the built-in coach answered although the AI coach is on */
+  fallback?: 'not_configured' | 'busy' | 'limit' | 'error' | 'health';
 }

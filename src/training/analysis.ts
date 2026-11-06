@@ -18,6 +18,7 @@ export const TYPE_LABEL: Record<SessionType, string> = {
   race: 'Race',
   runwalk: 'Run/walk',
   timetrial: 'Time trial',
+  strides: 'Strides and drills',
   rest: 'Rest day',
 };
 
@@ -33,6 +34,7 @@ export const TYPE_FOCUS: Record<SessionType, string> = {
   race: 'Race',
   runwalk: 'Building up',
   timetrial: 'Fitness test',
+  strides: 'Form and speed',
   rest: 'Recovery',
 };
 
@@ -102,6 +104,16 @@ export function classify(a: Activity, paces: TrainingPaces, zones: Zones | undef
   if (a.isRace) return { type: 'race', reason: 'Marked as a race' };
   const avgPace = a.movingS / (a.distanceM / 1000);
   const elevPerKm = (a.elevGainM ?? 0) / (a.distanceM / 1000);
+  // Short files (under 2 km): strides or drills when fast and slow parts alternate, otherwise a short jog.
+  // They are never tempo or intervals on their own: usually part of a warm-up or cool-down.
+  if (a.distanceM < 2000) {
+    const lp = (a.laps ?? []).filter((l) => l.distanceM > 40).map((l) => l.durationS / (l.distanceM / 1000));
+    const sp = lp.length >= 4 ? lp : a.streams ? segmentPaces(a.streams, 100) : [];
+    const sorted = [...sp].sort((x, y) => x - y);
+    const alternating = sp.length >= 4 && sorted[Math.floor(sorted.length * 0.75)] / sorted[Math.floor(sorted.length * 0.25)] > 1.2;
+    if (alternating || (avgPace <= paces.threshold[1] && a.movingS < 8 * 60)) return { type: 'strides', reason: 'A short file with fast strides or drills' };
+    return { type: avgPace >= paces.recovery[0] - 2 ? 'recovery' : 'easy', reason: 'A short jog' };
+  }
 
   // Structured efforts from laps or 400 m segments
   const lapPaces = (a.laps ?? []).filter((l) => l.distanceM > 150).map((l) => l.durationS / (l.distanceM / 1000));
@@ -197,7 +209,7 @@ export interface Similar {
 export function similarSessions(a: Activity, type: SessionType, all: Activity[], typeOf: (x: Activity) => SessionType): Similar[] {
   const t = new Date(a.startTime).getTime();
   return all
-    .filter((x) => x.id !== a.id && new Date(x.startTime).getTime() < t && t - new Date(x.startTime).getTime() < 365 * 86400000)
+    .filter((x) => x.id !== a.id && a.distanceM >= 2000 && x.distanceM >= 2000 && new Date(x.startTime).getTime() < t && t - new Date(x.startTime).getTime() < 365 * 86400000)
     .filter((x) => Math.abs(x.distanceM - a.distanceM) / a.distanceM < 0.2)
     .filter((x) => typeOf(x) === type)
     .sort((x, y) => y.startTime.localeCompare(x.startTime))
@@ -296,7 +308,9 @@ export function analyse(opts: {
     if (pat.easyTooHardPct > 25) {
       score -= 12;
       notes.push(`${pat.easyTooHardPct}% of this run was in Z3 or above, which is too much for an ${type === 'long' ? 'long' : 'easy'} day.`);
-      improve.push(`Slow down to ${P(paces.easy[0])} or slower and keep heart rate in Z2. Easy days build the engine; running them hard only adds fatigue.`);
+      // Only ask for a slower pace if the run was actually faster than easy pace; otherwise heart rate is the issue
+      if (avgPace < paces.easy[0] - 2) improve.push(`You averaged ${P(avgPace)}, faster than your easy pace of ${P(paces.easy[0])} or slower. Slow to that and keep heart rate in Z2: easy days build the engine, running them hard only adds fatigue.`);
+      else improve.push(`Your pace (${P(avgPace)}) was already easy, but heart rate was high for it. Heat, hills, poor sleep or tiredness can do this. On days like this, run by heart rate: stay in Z2 even if that means a slower pace or walking the hills.`);
     } else {
       wentWell.push(`You kept ${100 - pat.easyTooHardPct}% of the run in Z1 and Z2, exactly where easy running should be.`);
     }
@@ -366,7 +380,15 @@ export function analyse(opts: {
   if (recurring) notes.push(`You have mentioned ${recurring[0].toLowerCase()} discomfort ${recurring[1]} times recently. Worth keeping an eye on.`);
 
   if (!wentWell.length) wentWell.push(planned ? 'You got the session done, which is what builds fitness over months.' : 'Another run in the bank. Consistency is what builds fitness.');
-  if (!improve.length) improve.push('Nothing to change. Repeat this kind of execution.');
+  // Never leave this empty: turn what cost points into a concrete fix, or say what to keep doing and why
+  if (!improve.length) {
+    if (reasons.length && score < 85) improve.push(`${reasons[0].replace(/\.$/, '')}. Next time aim to match the plan more closely; that is what the session was built around.`);
+    else if (type === 'easy' || type === 'recovery') improve.push(`Keep easy runs like this one: ${P(avgPace)} on average${paces ? `, inside your easy range of ${P(paces.easy[0])} to ${P(paces.easy[1])}` : ''}. Holding back on easy days is what lets you run your hard sessions well.`);
+    else if (type === 'long') improve.push(`On long runs over 75 minutes, take on fuel from about 45 minutes and every 30 minutes after. You ran ${Math.round(a.movingS / 60)} minutes today, so practising this now pays off on race day.`);
+    else if (type === 'race' || type === 'timetrial') improve.push(`Note how the first kilometre felt against your average of ${P(avgPace)}. Most runners start too fast; matching the first kilometre to your goal pace is the easiest time to gain next race.`);
+    else if (type === 'strides') improve.push('Keep strides relaxed: about 20 seconds fast, full recovery between them. Smooth and quick, never a sprint.');
+    else improve.push(`Repeat this effort next time at the same pace (${P(cls.workPace ?? avgPace)}). When the last rep or kilometre feels as controlled as the first, you are ready for a small step up.`);
+  }
 
   score = Math.max(30, Math.min(100, Math.round(score + (wentWell.length - 1) * 3)));
   const scoreReason =

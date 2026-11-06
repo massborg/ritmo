@@ -80,7 +80,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -97,7 +97,7 @@ const rowToAct = (r: Row): Activity => ({
   id: r.id as string, source: r.k as Activity['source'], sourceIds: (r.x ?? {}) as Activity['sourceIds'],
   startTime: r.t as string, name: r.n as string, sport: 'run', distanceM: Number(r.dm), durationS: Number(r.ds),
   movingS: Number(r.ms), elevGainM: num(r.eg), avgHr: num(r.ah), maxHr: num(r.mh), avgCadence: num(r.ac), isRace: !!r.r,
-  isTimeTrial: !!(r.x as Record<string, unknown> | null)?.timeTrial, detailScore: Number(r.sc),
+  isTimeTrial: !!(r.x as Record<string, unknown> | null)?.timeTrial, notRace: !!(r.x as Record<string, unknown> | null)?.notRace, detailScore: Number(r.sc),
   derived: r.v != null ? { v: Number(r.v), ...(r.be ? { be: r.be as Record<string, number> } : {}), ...(r.sg ? { segs: r.sg as number[] } : {}) } : undefined,
   importedAt: '',
 });
@@ -239,7 +239,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of d.activities) ps.activities.set(a.id, actPrint(a));
