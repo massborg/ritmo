@@ -499,3 +499,4 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .week-preview li.muted { opacity: 0.6; }
 .week-preview .stat { font-size: 15px; }
 .chart .axis-value { font-size: 10px; fill: var(--ink-muted); }
+.chip { min-width: 44px; justify-content: center; }
