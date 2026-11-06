@@ -1,18 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Check, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
 import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
+import { LogSessionSheet } from '../components/LogSession';
+import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, localise, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
+import { weekReview } from '../training/report';
 import { missedKeySession, missedMoveOptions } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
 
@@ -21,8 +24,18 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
+/** "Today's training", "Yesterday's training", "Tomorrow's training" or "Monday's training · 2 Nov" */
+function dayTitle(d: string, t: string): string {
+  const diff = Math.round((parseYmd(d).getTime() - parseYmd(t).getTime()) / 86400000);
+  if (diff === 0) return "Today's training";
+  if (diff === -1) return "Yesterday's training";
+  if (diff === 1) return "Tomorrow's training";
+  const date = parseYmd(d);
+  return `${DAY_NAMES[(date.getDay() + 6) % 7]}'s training · ${date.getDate()} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
+}
+
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession } = useApp();
   const U = data.profile.units;
   const t = ymd(today);
   const [selected, setSelected] = useState(t);
@@ -30,11 +43,27 @@ export default function Today() {
   const [planMsg, setPlanMsg] = useState<string>();
   const [adding, setAdding] = useState(false);
   const [unwell, setUnwell] = useState(false);
+  const [logSession, setLogSession] = useState<PlannedSession>();
+  const [picking, setPicking] = useState(false);
+  const shiftDay = (n: number) => setSelected((d) => ymd(addDays(parseYmd(d), n)));
+  // ← and → change the day on a keyboard (not while typing)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable) || document.querySelector('.sheet-backdrop')) return;
+      if (e.key === 'ArrowLeft') setSelected((d) => ymd(addDays(parseYmd(d), -1)));
+      if (e.key === 'ArrowRight') setSelected((d) => ymd(addDays(parseYmd(d), 1)));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const swipe = useRef<number | undefined>(undefined);
   const latest = data.activities.length ? data.activities.reduce((m, x) => (x.startTime > m.startTime ? x : m)) : undefined;
   const { run: last } = useRunDetail(latest, data.mode === 'real');
   const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
+    {logSession && <LogSessionSheet session={logSession} onClose={() => setLogSession(undefined)} />}
     <QuickAdd open={adding} onClose={() => setAdding(false)} />
     {unwell && <NotFeeling onClose={() => setUnwell(false)} />}
   </>;
@@ -56,10 +85,11 @@ export default function Today() {
     );
   }
 
-  const ws = startOfWeek(today);
+  const ws = startOfWeek(parseYmd(selected));
   const week = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
   const ranOn = (d: string) => data.activities.some((a) => a.startTime.slice(0, 10) === d);
   const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest'), missed: !!session && session.type !== 'rest' && d < t && !ranOn(d) }; });
+  const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U }) : undefined;
   const runsHere = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
@@ -91,9 +121,27 @@ export default function Today() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Today" eyebrow={`${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}`} right={<><SampleChip />{logButton}<Avatar /></>} />
+      <AppHeader title={dayTitle(selected, t)} eyebrow={isToday ? `${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}` : undefined} right={<><SampleChip />{logButton}<Avatar /></>} />
 
-      {(plan || data.activities.length > 0) && <WeekStrip days={days} selected={selected} onSelect={setSelected} />}
+      {(plan || data.activities.length > 0) && (
+        <div className="stack-sm"
+          onTouchStart={(e) => { swipe.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => { const x0 = swipe.current; swipe.current = undefined; if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 60) shiftDay(dx < 0 ? 7 : -7); }}>
+          <div className="row-between">
+            <button className="icon-btn" aria-label="Previous week" onClick={() => shiftDay(-7)}><ChevronLeft size={22} strokeWidth={2} /></button>
+            <div className="row" style={{ gap: 6 }}>
+              {!isToday && <button className="chip" onClick={() => setSelected(t)}>Today</button>}
+              <button className="chip" aria-haspopup="dialog" onClick={() => setPicking(true)}><CalendarDays size={16} strokeWidth={2} aria-hidden="true" />Pick a date</button>
+            </div>
+            <button className="icon-btn" aria-label="Next week" onClick={() => shiftDay(7)}><ChevronRight size={22} strokeWidth={2} /></button>
+          </div>
+          <WeekStrip days={days} selected={selected} onSelect={setSelected} />
+        </div>
+      )}
+      <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
+        <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
+        <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
+      </Sheet>
 
       {s ? (
         <section className="hero stack" aria-labelledby="session-title">
@@ -113,13 +161,20 @@ export default function Today() {
               <p className="body hero-why"><strong>Why: </strong>{s.purpose}</p>
             </>
           ) : ranHereKm > 0 ? <p className="body">You ran {dist(ranHereKm, U)} on a rest day. It counts toward your week, and the rest of the week adjusts if needed.</p> : <p className="body">{s.purpose}</p>}
+          {!done && s.type !== 'rest' && selected < t && s.status !== 'skipped' && <p className="label">Did you do this session?</p>}
+          {s.status === 'skipped' && <p className="label">You skipped this session.</p>}
           <div className="row wrap">
             {done
-              ? <Link to={`/activity/${done.id}`} className="btn btn-primary">See your feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
-              : s.type !== 'rest' && selected <= t
-                ? <button className="btn btn-primary" onClick={() => setLogFor(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I did it</button>
+              ? <><Link to={`/activity/${done.id}`} className="btn btn-primary">See your feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
+                <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span></>
+              : s.type !== 'rest' && selected <= t && s.status !== 'skipped'
+                ? <>
+                    <button className="btn btn-primary" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />{selected < t ? 'Log this session' : 'I\u2019ve done this run'}</button>
+                    {selected < t && <button className="btn" onClick={() => skipSession(s.id)}>I skipped it</button>}
+                    {selected < t && <button className="btn" onClick={() => setAdding(true)}>I did something else</button>}
+                  </>
                 : null}
-            {!done && <Link to={`/session/${s.id}`} className="btn">{s.type === 'rest' ? 'Why rest matters' : 'Session details'}</Link>}
+            {!done && <Link to={`/session/${s.id}`} className="btn">{s.type === 'rest' ? 'Why rest matters' : selected > t ? 'Move or change' : 'Session details'}</Link>}
             {isToday && s.type !== 'rest' && !done && <Link to="/coach?q=I only have 30 minutes, what should I do?" className="btn btn-ghost">Short on time?</Link>}
             {isToday && <button className="btn btn-ghost" onClick={() => setUnwell(true)}>Not feeling 100%?</button>}
           </div>
@@ -134,6 +189,14 @@ export default function Today() {
         </Empty>
       )}
       {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
+
+      {/* Sundays: the week in review */}
+      {review && (
+        <section className="card stack-sm" aria-labelledby="week-review">
+          <h2 id="week-review" className="title">{review.title}</h2>
+          <ul className="bullets">{review.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        </section>
+      )}
 
       {/* What was actually run on the selected day, planned or not */}
       {runsHere.length > 0 && (

@@ -9,6 +9,8 @@ export interface AppData {
   mode: 'sample' | 'real' | 'empty';
   /** Server time of the newest run change this device has seen (for fetching only newer changes) */
   activitiesSyncedAt?: string;
+  /** Features switched on for this account (granted on the server) */
+  flags?: string[];
   profile: Profile;
   activities: Activity[];
   races: Race[];
@@ -80,7 +82,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -97,7 +99,10 @@ const rowToAct = (r: Row): Activity => ({
   id: r.id as string, source: r.k as Activity['source'], sourceIds: (r.x ?? {}) as Activity['sourceIds'],
   startTime: r.t as string, name: r.n as string, sport: 'run', distanceM: Number(r.dm), durationS: Number(r.ds),
   movingS: Number(r.ms), elevGainM: num(r.eg), avgHr: num(r.ah), maxHr: num(r.mh), avgCadence: num(r.ac), isRace: !!r.r,
-  isTimeTrial: !!(r.x as Record<string, unknown> | null)?.timeTrial, notRace: !!(r.x as Record<string, unknown> | null)?.notRace, detailScore: Number(r.sc),
+  isTimeTrial: !!(r.x as Record<string, unknown> | null)?.timeTrial, notRace: !!(r.x as Record<string, unknown> | null)?.notRace,
+  plannedSessionId: ((r.x as Record<string, unknown> | null)?.planned as string | undefined) ?? undefined,
+  reps: ((r.x as Record<string, unknown> | null)?.reps as Activity['reps']) ?? undefined,
+  media: ((r.x as Record<string, unknown> | null)?.media as string[] | undefined) ?? undefined, detailScore: Number(r.sc),
   derived: r.v != null ? { v: Number(r.v), ...(r.be ? { be: r.be as Record<string, number> } : {}), ...(r.sg ? { segs: r.sg as number[] } : {}) } : undefined,
   importedAt: '',
 });
@@ -203,9 +208,13 @@ export async function pullFromCloud(cache?: CachedData): Promise<CloudSnapshot> 
   const stored = p.data.data as { profile?: Profile; mode?: AppData['mode']; sources?: SourceStatus[] } & Partial<Profile>;
   const profile = (stored.profile ?? stored) as Profile;
   const mode = stored.mode ?? 'real';
-  const coach = await supabase.from('coach_messages').select('data').order('created_at');
+  const [coach, flags] = await Promise.all([
+    supabase.from('coach_messages').select('data').order('created_at'),
+    supabase.from('feature_flags').select('flag'),
+  ]);
   if (coach.error) throw coach.error;
-  const base: Partial<AppData> = { profile, mode, sources: stored.sources ?? [], coach: (coach.data ?? []).map((x) => x.data as CoachMessage) };
+  const base: Partial<AppData> = { profile, mode, sources: stored.sources ?? [], coach: (coach.data ?? []).map((x) => x.data as CoachMessage),
+    flags: flags.error ? [] : (flags.data ?? []).map((x) => x.flag as string) };
   if (mode !== 'real') return { found: true, data: base };
   const [a, r, pl, f] = await Promise.all([
     pullActivities(cache),
@@ -239,7 +248,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of d.activities) ps.activities.set(a.id, actPrint(a));

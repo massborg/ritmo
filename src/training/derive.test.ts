@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { bestEffort, deriveCore, effortKey } from './derive-core';
 import { effortOf } from './derive';
 import { personalBests } from './insights';
-import type { Activity, StreamPoint } from '../lib/types';
+import type { Activity, PlannedSession, StreamPoint } from '../lib/types';
 
 /** A run as 1-second points: pieces of [metres, seconds] run at an even pace. */
 function stream(pieces: [number, number][]): StreamPoint[] {
@@ -112,5 +112,36 @@ describe('run feedback rules', () => {
     expect(res.improve.length).toBeGreaterThan(0);
     expect(text).not.toMatch(/Nothing to change/);
     if (paces.easy[0] < 270) expect(text).not.toMatch(/Slow to that|slow down to/i);
+  });
+});
+
+describe('laps from screenshots', () => {
+  it('finds the warm-up, 6 reps, recoveries and the cool-down, and keeps "not sure" marks', async () => {
+    const { mapLaps } = await import('./laps');
+    const lap = (rep: number, d: number, t: number, hr: number, unsure: string[] = []) => ({ rep, distance_m: d, time_s: t, pace_s_per_km: null, avg_hr: hr, unsure });
+    const laps = [lap(1, 3000, 840, 140)];
+    for (let i = 0; i < 6; i++) { laps.push(lap(laps.length + 1, 1000, 192 + i, 172, i === 2 ? ['time_s'] : [])); if (i < 5) laps.push(lap(laps.length + 1, 400, 150, 150)); }
+    laps.push(lap(laps.length + 1, 2000, 580, 138));
+    const rows = mapLaps(laps);
+    expect(rows[0].kind).toBe('warmup');
+    expect(rows.filter((r) => r.kind === 'work').length).toBe(6);
+    expect(rows.filter((r) => r.kind === 'recovery').length).toBe(5);
+    expect(rows[rows.length - 1].kind).toBe('cooldown');
+    expect(rows.find((r) => r.label === 'Rep 3')!.unsure).toEqual(['time']);
+  });
+});
+
+describe('feedback report', () => {
+  it('a 6 x 1 km session inside target gets a specific verdict and a full breakdown', async () => {
+    const { buildReport } = await import('./report');
+    const reps = Array.from({ length: 6 }, (_, i) => ({ label: `Rep ${i + 1}`, kind: 'work' as const, distanceM: 1000, timeS: 193 - (i === 5 ? 2 : 0), avgHr: 170 + i }));
+    const a = run('m', stream([[10000, 2700]]), { source: 'manual', streams: undefined, reps });
+    const planned = { id: 'p', date: '2026-11-01', type: 'vo2max', title: 'Intervals: 6 x 1 km', distanceM: 10000, durationS: 2700, steps: [{ label: '6 x 1 km', detail: '', kind: 'work', pace: [190, 196] as [number, number] }] } as unknown as PlannedSession;
+    const an = { type: 'vo2max', patterns: {}, score: 90 } as never;
+    const r = buildReport({ a, an, planned, all: [a], units: 'km', typeOf: () => 'vo2max' });
+    expect(r.verdict).toMatch(/^Nailed it: 6 x 1 km averaged 3:1\d\/km, all inside target, last rep fastest\.$/);
+    expect(r.breakdown.find((b) => b.key === 'pace')!.value).toBe(100);
+    expect(r.breakdown.find((b) => b.key === 'completion')!.note).toBe('6 of 6 reps');
+    expect(r.breakdown.find((b) => b.key === 'consistency')!.value).toBeGreaterThan(90);
   });
 });

@@ -30,13 +30,24 @@ const NotFound = lazyPage(() => import('./pages/NotFound'));
 const About = lazyPage(() => import('./pages/About'));
 const Terms = lazyPage(() => import('./pages/Terms'));
 
-const TABS = [
-  { to: '/', label: 'Today', icon: Sun },
+interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
+/** Desktop sidebar: everything */
+const SIDEBAR: Tab[] = [
+  { to: '/', label: 'Training', icon: Sun },
   { to: '/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/progress', label: 'Progress', icon: LineChart },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
   { to: '/profile', label: 'Profile', icon: User },
 ];
+/** Phone tab bar: Training, Calendar, You (Progress with Profile behind a settings button). Coach is a
+ *  floating button on Training, run and session pages, and has an entry in You. */
+const MOBILE: Tab[] = [
+  { to: '/', label: 'Training', icon: Sun },
+  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/progress', label: 'You', icon: User, also: ['/profile', '/coach', '/goals', '/story', '/review'] },
+];
+/** Pages with the floating coach button */
+const COACH_FAB = [/^\/$/, /^\/activity\//, /^\/session\//];
 
 /** Pages anyone can open without an account */
 const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy', '/terms', '/about'];
@@ -190,7 +201,7 @@ function Shell() {
         <aside className="sidebar" aria-label="Main navigation">
           <NavLink to="/" className="sidebar-logo" aria-label="Ritmo, go to Today"><Logo variant="compact" width={112} alt="Ritmo" /></NavLink>
           <nav className="stack-sm" aria-label="Main">
-            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+            {SIDEBAR.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
           </nav>
           <p className="caption sidebar-foot">Train to your own rhythm.</p>
         </aside>
@@ -232,12 +243,15 @@ function Shell() {
           </ChunkBoundary>
         </Gate>
         <UpdateToast />
+        {!bare && COACH_FAB.some((r) => r.test(pathname)) && (
+          <NavLink to="/coach" className="coach-fab" aria-label="Ask your coach"><MessageCircle size={24} strokeWidth={2} aria-hidden="true" /></NavLink>
+        )}
         <LegacyOffer />
         <PlanProblemSheet />
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">
-          {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="tab" onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+          {MOBILE.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${isActive || t.also?.some((p) => pathname.startsWith(p)) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
         </nav>
       )}
     </div>
