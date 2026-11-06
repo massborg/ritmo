@@ -2,7 +2,8 @@
 import type { Activity, BackgroundLevel, GoalType, Plan, Profile, Race } from '../lib/types';
 import { addDays, daysBetween, distanceLabel, duration, parseYmd, ymd } from '../lib/format';
 import { estimateFitness, hrSetup, predictTime, trainingPaces, vdotFromPerformance } from './fitness';
-import { buildPlan, buildStarterPlan } from './plan';
+import { buildStarterPlan } from './plan';
+import { generatePlan, type PlanProblem } from './generator';
 
 export const MIN_AGE = 18;
 export const CONSENT_VERSION = '2026-11';
@@ -106,9 +107,10 @@ export function vdotFromWeeklyKm(km: number): number {
   return 50;
 }
 
-export interface SetupPlanResult { plan: Plan; basis: string; confidence: 'measured' | 'estimated' | 'none' }
+export interface SetupPlanResult { plan: Plan; basis: string; confidence: 'measured' | 'estimated' | 'none'; problem?: PlanProblem }
+export type SetupPlanOutcome = SetupPlanResult | { problem: PlanProblem; plan?: undefined; basis?: undefined; confidence?: undefined };
 
-export function planFromSetup(opts: { profile: Profile; races: Race[]; activities: Activity[]; today: Date }): SetupPlanResult {
+export function planFromSetup(opts: { profile: Profile; races: Race[]; activities: Activity[]; today: Date }): SetupPlanOutcome {
   const { profile, races, activities } = opts;
   const bg = profile.background;
   const start = profile.schedule?.startDate && parseYmd(profile.schedule.startDate) > opts.today ? parseYmd(profile.schedule.startDate) : opts.today;
@@ -134,8 +136,10 @@ export function planFromSetup(opts: { profile: Profile; races: Race[]; activitie
     const recentWeeklyKm = recent.length ? recent.reduce((x, a) => x + a.distanceM, 0) / 4000 : bg?.weeklyKm ?? 15;
     const longest = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), start); return d >= 0 && d < 42; }).reduce((m, a) => Math.max(m, a.distanceM / 1000), 0) || bg?.longestRecentKm || 8;
     const aRace = races.filter((r) => r.date >= ymd(start)).sort((a, b) => a.priority.localeCompare(b.priority) || a.date.localeCompare(b.date))[0];
-    const plan = buildPlan({ today: start, profile, race: aRace, paces: trainingPaces(vdot), recentWeeklyKm, longestRecentKm: longest });
-    result = { plan, basis: `${plan.changes[0].summary} Paces are ${source}.`, confidence };
+    const res = generatePlan({ today: start, profile, race: aRace, paces: trainingPaces(vdot), recentWeeklyKm, longestRecentKm: longest });
+    if (!res.ok) return { problem: res.problem };
+    const plan = res.plan;
+    result = { plan, basis: `${plan.changes[0].summary} Paces are ${source}.${res.warnings.length ? ` ${res.warnings.join(' ')}` : ''}`, confidence };
   }
   // Known time off becomes rest
   const off = profile.schedule?.timeOff ?? [];

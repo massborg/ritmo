@@ -63,6 +63,9 @@ export const daysBetween = (a: Date, b: Date) =>
   Math.round((parseYmd(ymd(b)).getTime() - parseYmd(ymd(a)).getTime()) / 86400000);
 
 /** Monday-based weekday 0..6 */
+/** Whole days from today to a date (0 = today). The one countdown used everywhere. */
+export const daysUntil = (today: Date, date: string) => daysBetween(parseYmd(ymd(today)), parseYmd(date));
+
 export const weekday = (d: Date) => (d.getDay() + 6) % 7;
 
 export const startOfWeek = (d: Date) => addDays(parseYmd(ymd(d)), -weekday(d));

@@ -1,7 +1,7 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
-import { addDays, daysBetween, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
-import { bestEffort, predictTime, vdotFromPerformance } from './fitness';
+import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
+import { bestEffort, predictRace, vdotFromPerformance } from './fitness';
 
 export function totalsBy(activities: Activity[], key: (a: Activity) => string): Map<string, { m: number; n: number; s: number }> {
   const m = new Map<string, { m: number; n: number; s: number }>();
@@ -102,7 +102,7 @@ export interface RaceReadiness {
 }
 
 export function raceReadiness(race: Race, activities: Activity[], vdot: number, today: Date): RaceReadiness {
-  const predictedS = predictTime(vdot, race.distanceM) * (race.courseType === 'trail' ? 1.12 : race.courseType === 'cross-country' ? 1.06 : 1);
+  const predictedS = predictRace(vdot, race.distanceM, activities, today).timeS * (race.courseType === 'trail' ? 1.12 : race.courseType === 'cross-country' ? 1.06 : 1);
   const last42 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d <= 42; });
   const longest = last42.reduce((x, a) => Math.max(x, a.distanceM), 0);
   const weekly = last42.reduce((x, a) => x + a.distanceM, 0) / 6;
@@ -120,7 +120,7 @@ export function raceReadiness(race: Race, activities: Activity[], vdot: number, 
     { label: 'Weekly average, last 6 weeks', value: `${(weekly / 1000).toFixed(0)} km of ${WEEKLY_NEEDED(race.distanceM) / 1000} km`, ok: volScore >= 0.85 },
     { label: 'Consistent weeks (3+ runs), last 8', value: `${consistentWeeks} of 8`, ok: consScore >= 0.85 },
   ];
-  if (race.goalS) parts.push({ label: 'Goal compared with prediction', value: race.goalS >= predictedS ? 'Within reach' : `${Math.round((predictedS - race.goalS) / 60)} min quicker than predicted`, ok: race.goalS >= predictedS * 0.99 });
+  if (race.goalS) parts.push({ label: 'Goal compared with prediction', value: race.goalS >= predictedS ? 'Within reach' : `${predictedS - race.goalS < 90 ? `${Math.round(predictedS - race.goalS)} s` : `${Math.round((predictedS - race.goalS) / 60)} min`} quicker than predicted`, ok: race.goalS >= predictedS * 0.99 });
   const weak = parts.filter((p) => !p.ok).map((p) => p.label.toLowerCase().replace(/, last.*/, ''));
   void weeksActive;
   const summary = score >= 85 ? 'You are well prepared. Trust the work and protect your freshness.'
@@ -153,7 +153,7 @@ export function pacingPlan(race: Race, targetS: number): PacingPlanRow[] {
 }
 
 export function taperGuidance(race: Race, today: Date): string {
-  const d = daysBetween(today, parseYmd(race.date));
+  const d = daysUntil(today, race.date);
   const long = race.distanceM >= 40000;
   if (d < 0) return 'Race complete. Recover with easy running for about one day per 3 km raced before any hard sessions.';
   if (d === 0) return 'Race day. Eat a familiar breakfast 3 hours before, warm up gently, and start at your planned pace, not faster.';

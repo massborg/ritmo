@@ -494,3 +494,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .value-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; position: relative; }
 .value-list li { display: flex; gap: 8px; align-items: flex-start; font: 500 15px/22px var(--font-body); }
 .value-list svg { flex: none; margin-top: 2px; }
+.week-preview { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.week-preview li { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 2px; border-radius: var(--r-input); background: var(--surface-sunken); text-align: center; font-size: 12px; line-height: 16px; min-width: 0; }
+.week-preview li.muted { opacity: 0.6; }
+.week-preview .stat { font-size: 15px; }

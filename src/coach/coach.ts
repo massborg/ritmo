@@ -1,7 +1,7 @@
 // The Ritmo coach. Answers are built only from the runner's computed data (facts), never invented numbers.
 // When the Supabase "coach" function is configured with a Claude API key, it phrases answers from the same facts.
 import type { Activity, PlannedSession, Profile, Race } from '../lib/types';
-import { daysBetween, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units } from '../lib/format';
+import { daysUntil, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units } from '../lib/format';
 import type { StageInfo } from '../training/stage';
 import type { FitnessEstimate, TrainingPaces } from '../training/fitness';
 import type { Readiness } from '../training/load';
@@ -31,6 +31,12 @@ export interface CoachContext {
   runCount: number;
   last?: { activity: Activity; analysis: Analysis };
   hasData: boolean;
+  /** Sessions from Monday this week to a week from today, so questions about a named day can be answered */
+  weekAhead?: PlannedSession[];
+  /** Target for this week, in km */
+  weekTargetKm?: number;
+  /** Longest easy run allowed, minutes */
+  maxEasyMin?: number;
 }
 
 export interface CoachReply { text: string; facts: string[] }
@@ -55,7 +61,7 @@ export function buildFacts(c: CoachContext): string[] {
     f.push(`Paces: easy ${paceRange(c.paces.easy[0], c.paces.easy[1], U)}, marathon ${paceRange(c.paces.marathon[0], c.paces.marathon[1], U)}, threshold ${paceRange(c.paces.threshold[0], c.paces.threshold[1], U)}, interval ${paceRange(c.paces.interval[0], c.paces.interval[1], U)}.`);
   }
   if (c.race) {
-    const d = daysBetween(c.today, parseYmd(c.race.date));
+    const d = daysUntil(c.today, c.race.date);
     f.push(`Next A race: ${c.race.name}, ${distanceLabel(c.race.distanceM)}, ${shortDate(parseYmd(c.race.date))} (${d} days away)${c.race.goalS ? `, goal ${duration(c.race.goalS)}` : ''}.`);
     if (c.raceReadiness) f.push(`Predicted finish ${duration(c.raceReadiness.predictedS)}. Race readiness ${c.raceReadiness.score}/100: ${c.raceReadiness.parts.map((p) => `${p.label} ${p.value}`).join('; ')}.`);
   }
@@ -83,6 +89,33 @@ export function localReply(q: string, c: CoachContext): CoachReply {
 
   if (/chest pain|chest tight|dizz|faint|palpitat|short of breath|can't breathe|cannot breathe/.test(lower)) {
     return { text: 'Please stop exercising. Chest pain, dizziness, fainting or unusual breathlessness need medical advice before you run again. If it is severe or happening now, call your local emergency number. I can give coaching guidance, not medical advice.', facts };
+  }
+
+  // Questions about a particular day: answer with that session's real numbers
+  const dayRef = namedDay(lower, c);
+  if (dayRef && c.weekAhead?.length) {
+    let ses = c.weekAhead.find((x) => x.date === dayRef);
+    let dayName = longDate(parseYmd(dayRef));
+    let lead = '';
+    if (!ses) {
+      // Nothing planned that day (for example before the plan started): talk about the coming one instead
+      const next = new Date(parseYmd(dayRef)); next.setDate(next.getDate() + 7);
+      const nextIso = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+      ses = c.weekAhead.find((x) => x.date === nextIso);
+      if (!ses) return { text: `There is nothing planned on ${dayName}.`, facts };
+      lead = `Nothing was planned on ${dayName}. `;
+      dayName = longDate(next);
+    }
+    if (ses.type === 'rest') return { text: `${lead}${dayName} is a rest day. ${ses.purpose}`, facts: [...facts, `${dayName}: rest day.`] };
+    const km = (ses.distanceM / 1000).toFixed(1);
+    const parts = ses.steps.filter((x) => x.label !== 'Rest').map((x) => `${x.label} ${x.detail}`).join('; ');
+    const wkShare = c.weekTargetKm ? ` That is ${Math.round(ses.distanceM / 10 / c.weekTargetKm)}% of this week's ${c.weekTargetKm} km.` : '';
+    const limits = /(km|long|far|distance|so much|big)/.test(lower) && (ses.type === 'easy' || ses.type === 'recovery')
+      ? ` Easy runs are capped at ${c.maxEasyMin ?? 90} minutes and no run is more than about a third of your week, so it will never be stretched to fill your weekly total.` : '';
+    return {
+      text: `${lead}${dayName} is ${ses.title.toLowerCase()}: ${km} km, about ${Math.round(ses.durationS / 60)} minutes (${parts}). ${ses.purpose} It is in the ${PHASE_LABEL[ses.phase].toLowerCase()} phase: ${PHASE_EXPLAIN[ses.phase].toLowerCase()}${wkShare}${limits}`,
+      facts: [...facts, `${dayName}: ${ses.title}, ${km} km, ${Math.round(ses.durationS / 60)} min. Steps: ${parts}.`],
+    };
   }
   if (PAIN.test(lower)) {
     return {
@@ -132,11 +165,12 @@ export function localReply(q: string, c: CoachContext): CoachReply {
     }
     if (!c.race || !c.raceReadiness) return { text: 'Add a target race in Calendar and I will predict your finish time and track how ready you are.', facts };
     const r = c.raceReadiness, race = c.race;
-    const days = daysBetween(c.today, parseYmd(race.date));
+    const days = daysUntil(c.today, race.date);
+    const gap = race.goalS ? r.predictedS - race.goalS : 0; // positive: prediction slower than goal
+    const gapWords = (sec: number) => (Math.abs(sec) < 90 ? `${Math.round(Math.abs(sec))} seconds` : `${Math.round(Math.abs(sec) / 60)} minutes`);
     const goal = race.goalS
-      ? Math.abs(race.goalS - r.predictedS) < 60 ? `Your fitness predicts ${duration(r.predictedS)}, right on your goal of ${duration(race.goalS)}.`
-        : race.goalS >= r.predictedS ? `Your goal of ${duration(race.goalS)} is within reach: your current fitness predicts ${duration(r.predictedS)}.`
-        : `Your fitness currently predicts ${duration(r.predictedS)}, ${Math.round((r.predictedS - race.goalS) / 60)} minutes slower than your goal of ${duration(race.goalS)}.`
+      ? gap <= 0 ? `Your goal of ${duration(race.goalS)} is within reach: your current fitness predicts ${duration(r.predictedS)}.`
+        : `Your fitness currently predicts ${duration(r.predictedS)}, ${gapWords(gap)} slower than your goal of ${duration(race.goalS)}.`
       : `Your current fitness predicts ${duration(r.predictedS)}.`;
     const weak = r.parts.find((p) => !p.ok);
     return { text: `${goal} Race readiness is ${r.score} out of 100 with ${days} days to go. ${weak ? `The gap is ${weak.label.toLowerCase()} (${weak.value}).` : 'Every marker is where it should be.'} ${r.summary}`, facts };
@@ -210,4 +244,19 @@ export function suggestions(s: PlannedSession | undefined, hasRuns: boolean): st
   if (hasRuns) out.push('How did my last run go?');
   out.push(s?.type === 'runwalk' || !s ? 'How fast should I run?' : 'What is threshold pace?');
   return out;
+}
+
+const DAY_WORDS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+/** The date a question refers to ("Thursday", "tomorrow", "today"), within this week or the next seven days */
+export function namedDay(lower: string, c: CoachContext): string | undefined {
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const add = (n: number) => { const d = new Date(c.today); d.setDate(d.getDate() + n); return iso(d); };
+  if (/\btomorrow\b/.test(lower)) return add(1);
+  if (/\byesterday\b/.test(lower)) return add(-1);
+  const i = DAY_WORDS.findIndex((w) => new RegExp(`\\b${w}\\b`).test(lower));
+  if (i < 0) return undefined;
+  const todayIdx = (c.today.getDay() + 6) % 7;
+  // "Thursday" means this week's Thursday (as on the week view); "next Thursday" means the coming one
+  const diff = i - todayIdx;
+  return add(/\bnext\b/.test(lower) ? (diff > 0 ? diff : diff + 7) : diff);
 }

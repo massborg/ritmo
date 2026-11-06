@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine } from '../components/ui';
-import { daysBetween, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
+import { daysUntil, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import { pacingPlan, raceReadiness, taperGuidance } from '../training/insights';
 import { estimateFitness, predictTime, vdotFromPerformance } from '../training/fitness';
 import type { CourseType, Race, RacePriority } from '../lib/types';
@@ -70,7 +70,7 @@ export default function RacePage() {
   if (!race) return <Empty title="Race not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
 
   const past = race.date < ymd(today);
-  const days = daysBetween(today, parseYmd(race.date));
+  const days = daysUntil(today, race.date);
   const rr = fitness && stage.predictions ? raceReadiness(race, data.activities, fitness.vdot, today) : undefined;
   const target = race.goalS && rr && race.goalS >= rr.predictedS * 0.98 ? race.goalS : rr?.predictedS;
   const pp = target ? pacingPlan(race, target) : [];

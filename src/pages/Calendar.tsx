@@ -43,7 +43,8 @@ export default function Calendar() {
     return (
       <div className="stack">
         {race && <Link to={`/race/${race.id}`} className="card card-link row-between"><span className="row" style={{ gap: 8 }}><Flag size={18} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><span className="label">{race.name}</span></span><span className="tag tag-accent">{race.priority} race</span></Link>}
-        {s && <SessionCard s={s} />}
+        {s && !(s.type === 'rest' && acts.length) && <SessionCard s={s} />}
+        {s?.type === 'rest' && acts.length > 0 && <StatusLine kind="info">Unplanned run on a rest day. It counts toward this week, and the rest of the week adjusts if needed.</StatusLine>}
         {acts.map((a) => (
           <Link key={a.id} to={`/activity/${a.id}`} className="card card-link row-between">
             <span className="stack-sm"><span className="label">{a.name}</span><span className="caption">{TYPE_LABEL[typeOf(a)]}</span></span>
@@ -94,6 +95,12 @@ export default function Calendar() {
 
         {view === 'week' && (
           <div className="card">
+            {(() => {
+              const done = weekDays.reduce((x, d) => x + actsOn(d).reduce((y, a) => y + a.distanceM, 0), 0);
+              const planned = weekDays.reduce((x, d) => { const ss = sessionOn(d); return x + (ss && ss.type !== 'rest' ? ss.distanceM : 0); }, 0);
+              const target = plan?.weeks?.find((w) => w.start === weekDays[0])?.targetKm;
+              return planned + done > 0 ? <p className="caption" style={{ marginBottom: 8 }}>This week: <strong style={{ color: 'var(--ink)' }}>{dist(done, U)}</strong> done{planned ? ` · ${dist(planned, U, 0)} planned` : ''}{target ? ` · target ${dist(target * 1000, U, 0)}` : ''}</p> : null;
+            })()}
             <ul className="list">
               {weekDays.map((d, i) => {
                 const s = sessionOn(d);
@@ -107,10 +114,10 @@ export default function Calendar() {
                         <span className="caption">{parseYmd(d).getDate()}</span>
                       </span>
                       <span className="stack-sm" style={{ gap: 2 }}>
-                        <span className="label">{race ? race.name : s ? s.title : 'Nothing planned'}</span>
-                        <span className="caption">{acts.length ? `${acts.map((a) => dist(a.distanceM, U)).join(' + ')} done` : s && s.type !== 'rest' ? `${s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · ${s.focus}` : ''}</span>
+                        <span className="label">{race ? race.name : acts.length && (!s || s.type === 'rest') ? 'Unplanned run' : s ? s.title : 'Nothing planned'}</span>
+                        <span className="caption">{acts.length ? `${acts.map((a) => dist(a.distanceM, U)).join(' + ')} done${s && s.type !== 'rest' ? ` of ${dist(s.distanceM, U, 0)} planned` : ''}` : s && s.type !== 'rest' ? `${s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · ${s.focus}` : ''}</span>
                       </span>
-                      <span>{acts.length ? <span className="status status-success"><Check size={18} strokeWidth={2} aria-hidden="true" /><span className="sr-only">Done</span></span> : s?.status === 'missed' ? <span className="caption">Missed</span> : null}</span>
+                      <span>{acts.length ? (s && s.type !== 'rest' ? <span className="status status-success"><Check size={18} strokeWidth={2} aria-hidden="true" /><span className="sr-only">Done</span></span> : <span className="tag">Unplanned</span>) : s?.status === 'missed' ? <span className="caption">Missed</span> : null}</span>
                     </button>
                   </li>
                 );
@@ -134,6 +141,7 @@ export default function Calendar() {
                     onClick={() => { setCursor(d); setView('day'); }}>
                     <span className="caption" style={{ color: 'var(--ink)' }}>{d.getDate()}</span>
                     {race ? <span className="cal-pill" style={typeStyle('race')}><span className="pill-long">{race.name}</span><span className="pill-short">Race</span></span>
+                      : acts.length && (!s || s.type === 'rest') ? <span className="cal-pill" style={typeStyle('easy')}><span className="pill-long">Unplanned</span><span className="pill-short">+</span></span>
                       : s && s.type !== 'rest' ? <span className="cal-pill" style={typeStyle(s.type)}><span className="pill-long">{s.focus}</span><span className="pill-short">{s.distanceM > 0 ? (s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(0) : `${Math.round(s.durationS / 60)}′`}</span></span> : null}
                     {acts.length > 0 && <span className="row caption" style={{ gap: 2, color: 'var(--success)' }}><Check size={12} strokeWidth={2.5} aria-hidden="true" />{(acts.reduce((x, a) => x + a.distanceM, 0) / (U === 'km' ? 1000 : 1609.344)).toFixed(0)}</span>}
                   </button>

@@ -1,270 +1,25 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
-import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, Race, SessionFeedback, SessionStep, SessionType } from '../lib/types';
-import { addDays, clamp, daysBetween, DAY_NAMES, distanceLabel, longDate, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
+import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
+import { addDays, daysBetween, DAY_NAMES, longDate, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 
 /** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
 const dayLabel = (d: string) => longDate(parseYmd(d));
 import type { TrainingPaces } from './fitness';
+import { easyRun, generatePlan, type GenInput, type PlanProblem, restDay } from './generator';
 
-const p = (s: number) => {
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
-};
-const pr = (r: [number, number]) => `${p(r[0])}–${p(r[1])}/km`;
 
-interface Ctx {
-  paces: TrainingPaces;
-  race?: Race;
-  goalLabel: string;
+export class PlanNotPossible extends Error {
+  problem: PlanProblem;
+  constructor(problem: PlanProblem) { super(problem.message); this.problem = problem; }
 }
 
-const PEAK_BY_DISTANCE = (m: number) => (m >= 40000 ? 70 : m >= 20000 ? 55 : m >= 9000 ? 45 : 35);
-const LONG_CAP = (m: number) => (m >= 40000 ? 32 : m >= 20000 ? 22 : m >= 9000 ? 18 : 14);
-
-function easySession(date: string, km: number, phase: Phase, ctx: Ctx, recovery = false): PlannedSession {
-  const pace = recovery ? ctx.paces.recovery : ctx.paces.easy;
-  return {
-    id: uid(), date, phase, status: 'planned',
-    type: recovery ? 'recovery' : 'easy',
-    title: recovery ? 'Recovery run' : 'Easy run',
-    focus: recovery ? 'Recovery' : 'Aerobic base',
-    purpose: recovery
-      ? 'Gentle running that helps your legs recover from harder work without adding fatigue.'
-      : 'Builds your aerobic engine: more capillaries, more mitochondria, stronger tendons. Most of your fitness comes from runs like this.',
-    howItHelps: `A bigger aerobic base lets you hold goal pace for longer on race day${ctx.race ? ` at ${ctx.race.name}` : ''}.`,
-    steps: [{ label: `${km.toFixed(0)} km relaxed`, detail: `at ${pr(pace)}, conversational, heart rate in Z${recovery ? 1 : 2}` }],
-    distanceM: km * 1000,
-    durationS: km * (pace[0] + pace[1]) / 2,
-    paceTarget: { minSPerKm: pace[0], maxSPerKm: pace[1] },
-    hrZones: recovery ? [1] : [2],
-  };
+/** Builds a plan, or throws PlanNotPossible with the reason and options when the settings do not fit. */
+export function buildPlan(input: GenInput): Plan {
+  const r = generatePlan(input);
+  if (!r.ok) throw new PlanNotPossible(r.problem);
+  return r.plan;
 }
-
-function longSession(date: string, km: number, phase: Phase, ctx: Ctx): PlannedSession {
-  const isMarathon = (ctx.race?.distanceM ?? 0) >= 40000;
-  const steps: SessionStep[] = [];
-  let title = 'Long run';
-  let focus = 'Endurance';
-  if ((phase === 'peak' || phase === 'build') && isMarathon && km >= 22) {
-    const mpKm = Math.round(km * (phase === 'peak' ? 0.45 : 0.3));
-    title = 'Long run with marathon pace';
-    focus = 'Marathon specific';
-    steps.push({ label: `${km - mpKm} km easy`, detail: `at ${pr(ctx.paces.long)}` });
-    steps.push({ label: `${mpKm} km at marathon pace`, detail: `at ${pr(ctx.paces.marathon)}, practise drinking and fuelling` });
-  } else if (phase === 'peak' && (ctx.race?.distanceM ?? 0) >= 20000 && km >= 16) {
-    title = 'Long run with a fast finish';
-    steps.push({ label: `${km - 5} km easy`, detail: `at ${pr(ctx.paces.long)}` });
-    steps.push({ label: '5 km steady', detail: `at ${pr(ctx.paces.marathon)}, finishing strong` });
-  } else {
-    steps.push({ label: `${km.toFixed(0)} km steady and relaxed`, detail: `at ${pr(ctx.paces.long)}, heart rate in Z2` });
-  }
-  return {
-    id: uid(), date, phase, status: 'planned', type: 'long', title, focus,
-    purpose: 'Teaches your body to burn fat efficiently, strengthens legs and builds the confidence to go the distance.',
-    howItHelps: isMarathon ? 'The single most important session for a strong marathon.' : 'Endurance means you slow down less at the end of your race.',
-    steps, distanceM: km * 1000, durationS: km * (ctx.paces.long[0] + ctx.paces.long[1]) / 2,
-    paceTarget: { minSPerKm: ctx.paces.long[0], maxSPerKm: ctx.paces.long[1] }, hrZones: [2],
-  };
-}
-
-function qualitySession(date: string, kind: SessionType, km: number, phase: Phase, ctx: Ctx): PlannedSession {
-  const P = ctx.paces;
-  const wu: SessionStep = { label: 'Warm up', detail: `2 km easy at ${pr(P.easy)}, then 4 relaxed strides` };
-  const cd: SessionStep = { label: 'Cool down', detail: `2 km easy at ${pr(P.easy)}` };
-  let s: Omit<PlannedSession, 'id' | 'date' | 'phase' | 'status' | 'distanceM' | 'durationS'>;
-  switch (kind) {
-    case 'threshold': {
-      const reps = phase === 'base' ? 3 : phase === 'build' ? 4 : 5;
-      s = {
-        type: 'threshold', title: `Threshold: ${reps} x 1.6 km`, focus: 'Threshold',
-        purpose: 'Raises the pace you can hold before lactate builds up fast. This is the pace you could race for about an hour.',
-        howItHelps: 'A higher threshold makes every race pace from 10K to marathon feel more controlled.',
-        steps: [wu, { label: `${reps} x 1.6 km`, detail: `at ${pr(P.threshold)}, comfortably hard, 90 s easy jog between` }, cd],
-        paceTarget: { minSPerKm: P.threshold[0], maxSPerKm: P.threshold[1] }, hrZones: [4],
-      };
-      break;
-    }
-    case 'vo2max': {
-      const reps = phase === 'build' ? 5 : 6;
-      s = {
-        type: 'vo2max', title: `VO2 max: ${reps} x 1 km`, focus: 'VO2 max',
-        purpose: 'Pushes your heart and lungs close to their maximum, which raises the ceiling of your aerobic fitness.',
-        howItHelps: 'A higher ceiling makes your goal pace a smaller percentage of your maximum.',
-        steps: [wu, { label: `${reps} x 1 km`, detail: `at ${pr(P.interval)}, hard but controlled, 2 min jog between` }, cd],
-        paceTarget: { minSPerKm: P.interval[0], maxSPerKm: P.interval[1] }, hrZones: [5],
-      };
-      break;
-    }
-    case 'tempo': {
-      const tk = clamp(Math.round(km - 4), 4, 12);
-      const isM = (ctx.race?.distanceM ?? 0) >= 40000;
-      s = {
-        type: 'tempo', title: isM ? `Marathon pace: ${tk} km` : `Tempo: ${tk} km`, focus: isM ? 'Marathon pace' : 'Tempo',
-        purpose: isM ? 'Rehearses the exact rhythm you will hold on race day so it becomes automatic.' : 'Steady running just below threshold that builds stamina at faster paces.',
-        howItHelps: 'Makes sustained, honest effort feel familiar.',
-        steps: [wu, { label: `${tk} km steady`, detail: `at ${pr(P.marathon)}, Z3` }, cd],
-        paceTarget: { minSPerKm: P.marathon[0], maxSPerKm: P.marathon[1] }, hrZones: [3],
-      };
-      break;
-    }
-    case 'hills':
-      s = {
-        type: 'hills', title: 'Hills: 8 x 60 s', focus: 'Hill strength',
-        purpose: 'Running uphill builds leg strength and power with less impact than flat speed work.',
-        howItHelps: 'Stronger legs hold their form late in a race.',
-        steps: [wu, { label: '8 x 60 s uphill', detail: 'strong effort on a steady 4–6% hill, jog back down' }, cd],
-        hrZones: [4, 5],
-      };
-      break;
-    case 'speed':
-    default:
-      s = {
-        type: 'speed', title: 'Easy run with strides', focus: 'Speed',
-        purpose: 'Short, relaxed bursts that keep your legs quick and your form efficient without tiring you.',
-        howItHelps: 'Good running economy means every pace costs less energy.',
-        steps: [{ label: `${Math.max(4, km - 1).toFixed(0)} km easy`, detail: `at ${pr(P.easy)}` }, { label: '6 x 20 s strides', detail: `quick and relaxed around ${p(P.repetition[0])}/km, full recovery` }],
-        paceTarget: { minSPerKm: P.easy[0], maxSPerKm: P.easy[1] }, hrZones: [2],
-      };
-  }
-  const avgPace = s.paceTarget ? (s.paceTarget.minSPerKm + s.paceTarget.maxSPerKm) / 2 : P.easy[0];
-  return { ...s, id: uid(), date, phase, status: 'planned', distanceM: km * 1000, durationS: km * (avgPace * 0.4 + P.easy[1] * 0.6) };
-}
-
-function raceSession(date: string, race: Race, ctx: Ctx): PlannedSession {
-  return {
-    id: uid(), date, phase: 'race', status: 'planned', type: 'race', title: race.name, focus: 'Race',
-    purpose: 'Race day. Everything you have done has been building to this.',
-    howItHelps: 'Run your pacing plan, start controlled and finish strong.',
-    steps: [{ label: 'Race', detail: `${distanceLabel(race.distanceM)}${race.goalS ? `, goal ${Math.floor(race.goalS / 3600)}:${String(Math.floor((race.goalS % 3600) / 60)).padStart(2, '0')}:${String(Math.round(race.goalS % 60)).padStart(2, '0')}` : ''}` }],
-    distanceM: race.distanceM, durationS: race.goalS ?? race.distanceM * ctx.paces.marathon[0] / 1000,
-  };
-}
-
-function restSession(date: string, phase: Phase): PlannedSession {
-  return {
-    id: uid(), date, phase, status: 'planned', type: 'rest', title: 'Rest day', focus: 'Recovery',
-    purpose: 'Fitness is built while you recover. Rest lets your body adapt to the training.',
-    howItHelps: 'Arriving fresh at your key sessions makes them count.',
-    steps: [{ label: 'Rest', detail: 'Optional: a walk, mobility or gentle stretching' }],
-    distanceM: 0, durationS: 0,
-  };
-}
-
-export interface PlanInput {
-  today: Date;
-  profile: Profile;
-  race?: Race;
-  paces: TrainingPaces;
-  recentWeeklyKm: number; // average of last 4 weeks
-  longestRecentKm: number; // longest in last 6 weeks
-}
-
-export function buildPlan(input: PlanInput): Plan {
-  const { today, profile, race, paces } = input;
-  const start = startOfWeek(today);
-  const end = race ? parseYmd(race.date) : addDays(start, 12 * 7 - 1);
-  const totalWeeks = Math.max(1, Math.ceil((daysBetween(start, end) + 1) / 7));
-  const raceM = race?.distanceM ?? 10000;
-  const taperWeeks = totalWeeks < 4 ? 1 : raceM >= 40000 ? 2 : 1;
-  const trainWeeks = Math.max(0, totalWeeks - taperWeeks);
-  const baseW = Math.round(trainWeeks * 0.4), buildW = Math.round(trainWeeks * 0.35);
-  const ctx: Ctx = { paces, race, goalLabel: race ? race.name : profile.goal };
-
-  const cur = Math.max(15, input.recentWeeklyKm);
-  const peak = clamp(PEAK_BY_DISTANCE(raceM), cur, cur * 1.45);
-  const days = profile.daysAvailable.length ? [...profile.daysAvailable].sort() : [1, 3, 5, 6];
-  const longDay = days.includes(profile.longRunDay) ? profile.longRunDay : days[days.length - 1];
-
-  const sessions: PlannedSession[] = [];
-  const phases: Plan['phases'] = [];
-  let vol = cur;
-  let longKm = Math.max(8, input.longestRecentKm);
-  for (let w = 0; w < totalWeeks; w++) {
-    const ws = addDays(start, w * 7);
-    let phase: Phase = w < baseW ? 'base' : w < baseW + buildW ? 'build' : w < trainWeeks ? 'peak' : 'taper';
-    const recoveryWeek = phase !== 'taper' && w > 0 && (w + 1) % 4 === 0 && w < trainWeeks - 1;
-    if (recoveryWeek) phase = 'recovery';
-    const last = phases[phases.length - 1];
-    if (last && last.phase === phase) last.end = ymd(addDays(ws, 6));
-    else phases.push({ phase, start: ymd(ws), end: ymd(addDays(ws, 6)) });
-
-    // Weekly volume, no more than 10% up on the previous normal week
-    let weekVol: number;
-    if (phase === 'taper') {
-      const fromEnd = totalWeeks - w; // 1 = race week
-      weekVol = peak * (fromEnd === 1 ? 0.5 : 0.7);
-    } else if (recoveryWeek) {
-      weekVol = vol * 0.75;
-    } else {
-      vol = Math.min(peak, w === 0 ? cur : vol * 1.08);
-      weekVol = vol;
-    }
-    const longTarget = phase === 'taper' ? Math.min(longKm, LONG_CAP(raceM)) * (totalWeeks - w === 1 ? 0 : totalWeeks - w === 2 ? 0.75 : 0.6)
-      : recoveryWeek ? longKm * 0.75
-      : (longKm = Math.min(LONG_CAP(raceM), longKm + (w === 0 ? 0 : 1.5), weekVol * 0.38));
-
-    // Pick quality days: not the long-run day, not the day before it, spread apart
-    const others = days.filter((d) => d !== longDay);
-    const quality: number[] = [];
-    const nQuality = phase === 'recovery' ? 0 : phase === 'taper' ? 1 : phase === 'base' ? 1 : days.length >= 4 ? 2 : 1;
-    for (const d of others) {
-      if (quality.length >= nQuality) break;
-      if (d === (longDay + 6) % 7) continue; // day before long run
-      if (quality.some((q) => Math.abs(q - d) < 2)) continue;
-      quality.push(d);
-    }
-
-    const qualityKinds: SessionType[] =
-      phase === 'base' ? [w % 2 === 0 ? 'speed' : 'hills']
-      : phase === 'build' ? ['threshold', raceM >= 40000 ? 'tempo' : 'vo2max']
-      : phase === 'peak' ? (raceM >= 20000 ? ['threshold', 'tempo'] : ['vo2max', 'threshold'])
-      : ['threshold'];
-
-    const raceDate = race ? race.date : undefined;
-    const easyCount = days.length - 1 - quality.length;
-    const qKm = clamp(weekVol * 0.17, 6, 14);
-    const easyKm = easyCount > 0 ? Math.max(4, (weekVol - longTarget - qKm * quality.length) / easyCount) : 0;
-
-    for (let d = 0; d < 7; d++) {
-      const date = ymd(addDays(ws, d));
-      if (raceDate && date > raceDate) break;
-      if (race && date === raceDate) { sessions.push(raceSession(date, race, ctx)); continue; }
-      if (raceDate && daysBetween(parseYmd(date), parseYmd(raceDate)) === 1) { sessions.push(restSession(date, 'taper')); continue; }
-      if (!days.includes(d)) { sessions.push(restSession(date, phase)); continue; }
-      if (d === longDay && longTarget > 0) { sessions.push(longSession(date, Math.round(longTarget), phase, ctx)); continue; }
-      const qi = quality.indexOf(d);
-      if (qi >= 0) {
-        const kind = qualityKinds[qi] ?? 'speed';
-        const sess = qualitySession(date, phase === 'taper' ? 'threshold' : kind, Math.round(phase === 'taper' ? qKm * 0.7 : qKm), phase, ctx);
-        if (phase === 'taper') {
-          sess.title = 'Sharpener: 3 x 1 km';
-          sess.steps = [{ label: 'Warm up', detail: `2 km easy at ${pr(paces.easy)}` }, { label: '3 x 1 km', detail: `at ${pr(paces.threshold)}, 2 min jog between. Short and crisp.` }, { label: 'Cool down', detail: '1–2 km easy' }];
-          sess.purpose = 'Keeps your legs sharp while fatigue drops before the race.';
-        }
-        sessions.push(sess);
-        continue;
-      }
-      sessions.push(easySession(date, Math.round(easyKm), phase, ctx, d === (longDay + 1) % 7));
-    }
-  }
-
-  return {
-    id: uid(),
-    raceId: race?.id,
-    createdAt: new Date().toISOString(),
-    startDate: ymd(start),
-    endDate: ymd(end),
-    phases,
-    sessions,
-    changes: [{
-      id: 'built',
-      at: new Date().toISOString(),
-      reason: 'rebuilt',
-      summary: `Built a ${totalWeeks}-week plan${race ? ` for ${race.name}` : ''} from your recent average of ${Math.round(input.recentWeeklyKm)} km a week, rising to about ${Math.round(peak)} km at peak. Long runs build from ${Math.round(input.longestRecentKm)} km on ${DAY_NAMES[longDay]}s.`,
-    }],
-  };
-}
+export type PlanInput = GenInput;
 
 export const PHASE_LABEL: Record<Phase, string> = {
   base: 'Base', build: 'Build', peak: 'Peak', taper: 'Taper', recovery: 'Recovery week', race: 'Race',
@@ -323,9 +78,36 @@ export function adaptPlan(opts: {
   const upcoming = plan.sessions.filter((s) => s.date >= t && s.status === 'planned');
   const toEasy = (s: PlannedSession, why: string) => {
     if (s.type === 'runwalk' || s.type === 'timetrial') { Object.assign(s, { ...walkSession(s.date, s.phase), id: s.id, purpose: `${why} ${walkSession(s.date, s.phase).purpose}` }); return; }
-    const e = easySession(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces, goalLabel: '' });
+    const e = easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces });
     Object.assign(s, { ...e, id: s.id, title: 'Easy run (adjusted)', purpose: `${why} ${e.purpose}` });
   };
+
+  // 1b) Runs on rest days (or before the plan started this week) still count. If the week would now
+  // overshoot its target, the remaining easy runs this week are trimmed, and the change is explained.
+  const wkStart = ymd(startOfWeek(today));
+  const wkEnd = ymd(addDays(startOfWeek(today), 6));
+  const target = plan.weeks?.find((w) => w.start === wkStart)?.targetKm;
+  if (target) {
+    const doneKm = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkStart && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
+    const todayDone = (byDate.get(t) ?? []).reduce((x, a) => x + a.distanceM, 0) / 1000;
+    const rest = plan.sessions.filter((s) => s.date >= t && s.date <= wkEnd && s.status === 'planned' && !(s.date === t && todayDone > 0));
+    const over = doneKm + todayDone + rest.reduce((x, s) => x + s.distanceM, 0) / 1000 - target;
+    const unplanned = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkStart && d < t && !plan.sessions.some((s) => s.date === d && s.type !== 'rest'); });
+    const id = `rebalance:${wkStart}:${unplanned.map((a) => a.id).join(',')}`;
+    if (over > 3 && unplanned.length && !has(id)) {
+      const easy = rest.filter((s) => s.type === 'easy' || s.type === 'recovery').sort((a, b) => b.distanceM - a.distanceM);
+      let left = over;
+      const notes: string[] = [];
+      for (const s of easy) {
+        if (left <= 0.5) break;
+        const before = s.distanceM / 1000;
+        const after = Math.max(0, Math.round((before - left) * 10) / 10);
+        if (after < 4) { Object.assign(s, { ...restDay(s.date, s.phase, 'Rest instead of an easy run, because you have already run extra this week.'), id: s.id }); notes.push(`${dayLabel(s.date)}: ${before.toFixed(1)} km easy → rest`); left -= before; }
+        else { const e = easyRun(s.date, after, s.phase, { paces }); Object.assign(s, { ...e, id: s.id, title: `${s.title} (shortened)` }); notes.push(`${dayLabel(s.date)}: ${before.toFixed(1)} → ${after.toFixed(1)} km`); left -= before - after; }
+      }
+      if (notes.length) log(id, 'rebuilt', `You ran ${unplanned.reduce((x, a) => x + a.distanceM, 0) / 1000 > 0 ? (unplanned.reduce((x, a) => x + a.distanceM, 0) / 1000).toFixed(1) : '0'} km on days with no session planned, so this week was heading ${over.toFixed(0)} km over its ${target} km target. Easy runs adjusted: ${notes.join('; ')}. Key sessions stay as planned.`);
+    }
+  }
 
   // 2) Missed sessions
   const recentMissed = plan.sessions.filter((s) => s.status === 'missed' && daysBetween(parseYmd(s.date), today) <= 7);
@@ -391,7 +173,7 @@ export function adaptPlan(opts: {
     const id = `illness:${profile.illnessUntil}`;
     if (!has(id)) {
       for (const s of upcoming) {
-        if (s.date <= profile.illnessUntil && s.type !== 'race') Object.assign(s, { ...restSession(s.date, s.phase), id: s.id });
+        if (s.date <= profile.illnessUntil && s.type !== 'race') Object.assign(s, { ...restDay(s.date, s.phase), id: s.id });
         else if (daysBetween(parseYmd(profile.illnessUntil), parseYmd(s.date)) <= 4 && s.type !== 'rest' && s.type !== 'race') toEasy(s, 'Easing back after illness.');
       }
       log(id, 'illness', `You reported feeling unwell. Sessions until ${profile.illnessUntil} are now rest, and the following four days are easy only. If you had a fever or chest symptoms, wait until you have been symptom-free for at least a day before running.`);
@@ -404,7 +186,7 @@ export function adaptPlan(opts: {
     const id = `pain:${f.activityId}`;
     if (has(id)) continue;
     const next2 = upcoming.filter((s) => daysBetween(today, parseYmd(s.date)) <= 2 && s.type !== 'rest' && s.type !== 'race');
-    next2.forEach((s, i) => (i === 0 ? Object.assign(s, { ...restSession(s.date, s.phase), id: s.id }) : toEasy(s, 'Adjusted because you logged pain.')));
+    next2.forEach((s, i) => (i === 0 ? Object.assign(s, { ...restDay(s.date, s.phase), id: s.id }) : toEasy(s, 'Adjusted because you logged pain.')));
     log(id, 'pain', `You logged ${f.pain.map((x) => x.area.toLowerCase()).join(' and ')} pain, so the next two days are rest and easy running. This is coaching, not medical advice: if pain persists, gets worse or changes how you run, please see a physio or doctor.${f.pain.some((x) => /chest|dizz/i.test(x.area)) ? ' Chest pain, dizziness or fainting need medical advice before you exercise again.' : ''}`);
   }
 
@@ -434,6 +216,7 @@ export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan
   const from = a.date;
   a.date = toDate;
   a.movedFrom = from;
+  a.status = 'planned'; // a session moved to another day is planned again (even if it was missed)
   if (b) { b.date = from; b.movedFrom = toDate; }
   sessions.sort((x, y) => x.date.localeCompare(y.date));
   const warn = b && KEY.includes(b.type) && KEY.includes(a.type) && Math.abs(daysBetween(parseYmd(from), parseYmd(toDate))) === 1;
@@ -544,7 +327,7 @@ export function buildStarterPlan(input: { today: Date; profile: Profile; canRun1
       firstDate ??= key;
       i++;
     } else if (firstDate) {
-      sessions.push({ ...restSession(key, phase), purpose: 'Rest days are when your body adapts and gets stronger. A gentle walk is fine.' });
+      sessions.push({ ...restDay(key, phase), purpose: 'Rest days are when your body adapts and gets stronger. A gentle walk is fine.' });
     }
     d = addDays(d, 1);
   }
@@ -561,4 +344,51 @@ export function buildStarterPlan(input: { today: Date; profile: Profile; canRun1
       summary: `Built a ${weeks}-week run/walk plan on ${dayNames}. You start with ${first[2]} x ${fmtS(first[0])} of easy running with walking breaks and build to 30 minutes of continuous running, then a 5K at your own pace. Go by feel: you should be able to talk the whole time.`,
     }],
   };
+}
+
+/** A key session missed recently that the runner has not dealt with yet */
+export function missedKeySession(plan: Plan, today: Date): PlannedSession | undefined {
+  const t = ymd(today);
+  const wkEnd = ymd(addDays(startOfWeek(today), 6));
+  return plan.sessions.filter((s) => s.status === 'missed' && KEY.includes(s.type) && s.type !== 'race' && daysBetween(parseYmd(s.date), today) <= 3 && s.date < t && wkEnd >= s.date
+    && !plan.changes.some((c) => c.id === `missed-handled:${s.id}`)).sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
+/**
+ * Days a missed key session could move to: later this week, onto an easy or rest day, never next to
+ * another hard day, and not in the last two days before a race.
+ */
+export function missedMoveOptions(plan: Plan, sessionId: string, today: Date): string[] {
+  const s = plan.sessions.find((x) => x.id === sessionId);
+  if (!s) return [];
+  const t = ymd(today);
+  const wkEnd = ymd(addDays(startOfWeek(today), 6));
+  const race = plan.sessions.find((x) => x.type === 'race');
+  const hardOn = (d: string) => plan.sessions.some((x) => x.date === d && x.id !== s.id && KEY.includes(x.type));
+  const out: string[] = [];
+  for (let d = t; d <= wkEnd; d = ymd(addDays(parseYmd(d), 1))) {
+    const on = plan.sessions.find((x) => x.date === d);
+    if (on && !['easy', 'recovery', 'rest'].includes(on.type)) continue;
+    if (race && daysBetween(parseYmd(d), parseYmd(race.date)) <= 2) continue;
+    if (hardOn(ymd(addDays(parseYmd(d), -1))) || hardOn(ymd(addDays(parseYmd(d), 1)))) continue;
+    out.push(d);
+  }
+  return out;
+}
+
+/** Record that the runner chose to let a missed session go, so they are not asked again */
+export function dropMissed(plan: Plan, sessionId: string, movedFrom?: string): Plan {
+  const s = plan.sessions.find((x) => x.id === sessionId);
+  if (!s) return plan;
+  const summary = movedFrom
+    ? `${s.title} moved from ${dayLabel(movedFrom)}, when it was missed, to ${dayLabel(s.date)}, with an easier day either side.`
+    : `You let ${s.title.toLowerCase()} on ${dayLabel(s.date)} go. That is fine: one missed session costs almost nothing, and the rest of the week stays as planned.`;
+  return { ...plan, changes: [...plan.changes, { id: `missed-handled:${s.id}`, at: new Date().toISOString(), reason: 'missed', summary }] };
+}
+
+/** Runs on days with no session planned (rest days, or before the plan started) */
+export function isUnplanned(plan: Plan | undefined, date: string): boolean {
+  if (!plan) return false;
+  const s = plan.sessions.find((x) => x.date === date);
+  return !s || s.type === 'rest';
 }

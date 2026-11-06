@@ -122,6 +122,21 @@ export interface Profile {
   setupStep?: string; // last completed setup step, to resume on any device
   setupStepsDone?: string[]; // optional steps already seen (e.g. "runs" skipped)
   setupCompletedAt?: string;
+  /** How the runner wants to train. Anything missing falls back to a sensible default. */
+  training?: TrainingSettings;
+}
+
+export interface TrainingSettings {
+  weeklyKm?: number; // starting weekly volume; defaults to the recent average
+  peakKm?: number; // where the plan builds to
+  progression?: 'maintain' | 'steady' | 'progressive' | 'aggressive';
+  daysPerWeek?: number; // 2–7, at most the available days
+  dayAfterLong?: 'easy' | 'off';
+  cutbackEvery?: 3 | 4;
+  maxEasyMin?: number;
+  maxQualityMin?: number;
+  maxLongMin?: number;
+  startMode?: 'today' | 'monday';
 }
 
 export interface Consents {
@@ -159,6 +174,12 @@ export interface TrainingSchedule {
 export interface SessionStep {
   label: string; // e.g. "Warm up", "6 x 800 m"
   detail: string; // e.g. "at 4:05/km, 90 s jog between"
+  /** Structured parts, so distance and time always add up. Total km of this step, including any recoveries. */
+  km?: number;
+  durationS?: number;
+  pace?: [number, number]; // s/km fast, slow
+  zones?: number[];
+  kind?: 'warmup' | 'work' | 'steady' | 'cooldown' | 'easy' | 'strides';
 }
 
 export interface PlannedSession {
@@ -189,6 +210,8 @@ export interface PlanChange {
   summary: string; // plain-English explanation shown to the runner
 }
 
+export interface PlanWeek { start: string; targetKm: number; phase: Phase; cutback?: boolean }
+
 export interface Plan {
   id: string;
   /** Why this plan was chosen, and how confident its numbers are, in plain words */
@@ -201,6 +224,8 @@ export interface Plan {
   phases: { phase: Phase; start: string; end: string }[];
   sessions: PlannedSession[];
   changes: PlanChange[];
+  /** Weekly volume targets, so screens can compare planned, done and target */
+  weeks?: PlanWeek[];
 }
 
 export interface SourceStatus {
@@ -217,4 +242,6 @@ export interface CoachMessage {
   text: string;
   at: string;
   facts?: string[]; // data the answer is grounded on
+  /** Chats with sample data are kept apart from the runner's own */
+  mode?: 'sample' | 'real';
 }

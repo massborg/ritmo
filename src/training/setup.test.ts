@@ -87,14 +87,14 @@ describe('first plan from setup', () => {
   it('beginners get a run/walk plan set by effort', () => {
     const r = planFromSetup({ profile: { ...complete, background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
     expect(r.confidence).toBe('none');
-    expect(r.plan.sessions.some((s) => s.type === 'runwalk')).toBe(true);
-    expect(r.plan.basis).toMatch(/new to running/);
+    expect(r.plan!.sessions.some((s) => s.type === 'runwalk')).toBe(true);
+    expect(r.plan!.basis).toMatch(/new to running/);
   });
   it('a runner with only weekly distance gets estimated paces, labelled as such', () => {
     const r = planFromSetup({ profile: complete, races: [], activities: [], today });
     expect(r.confidence).toBe('estimated');
     expect(r.basis).toMatch(/estimated from your typical 30 km/);
-    expect(r.plan.paceConfidence).toBe('estimated');
+    expect(r.plan!.paceConfidence).toBe('estimated');
   });
   it('a recent race time sets paces', () => {
     const r = planFromSetup({ profile: { ...complete, background: { level: 'racer', weeklyKm: 40, recentRace: { distanceM: 10000, timeS: 45 * 60 } } }, races: [], activities: [], today });
@@ -102,7 +102,7 @@ describe('first plan from setup', () => {
   });
   it('time off becomes rest', () => {
     const r = planFromSetup({ profile: { ...complete, schedule: { sessionMinutes: 45, startDate: ymd(today), timeOff: [{ from: ymd(addDays(today, 3)), to: ymd(addDays(today, 9)) }] } }, races: [], activities: [], today });
-    const off = r.plan.sessions.filter((s) => s.date >= ymd(addDays(today, 3)) && s.date <= ymd(addDays(today, 9)));
+    const off = r.plan!.sessions.filter((s) => s.date >= ymd(addDays(today, 3)) && s.date <= ymd(addDays(today, 9)));
     expect(off.length).toBeGreaterThan(0);
     expect(off.every((s) => s.type === 'rest')).toBe(true);
     expect(r.basis).toMatch(/time off/);

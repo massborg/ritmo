@@ -1,6 +1,6 @@
 // Fitness model: VDOT (Daniels/Gilbert), race predictions, training paces and heart-rate zones.
-import type { Activity, Profile, StreamPoint } from '../lib/types';
-import { shortDate } from '../lib/format';
+import type { Activity, Profile, Race, StreamPoint } from '../lib/types';
+import { distanceLabel, duration, shortDate } from '../lib/format';
 
 /** Oxygen cost of running at v metres/minute */
 const vo2AtV = (v: number) => -4.6 + 0.182258 * v + 0.000104 * v * v;
@@ -48,9 +48,10 @@ export function trainingPaces(vdot: number): TrainingPaces {
   const mp = predictTime(vdot, 42195) / 42.195;
   const rep = predictTime(vdot, 1609.344) / 1.609344;
   return {
-    easy: [paceAtPct(vdot, 0.74), paceAtPct(vdot, 0.65)],
-    recovery: [paceAtPct(vdot, 0.64), paceAtPct(vdot, 0.58)],
-    long: [paceAtPct(vdot, 0.75), paceAtPct(vdot, 0.66)],
+    // Easy running sits well below marathon effort (Daniels' tables): about 59–68% of VO2max
+    easy: [paceAtPct(vdot, 0.68), paceAtPct(vdot, 0.59)],
+    recovery: [paceAtPct(vdot, 0.58), paceAtPct(vdot, 0.53)],
+    long: [paceAtPct(vdot, 0.69), paceAtPct(vdot, 0.6)],
     marathon: [mp - 4, mp + 4],
     threshold: [paceAtPct(vdot, 0.885), paceAtPct(vdot, 0.855)],
     interval: [paceAtPct(vdot, 0.985), paceAtPct(vdot, 0.955)],
@@ -115,22 +116,50 @@ export interface FitnessEstimate {
 }
 
 const EFFORT_DISTANCES = [5000, 10000, 21097.5];
+/** Distances people race, for spotting races in imported files (which rarely say "race") */
+const RACE_DISTANCES_M = [3000, 5000, 8000, 10000, 15000, 16093.4, 21097.5, 42195];
+const RACE_NAME = /\b(race|parkrun|gara|corsa|marathon|half|10 ?k|5 ?k|xc|cross country|championship)\b/i;
+
+/** The standard race distance a run matches (GPS distances are allowed about 4% either way), if any */
+export function raceDistanceOf(distanceM: number): number | undefined {
+  return RACE_DISTANCES_M.find((d) => Math.abs(distanceM - d) / d <= 0.04);
+}
 
 /**
- * Estimate VDOT at a given date from the previous 120 days.
- * Races count fully; hard training efforts are discounted because they are rarely all-out.
+ * Whether a run was very probably a race or all-out effort, so it counts at full value for fitness.
+ * Imported files almost never carry a race flag, so this looks at distance, effort, name and saved races.
  */
-export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Date()): FitnessEstimate | undefined {
+export function likelyRace(a: Activity, hr: HrSetup, races: Race[] = []): boolean {
+  if (a.isRace || a.isTimeTrial) return true;
+  const d = raceDistanceOf(a.distanceM);
+  if (!d) return false;
+  const day = a.startTime.slice(0, 10);
+  if (races.some((r) => r.date === day && Math.abs(r.distanceM - a.distanceM) / r.distanceM <= 0.08)) return true;
+  if (RACE_NAME.test(a.name)) return true;
+  // Hard all the way: average heart rate at or above about 85% of heart-rate reserve over a race distance
+  return !!a.avgHr && a.avgHr >= hr.rest + 0.85 * (hr.max - hr.rest);
+}
+
+const GENERIC_NAME = /^(run|running|morning run|afternoon run|evening run|lunch run|night run|corsa|activity)$/i;
+const effortLabel = (a: Activity, distanceM: number, timeS: number, when: string) =>
+  `your ${a.name && !GENERIC_NAME.test(a.name.trim()) ? a.name : distanceLabel(distanceM).replace(/^\w/, (c) => c.toLowerCase())} in ${duration(timeS)} on ${when}`;
+
+/**
+ * Estimate VDOT at a given date from the previous 120 days, using the best performance weighted by how
+ * recent it is. Races (including ones recognised from imported files) count fully; hard training efforts
+ * are discounted because they are rarely all-out.
+ */
+export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Date(), races: Race[] = []): FitnessEstimate | undefined {
   const from = at.getTime() - 120 * 86400000;
   let best: FitnessEstimate | undefined;
   for (const a of activities) {
     const t = new Date(a.startTime).getTime();
     if (t < from || t > at.getTime() || a.distanceM < 3000) continue;
     const hardHr = a.avgHr ? a.avgHr >= hr.rest + 0.82 * (hr.max - hr.rest) : false;
-    const allOut = a.isRace || a.isTimeTrial;
+    const allOut = likelyRace(a, hr, races);
     const when = shortDate(new Date(a.startTime));
     const candidates: { v: number; label: string; allOut: boolean }[] = [];
-    if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isRace ? `your ${a.name} on ${when}` : `your time trial on ${when}`, allOut: true });
+    if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isTimeTrial ? `your time trial on ${when}` : effortLabel(a, raceDistanceOf(a.distanceM) ?? a.distanceM, a.movingS * ((raceDistanceOf(a.distanceM) ?? a.distanceM) / a.distanceM), when), allOut: true });
     if (a.streams?.length) {
       for (const d of EFFORT_DISTANCES) {
         const e = bestEffort(a.streams, d);
@@ -160,4 +189,26 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
     return { vdot: vo2AtV(v) / 0.7, basedOn: 'your typical easy pace', date: new Date(at).toISOString().slice(0, 10), confidence: 'low' };
   }
   return best;
+}
+
+/** Fastest time over a distance in the last `days` days: whole runs of that distance (scaled) and best efforts inside runs. */
+export function recentBest(activities: Activity[], distanceM: number, at = new Date(), days = 56): { timeS: number; date: string } | undefined {
+  const from = at.getTime() - days * 86400000;
+  let best: { timeS: number; date: string } | undefined;
+  for (const a of activities) {
+    const t = new Date(a.startTime).getTime();
+    if (t < from || t > at.getTime()) continue;
+    const times: number[] = [];
+    if (Math.abs(a.distanceM - distanceM) / distanceM <= 0.04) times.push(a.movingS * (distanceM / a.distanceM));
+    if (a.streams?.length) { const e = bestEffort(a.streams, distanceM); if (e) times.push(e); }
+    for (const x of times) if (!best || x < best.timeS) best = { timeS: x, date: a.startTime.slice(0, 10) };
+  }
+  return best;
+}
+
+/** Race prediction: from fitness, but never slower than something the runner has actually run in the last 8 weeks. */
+export function predictRace(vdot: number, distanceM: number, activities: Activity[], at = new Date()): { timeS: number; fromRecentBest?: { timeS: number; date: string } } {
+  const model = predictTime(vdot, distanceM);
+  const pb = recentBest(activities, distanceM, at);
+  return pb && pb.timeS < model ? { timeS: pb.timeS, fromRecentBest: pb } : { timeS: model };
 }

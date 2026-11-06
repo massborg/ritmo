@@ -8,13 +8,13 @@ import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
 import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { easyHardBalance, monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
 import { PHASE_LABEL } from '../training/plan';
-import { estimateFitness, predictTime } from '../training/fitness';
+import { estimateFitness, predictRace } from '../training/fitness';
 import { zoneTime } from '../training/analysis';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function Progress() {
-  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan } = useApp();
+  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness } = useApp();
   const U = data.profile.units;
   const acts = data.activities;
   const [period, setPeriod] = useState<Period>('week');
@@ -80,15 +80,14 @@ export default function Progress() {
     const labels: string[] = [], five: (number | null)[] = [], ten: (number | null)[] = [], half: (number | null)[] = [], mar: (number | null)[] = [];
     for (let i = 23; i >= 0; i -= 1) {
       const d = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
-      const f = estimateFitness(acts, hr, d > today ? today : d);
+      const at = d > today ? today : d;
+      const f = estimateFitness(acts, hr, at, data.races);
       labels.push(`${MONTHS[d.getMonth()]}${d.getMonth() === 0 ? ` ${String(d.getFullYear()).slice(2)}` : ''}`);
-      five.push(f ? predictTime(f.vdot, 5000) / 60 : null);
-      ten.push(f ? predictTime(f.vdot, 10000) / 60 : null);
-      half.push(f ? predictTime(f.vdot, 21097.5) / 60 : null);
-      mar.push(f ? predictTime(f.vdot, 42195) / 60 : null);
+      const pr = (m: number) => (f ? predictRace(f.vdot, m, acts, at).timeS / 60 : null);
+      five.push(pr(5000)); ten.push(pr(10000)); half.push(pr(21097.5)); mar.push(pr(42195));
     }
     return { labels, five, ten, half, mar };
-  }, [acts, today, hr]);
+  }, [acts, today, hr, data.races]);
 
   if (!acts.length) return (
     <div className="stack-lg">
@@ -174,7 +173,7 @@ export default function Progress() {
 {stage.predictions ? (
         <section className="card stack" aria-labelledby="est">
           <h2 id="est" className="title">Estimated race times</h2>
-          <p className="caption">Minutes, last 24 months. Lower is faster.</p>
+          <p className="caption">Minutes, last 24 months. Lower is faster. Now based on {fitness?.basedOn ?? 'your recent runs'}, and never slower than a time you have run in the last 8 weeks.</p>
           <LineChart labels={est.labels} every={4} format={(v) => duration(v * 60).replace(/:\d\d$/, '')} series={[{ name: 'Half marathon', values: est.half, color: 'var(--brand)' }, { name: '10K', values: est.ten, color: 'var(--ink)' }]} />
           <div className="grid-3">
             {[['5K', est.five], ['10K', est.ten], ['Half', est.half], ['Marathon', est.mar]].map(([l, v]) => {

@@ -143,6 +143,27 @@ function LegacyOffer() {
   );
 }
 
+/** When a plan cannot be built as asked: the reason, and one-tap options. Nothing is changed silently. */
+function PlanProblemSheet() {
+  const { planProblem, applyPlanOption, dismissPlanProblem } = useApp();
+  const nav = useNavigate();
+  const [msg, setMsg] = useState<string>();
+  if (!planProblem) return null;
+  return (
+    <Sheet open onClose={dismissPlanProblem} title={planProblem.kind === 'doesNotFit' ? 'That week does not fit' : 'The plan could not be built'}
+      footer={<div className="stack-sm">
+        {planProblem.options.map((o) => (
+          <button key={o.label} className={`btn btn-block${o.recommended ? ' btn-primary' : ''}`} onClick={() => setMsg(applyPlanOption(o))}>{o.label}</button>
+        ))}
+        <button className="btn btn-ghost btn-block" onClick={() => { dismissPlanProblem(); nav('/goals'); }}>Change my training settings</button>
+      </div>}>
+      <p>{planProblem.message}</p>
+      {planProblem.fit && <p className="muted">Ritmo will not squeeze extra distance into one run. Long runs, quality sessions and easy runs each have a safe limit, and no run is more than about a third of your week.</p>}
+      {msg && <div role="alert"><StatusLine kind="warning">{msg}</StatusLine></div>}
+    </Sheet>
+  );
+}
+
 function Shell() {
   const { pathname } = useLocation();
   const { session } = useApp();
@@ -194,6 +215,7 @@ function Shell() {
           </Suspense>
         </Gate>
         <LegacyOffer />
+        <PlanProblemSheet />
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">

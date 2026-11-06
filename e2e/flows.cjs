@@ -92,6 +92,8 @@ async function doSetup(page, o = {}) {
     await page.getByRole('button', { name: /Continue with \d+ runs/ }).click();
   } else await page.getByRole('button', { name: 'Skip for now' }).click();
   await see(page, 'Your first weeks');
+  // If the week asked for does not fit the days, take the recommended option
+  if (await page.getByText('That week does not fit').count()) await page.getByRole('button', { name: /\(recommended\)/ }).click();
 }
 async function startPlan(page) {
   await page.getByRole('button', { name: 'Start my plan' }).click();

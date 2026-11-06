@@ -102,7 +102,7 @@ export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, 
 
 /** Hours, minutes, seconds with tap steppers. Value in seconds. */
 export function DurationField({ label, value, onChange, id }: { label: string; value?: number; onChange: (s: number | undefined) => void; id: string }) {
-  const s = value ?? 0;
+  const s = Math.round(value ?? 0);
   const parts = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), Math.round(s % 60)];
   const names = ['hours', 'minutes', 'seconds'];
   const max = [23, 59, 59];

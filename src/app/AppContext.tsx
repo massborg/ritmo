@@ -12,10 +12,11 @@ import { parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
-import { estimateFitness, type FitnessEstimate, hrSetup, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
+import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
-import { adaptPlan, buildPlan, buildStarterPlan, moveSession as movePlanSession } from '../training/plan';
+import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession } from '../training/plan';
+import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
 import { fitnessStage, type StageInfo } from '../training/stage';
 import { ask, type CoachContext } from '../coach/coach';
@@ -86,6 +87,7 @@ interface Ctx extends Derived {
   logFeedback: (f: SessionFeedback) => void;
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
+  handleMissed: (sessionId: string, toDate?: string) => void;
   reportIllness: (days: number) => void;
   clearIllness: () => void;
   analysisFor: (a: Activity) => Analysis;
@@ -102,6 +104,10 @@ interface Ctx extends Derived {
   /** Signed link to the person's own profile picture, if they have one */
   avatarSrc?: string;
   saveAvatar: (jpeg: Blob) => Promise<void>;
+  /** Set when a plan could not be built as asked, with one-tap options */
+  planProblem?: PlanProblem;
+  applyPlanOption: (o: PlanProblem['options'][number]) => string | undefined;
+  dismissPlanProblem: () => void;
   deleteAvatar: () => Promise<void>;
 }
 
@@ -148,6 +154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [avatarSrc, setAvatarSrc] = useState<string>();
+  const [planProblem, setPlanProblem] = useState<PlanProblem>();
   const userId = session?.user.id;
   const currentUid = useRef<string | undefined>(undefined);
   const cloudLoaded = useRef(false);
@@ -261,7 +268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const acts = data.activities;
     const hr = hrSetup(data.profile, acts, today);
     const zones = hrZones(hr);
-    const fitness = estimateFitness(acts, hr, today);
+    const fitness = estimateFitness(acts, hr, today, data.races);
     const stage = fitnessStage(acts, fitness, today);
     const paces = fitness && stage.paces ? trainingPaces(fitness.vdot) : undefined;
     const series = loadSeries(acts, hr, paces?.threshold[1], today, 400);
@@ -272,7 +279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let p = monthPaces.get(k);
       if (!p) {
         const end = new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)), 0);
-        const f = estimateFitness(acts, hr, end > today ? today : end);
+        const f = estimateFitness(acts, hr, end > today ? today : end, data.races);
         p = f ? trainingPaces(f.vdot) : paces ?? trainingPaces(40);
         monthPaces.set(k, p);
       }
@@ -283,7 +290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const typeCache = new Map<string, SessionType>();
     const typeOf = (a: Activity) => {
       let t = typeCache.get(a.id);
-      if (!t) { t = a.isTimeTrial ? 'timetrial' : classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
+      if (!t) { t = a.isTimeTrial ? 'timetrial' : likelyRace(a, hr, data.races) ? 'race' : classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
       return t;
     };
 
@@ -295,7 +302,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
     const aRace = upcoming.find((r) => r.priority === 'A') ?? upcoming[0];
     const nextRace = upcoming[0];
-    const readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
+    let readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
+    // On a planned rest day, good readiness means the rest is working, not "go and train"
+    if (todaySession?.type === 'rest' && readiness.level === 'ready') {
+      readiness = { ...readiness, label: 'Recovering well', summary: `Enjoy the rest day: you are absorbing your training. You are in good shape for ${plan?.sessions.find((x) => x.date > t && x.type !== 'rest')?.title.toLowerCase() ?? 'your next session'}.` };
+    }
     const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
     return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS };
   }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode]);
@@ -411,20 +422,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = (p: Partial<Profile>) => setData((d) => ({ ...d, profile: { ...d.profile, ...p } }));
 
-  const rebuild = (d: AppData, race: Race | undefined, why?: string): Plan | undefined => {
+  /** Builds a plan from the runner's settings. Returns the problem (and options) instead when it does not fit. */
+  const makePlan = (d: AppData, race: Race | undefined, why?: string): { plan?: Plan; problem?: PlanProblem } => {
     const today = d.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
     const hr = hrSetup(d.profile, d.activities, today);
-    const f = estimateFitness(d.activities, hr, today);
-    if (!f) return d.plan;
+    const f = estimateFitness(d.activities, hr, today, d.races);
+    if (!f) return {};
     const recent = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 28; });
     const longest = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
-    const plan = buildPlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000 });
+    const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn });
+    if (!res.ok) return { problem: res.problem };
+    const plan = res.plan;
+    if (res.warnings.length) plan.changes[0].summary += ` ${res.warnings.join(' ')}`;
     if (d.plan) {
-      const past = d.plan.sessions.filter((s) => s.date < ymd(today) && s.date >= plan.startDate);
-      plan.sessions = [...past, ...plan.sessions.filter((s) => s.date >= ymd(today))];
+      const past = d.plan.sessions.filter((s) => s.date < plan.startDate && s.date >= ymd(startOfWeek(parseYmd(plan.startDate))));
+      plan.sessions = [...past, ...plan.sessions];
       plan.changes = [...d.plan.changes, { ...plan.changes[0], id: uid(), summary: why ? `${why} ${plan.changes[0].summary}` : plan.changes[0].summary }];
     }
-    return plan;
+    return { plan };
+  };
+  const rebuild = (d: AppData, race: Race | undefined, why?: string): Plan | undefined => {
+    const r = makePlan(d, race, why);
+    if (r.problem) { setPlanProblem(r.problem); return d.plan; }
+    return r.plan ?? d.plan;
   };
 
   const saveRace = (r: Race) => setData((d) => {
@@ -456,22 +476,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? 'Ritmo needs a few runs with time and distance from the last four months to build a plan. Log a run or upload more recent files.'
         : 'Ritmo needs some running history to build a plan. Upload your files, log a run, or choose "I\'m new to running" for a starter plan.';
     }
+    return finishBuild(d);
+  };
+  const aRaceOf = (d: AppData) => {
     const t = ymd(d.mode === 'sample' ? parseYmd(SAMPLE_TODAY) : new Date());
-    const race = d.races.filter((r) => r.date >= t).sort((a, b) => (a.priority === b.priority ? a.date.localeCompare(b.date) : a.priority.localeCompare(b.priority)))[0];
-    const plan = rebuild({ ...d, plan: undefined }, race);
-    if (!plan) return 'The plan could not be built. Please try again.';
+    return d.races.filter((r) => r.date >= t).sort((a, b) => (a.priority === b.priority ? a.date.localeCompare(b.date) : a.priority.localeCompare(b.priority)))[0];
+  };
+  const finishBuild = (d: AppData): string | undefined => {
+    const r = makePlan({ ...d, plan: undefined }, aRaceOf(d));
+    if (r.problem) { setPlanProblem(r.problem); return undefined; }
+    if (!r.plan) return 'The plan could not be built. Please try again.';
+    const plan = r.plan;
+    setPlanProblem(undefined);
     setData((x) => ({ ...x, plan, profile: { ...x.profile, experience: x.profile.experience ?? 'runner' } }));
     if (d.mode === 'real') void deleteOtherPlans(plan.id).catch(() => {});
     return undefined;
   };
+  /** One tap on a "does not fit" option: save the change to the runner's settings, then build again. */
+  const applyPlanOption = (o: PlanProblem['options'][number]) => {
+    const d = dataRef.current;
+    const profile: Profile = { ...d.profile, ...(o.daysAvailable ? { daysAvailable: o.daysAvailable } : {}), training: { ...d.profile.training, ...o.training } };
+    setData((x) => ({ ...x, profile: { ...x.profile, ...(o.daysAvailable ? { daysAvailable: o.daysAvailable } : {}), training: { ...x.profile.training, ...o.training } } }));
+    return finishBuild({ ...d, profile });
+  };
 
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
+  /** A missed key session: move it to a safe day this week, or let it go */
+  const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
+    if (!d.plan) return d;
+    const base = derived.plan ?? d.plan;
+    const from = base.sessions.find((x) => x.id === sessionId)?.date;
+    const moved = toDate ? movePlanSession(base, sessionId, toDate) : base;
+    return { ...d, plan: dropMissed(moved, sessionId, toDate ? from : undefined) };
+  });
 
   const reportIllness = (days: number) => updateProfile({ illnessUntil: ymd(addDays(derived.today, days - 1)) });
   const clearIllness = () => updateProfile({ illnessUntil: undefined });
 
   const sendCoach = async (text: string, useAi?: boolean) => {
-    const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString() };
+    const mode = data.mode === 'sample' ? 'sample' as const : 'real' as const;
+    const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString(), mode };
     setData((d) => ({ ...d, coach: [...d.coach, msg] }));
     setCoachBusy(true);
     try {
@@ -493,11 +537,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         runCount: data.activities.length,
         last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
         hasData: data.activities.length > 0 || !!derived.plan,
+        weekAhead: (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= ymd(addDays(derived.today, 7))),
+        weekTargetKm: derived.plan?.weeks?.find((w) => w.start === wk)?.targetKm,
+        maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
-      const reply = await ask(text, ctx, data.coach.map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts }] }));
+      const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode).map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode }] }));
     } catch {
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString() }] }));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
     } finally {
       setCoachBusy(false);
     }
@@ -615,9 +662,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, handleMissed,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
-    signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar,
+    signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

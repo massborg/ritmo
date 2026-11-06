@@ -10,6 +10,8 @@ import { Sheet } from '../components/inputs';
 export default function Coach() {
   const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile } = useApp();
   const ai = data.profile.consents?.aiCoach;
+  // Chats with the sample runner stay with the sample runner
+  const chat = data.coach.filter((m) => (m.mode ?? 'real') === (data.mode === 'sample' ? 'sample' : 'real'));
   const [pending, setPending] = useState<string>();
   const SUGGESTIONS = suggestions(todaySession, data.activities.length > 0);
   const [params, setParams] = useSearchParams();
@@ -22,7 +24,7 @@ export default function Coach() {
     if (q && !asked.current) { asked.current = true; submit(q); setParams({}, { replace: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [data.coach.length, coachBusy]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chat.length, coachBusy]);
 
   // The first question asks whether answers may use the AI coach. Declining keeps answers on the device's built-in coach.
   const submit = (q: string) => {
@@ -39,13 +41,13 @@ export default function Coach() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Coach" eyebrow="Answers from your own runs and plan. Coaching guidance, not medical advice." right={data.coach.length > 0 ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
+      <AppHeader title="Coach" eyebrow="Answers from your own runs and plan. Coaching guidance, not medical advice." right={chat.length > 0 ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
 
       <div className="chat" aria-live="polite">
-        {data.coach.length === 0 && (
+        {chat.length === 0 && (
           <div className="bubble bubble-coach"><p>Hello{data.profile.name ? ` ${data.profile.name}` : ''}. {data.activities.length ? 'I know your runs, your plan and how your recent sessions went.' : todaySession ? 'I know your plan, and I will learn more about you with every run you log.' : 'Once you have a plan or log a run, I can answer with your own data.'} What would you like to know?</p></div>
         )}
-        {data.coach.map((m) => (
+        {chat.map((m) => (
           <div key={m.id} className={`bubble ${m.role === 'coach' ? 'bubble-coach' : 'bubble-runner'}`}>
             <p>{m.text}</p>
             {m.facts && m.facts.length > 0 && (

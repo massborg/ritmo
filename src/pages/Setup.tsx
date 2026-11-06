@@ -15,6 +15,7 @@ import {
   ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
 } from '../training/setup';
 import { vdotFromPerformance } from '../training/fitness';
+import type { PlanProblem } from '../training/generator';
 import { pickStarterDays } from '../training/plan';
 
 const TITLES: Record<SetupStep, string> = {
@@ -380,7 +381,10 @@ function ScheduleStep({ onNext }: StepProps) {
   const p = data.profile;
   const bg = p.background;
   const beginner = !bg || bg.level === 'new' || bg.level === 'returning';
-  const [days, setDays] = useState<number[]>(p.daysAvailable.length ? p.daysAvailable : beginner ? [1, 3, 5] : [1, 3, 5, 6]);
+  // Until the runner has chosen, suggest days that suit their weekly distance
+  const kmWeek = bg?.weeklyKm ?? 0;
+  const suggested = beginner ? [1, 3, 5] : kmWeek <= 25 ? [1, 3, 5] : kmWeek <= 45 ? [1, 3, 5, 6] : kmWeek <= 70 ? [0, 1, 3, 5, 6] : [0, 1, 3, 4, 5, 6];
+  const [days, setDays] = useState<number[]>(p.schedule && p.daysAvailable.length ? p.daysAvailable : suggested);
   const [longDay, setLongDay] = useState<number>(p.longRunDay ?? 6);
   const [mins, setMins] = useState<number>(p.schedule?.sessionMinutes ?? (beginner ? 30 : 45));
   const [start, setStart] = useState<string>(p.schedule?.startDate && p.schedule.startDate >= ymd(today) ? p.schedule.startDate : ymd(today));
@@ -475,12 +479,36 @@ function RunsStep({ onNext }: StepProps) {
   );
 }
 
+/** The week asked for does not fit: say why and offer one-tap fixes, which update the answers and rebuild the preview. */
+function FitProblem({ problem }: { problem: PlanProblem }) {
+  const { data, updateProfile } = useApp();
+  return (
+    <section className="card stack" role="status">
+      <StatusLine kind="warning">{problem.kind === 'doesNotFit' ? 'That week does not fit' : 'The plan could not be built'}</StatusLine>
+      <p>{problem.message}</p>
+      {problem.options.map((o) => (
+        <button key={o.label} className={`btn${o.recommended ? ' btn-primary' : ''}`} onClick={() => updateProfile({ ...(o.daysAvailable ? { daysAvailable: o.daysAvailable } : {}), training: { ...data.profile.training, ...o.training } })}>{o.label}</button>
+      ))}
+    </section>
+  );
+}
+
 // ---------------- 9. Plan preview ----------------
 function PreviewStep({ today, onAccept, onEditDays }: { today: Date; onAccept: (plan: Plan) => void; onEditDays: () => void }) {
   const { data } = useApp();
   const result = useMemo(() => planFromSetup({ profile: data.profile, races: data.races, activities: data.activities, today }), [data.profile, data.races, data.activities, today]);
   const u = data.profile.units;
-  const first = result.plan.sessions.filter((s) => s.type !== 'rest').slice(0, 6);
+  if (!result.plan) {
+    return (
+      <div className="stack-lg">
+        <StepHead title="Your first weeks" />
+        <FitProblem problem={result.problem} />
+        <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={onEditDays}>Change my training days</button>
+      </div>
+    );
+  }
+  const plan = result.plan;
+  const first = plan.sessions.filter((s) => s.type !== 'rest').slice(0, 6);
   return (
     <div className="stack-lg">
       <StepHead title="Your first weeks" />
@@ -499,7 +527,7 @@ function PreviewStep({ today, onAccept, onEditDays }: { today: Date; onAccept: (
         ))}
       </ul>
       <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={onEditDays}>Change my training days</button>
-      <Footer label="Start my plan" onNext={() => onAccept(result.plan)} />
+      <Footer label="Start my plan" onNext={() => onAccept(plan)} />
       <p className="caption" style={{ textAlign: 'center' }}><Sparkles size={14} strokeWidth={2} aria-hidden="true" style={{ display: 'inline', verticalAlign: '-2px' }} /> The plan adapts after every run you log.</p>
     </div>
   );
@@ -509,13 +537,16 @@ function PreviewStep({ today, onAccept, onEditDays }: { today: Date; onAccept: (
 function Done({ hadPlan, onFinish }: { hadPlan: boolean; onFinish: (plan?: Plan) => void }) {
   const { data, today } = useApp();
   const [confirm, setConfirm] = useState(false);
+  const [problem, setProblem] = useState<PlanProblem>();
   if (!hadPlan) {
     // New setup with nothing left to answer but no plan: build one now
     const r = planFromSetup({ profile: data.profile, races: data.races, activities: data.activities, today });
+    if (!r.plan) return <div className="setup stack-lg"><StepHead title="Almost there" /><FitProblem problem={r.problem} /></div>;
+    const plan = r.plan;
     return (
       <div className="setup stack-lg">
         <StepHead title="All set">{r.basis}</StepHead>
-        <button className="btn btn-primary btn-block" onClick={() => onFinish(r.plan)}>Start my plan</button>
+        <button className="btn btn-primary btn-block" onClick={() => onFinish(plan)}>Start my plan</button>
       </div>
     );
   }
@@ -523,12 +554,13 @@ function Done({ hadPlan, onFinish }: { hadPlan: boolean; onFinish: (plan?: Plan)
     <div className="setup stack-lg">
       <StepHead title="Thank you, all set">Your answers are saved. Your current plan stays as it is.</StepHead>
       <button className="btn btn-primary btn-block" onClick={() => onFinish()}>Go to today</button>
+      {problem && <FitProblem problem={problem} />}
       {!confirm
         ? <button className="btn btn-ghost btn-block" onClick={() => setConfirm(true)}>Rebuild my plan with these answers</button>
         : (
           <div className="card stack" role="alertdialog" aria-label="Replace your plan?">
             <p>This replaces your current plan from today. Past sessions and your runs are kept.</p>
-            <div className="row"><button className="btn" onClick={() => setConfirm(false)}>Keep my plan</button><button className="btn btn-primary" onClick={() => onFinish(planFromSetup({ profile: data.profile, races: data.races, activities: data.activities, today }).plan)}>Replace it</button></div>
+            <div className="row"><button className="btn" onClick={() => setConfirm(false)}>Keep my plan</button><button className="btn btn-primary" onClick={() => { const r = planFromSetup({ profile: data.profile, races: data.races, activities: data.activities, today }); if (r.plan) onFinish(r.plan); else setProblem(r.problem); }}>Replace it</button></div>
           </div>
         )}
     </div>

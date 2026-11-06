@@ -1,6 +1,6 @@
 // Session analysis: classification, splits, patterns, scoring and plain-English feedback.
 import type { Activity, PlannedSession, SessionFeedback, SessionType, StreamPoint } from '../lib/types';
-import { pace as fmtPace, type Units } from '../lib/format';
+import { duration, pace as fmtPace, type Units } from '../lib/format';
 import { type TrainingPaces, zoneOf } from './fitness';
 
 export type Zones = { zone: number; min: number; max: number }[];
@@ -425,7 +425,7 @@ function simpleAnalysis(a: Activity, planned: PlannedSession | undefined, feedba
   if (type === 'runwalk') {
     wentWell.push(`You completed ${planned ? `"${planned.title}"` : 'your session'}: ${minutes} minutes on your feet. Every session like this makes the next one easier.`);
   } else if (type === 'timetrial') {
-    wentWell.push(`You ran ${(a.distanceM / 1000).toFixed(2)} km in ${Math.floor(a.movingS / 60)}:${String(Math.round(a.movingS % 60)).padStart(2, '0')}, an average of ${P(a.movingS / (a.distanceM / 1000))}. This result now sets your training paces and race predictions.`);
+    wentWell.push(`You ran ${(a.distanceM / 1000).toFixed(2)} km in ${duration(a.movingS)}, an average of ${P(a.movingS / (a.distanceM / 1000))}. This result now sets your training paces and race predictions.`);
   } else {
     wentWell.push(`You logged ${(a.distanceM / 1000).toFixed(1)} km in ${minutes} minutes. Consistency like this is what builds fitness.`);
   }
