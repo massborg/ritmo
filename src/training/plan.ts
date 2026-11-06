@@ -1,6 +1,6 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
 import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
-import { addDays, daysBetween, DAY_NAMES, longDate, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
+import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 
 /** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
 const dayLabel = (d: string) => longDate(parseYmd(d));
@@ -34,6 +34,7 @@ export const PHASE_EXPLAIN: Record<Phase, string> = {
 };
 
 const KEY: SessionType[] = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race'];
+const HARDER: SessionType[] = ['threshold', 'vo2max', 'tempo', 'hills'];
 
 /**
  * Apply adaptations to a plan given what actually happened. Idempotent: each change has a stable id.
@@ -165,6 +166,33 @@ export function adaptPlan(opts: {
     if (!has(id) && level && nextRW.title !== level.title) {
       Object.assign(nextRW, { title: level.title, steps: level.steps, durationS: level.durationS, purpose: `Picking up where you left off. ${level.purpose}` });
       log(id, 'missed', `A couple of sessions did not happen, and that is fine. Your next session picks up at the level you last ran, so you ease back in without a jump.`);
+    }
+  }
+
+  // 3c) Temporary changes the runner asked for: easier, no pace targets, or travel
+  const adj = profile.adjust;
+  if (adj && adj.until >= t) {
+    const id = `adjust:${adj.kind}:${adj.from}:${adj.until}`;
+    const inRange = upcoming.filter((s) => s.date >= adj.from && s.date <= adj.until && s.type !== 'race' && s.type !== 'rest');
+    if (!has(id)) {
+      for (const s of inRange) {
+        if (adj.kind === 'easier' && HARDER.includes(s.type)) toEasy(s, 'Easier for a few days, as you asked.');
+        if (adj.kind === 'easier' && s.type === 'long') Object.assign(s, { ...easyRun(s.date, Math.max(6, Math.round(s.distanceM / 1000 * 0.7)), s.phase, { paces }), id: s.id, title: 'Long run, easier', type: 'long' });
+        if (adj.kind === 'travel') {
+          const km = Math.min(s.distanceM / 1000, Math.round(45 * 60 / ((paces.easy[0] + paces.easy[1]) / 2) * 10) / 10);
+          Object.assign(s, { ...easyRun(s.date, Math.max(3, km), s.phase, { paces }, { why: 'Travel mode: an easy run of up to 45 minutes, or skip it if the day is too full. Any running keeps your fitness ticking over.' }), id: s.id, title: 'Easy run (travel)' });
+        }
+        if (adj.kind === 'nopace') {
+          s.paceTarget = undefined;
+          s.steps = s.steps.map((x) => ({ ...x, pace: undefined, detail: x.detail.replace(/at \d+:\d\d–\d+:\d\d\/km/g, x.kind === 'easy' || x.kind === 'warmup' || x.kind === 'cooldown' ? 'by feel, conversational' : 'by effort').replace(/around \d+:\d\d\/km/g, 'quick and relaxed') }));
+          s.purpose = `${s.purpose} Run it by feel for now: no pace targets until ${dayLabel(adj.until)}.`;
+        }
+      }
+      const what = adj.kind === 'easier' ? 'hard sessions are easy runs and long runs are shorter' : adj.kind === 'travel' ? 'sessions are easy runs of up to 45 minutes' : 'sessions have no pace targets: run them by feel';
+      log(id, adj.kind === 'easier' ? 'harder' : 'rebuilt', `You asked for ${adj.kind === 'travel' ? 'travel mode' : adj.kind === 'easier' ? 'an easier few days' : 'no pace targets'} from ${dayLabel(adj.from)} to ${dayLabel(adj.until)}, so ${what}. Afterwards the plan picks up where it was, with the first hard session kept a little shorter.`);
+      // Guide back: the first hard session after the period is shortened
+      const back = upcoming.find((s) => s.date > adj.until && HARDER.includes(s.type));
+      if (back && adj.kind !== 'nopace') { back.distanceM = Math.round(back.distanceM * 0.85 / 100) * 100; back.durationS = Math.round(back.durationS * 0.85); back.purpose = `First hard session back: a little shorter than usual. ${back.purpose}`; }
     }
   }
 
@@ -391,4 +419,44 @@ export function isUnplanned(plan: Plan | undefined, date: string): boolean {
   if (!plan) return false;
   const s = plan.sessions.find((x) => x.date === date);
   return !s || s.type === 'rest';
+}
+
+export type SwapKind = 'shorter' | 'easy' | 'treadmill' | 'similar';
+
+/** Change one planned session at the runner's request, with the reason logged. */
+export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces: TrainingPaces): Plan {
+  const sessions = plan.sessions.map((s) => ({ ...s }));
+  const s = sessions.find((x) => x.id === sessionId);
+  if (!s || s.type === 'rest' || s.type === 'race') return plan;
+  const before = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
+  if (kind === 'shorter') {
+    const f = 0.7;
+    s.steps = s.steps.map((x) => (x.kind === 'warmup' || x.kind === 'cooldown' || x.kind === 'easy' || x.kind === 'steady' ? { ...x, km: x.km ? Math.round(x.km * f * 10) / 10 : x.km, durationS: x.durationS ? Math.round(x.durationS * f) : x.durationS, label: x.kind === 'easy' && x.km ? `${Math.round(x.km * f * 10) / 10} km easy` : x.label } : x));
+    s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || Math.round(s.distanceM * f);
+    s.durationS = Math.round(s.steps.reduce((a, x) => a + (x.durationS ?? 0), 0)) || Math.round(s.durationS * f);
+    s.title = `${s.title.replace(/ \(shorter\)$/, '')} (shorter)`;
+  } else if (kind === 'easy') {
+    Object.assign(s, { ...easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces }), id: s.id, title: 'Easy run (swapped)' });
+  } else if (kind === 'treadmill') {
+    s.title = `${s.title.replace(/ \(treadmill\)$/, '')} (treadmill)`;
+    s.steps = [...s.steps, { label: 'Treadmill', detail: 'Set a 1% incline to match outdoor effort. Use the same paces; for reps, change the speed at the start of each rep and give the belt a few seconds to catch up.' }];
+  } else {
+    const alt: Record<string, string> = { threshold: 'vo2max', vo2max: 'threshold', tempo: 'threshold', hills: 'threshold', long: 'long', easy: 'easy', recovery: 'easy' };
+    if (s.type === 'threshold' || s.type === 'tempo' || s.type === 'hills') {
+      s.title = 'Fartlek: 8 x 2 min'; s.focus = 'Threshold'; s.type = 'threshold';
+      s.steps = [s.steps[0], { kind: 'work', label: '8 x 2 min comfortably hard', detail: `at about ${pace(paces.threshold[0], 'km', false)}–${pace(paces.threshold[1], 'km', false)}/km, 1 min easy jog between, on any route`, km: Math.round((16 * 60 / ((paces.threshold[0] + paces.threshold[1]) / 2) + 7 * 60 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 16 * 60 + 7 * 60, zones: [4] }, s.steps[s.steps.length - 1]];
+      s.purpose = 'A flexible version of today\'s threshold work that needs no track or measured route.';
+    } else if (s.type === 'vo2max') {
+      s.title = 'Hill reps: 8 x 90 s'; s.focus = 'Intervals';
+      s.steps = [s.steps[0], { kind: 'work', label: '8 x 90 s uphill', detail: 'hard but controlled on a steady hill, jog back down', km: Math.round((8 * 90 / ((paces.interval[0] + paces.interval[1]) / 2) * 0.85 + 8 * 90 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 8 * 180, zones: [5] }, s.steps[s.steps.length - 1]];
+      s.purpose = 'Hill reps give a similar VO2 max stimulus with less impact, and work anywhere with a slope.';
+    } else {
+      s.title = `${s.title} (any route)`;
+    }
+    void alt;
+    s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || s.distanceM;
+    s.durationS = Math.round(s.steps.reduce((a, x) => a + (x.durationS ?? 0), 0)) || s.durationS;
+  }
+  const after = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
+  return { ...plan, sessions, changes: [...plan.changes, { id: uid(), at: new Date().toISOString(), reason: 'moved', summary: `${dayLabel(s.date)}: ${before} → ${after}, at your request.` }] };
 }

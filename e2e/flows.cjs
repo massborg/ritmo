@@ -291,7 +291,7 @@ async function run(label, deviceOpts) {
   await step(P('"I did it" logs a run with time, distance and feel'), async () => {
     const did = page.getByRole('button', { name: 'I did it' });
     if (await did.count()) await did.first().click();
-    else await page.getByRole('button', { name: 'Log a run' }).click();
+    else { await page.getByRole('button', { name: /^Add a run/ }).click(); await page.getByRole('button', { name: /Log a run/ }).click(); }
     await see(page, 'How did it feel?');
     await page.getByRole('button', { name: 'Good', exact: true }).click();
     await page.getByRole('button', { name: 'Save run' }).click();

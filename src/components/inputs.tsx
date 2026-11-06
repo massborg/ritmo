@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
-import { addDays, DAY_SHORT, longDate, MONTHS_LONG, parseYmd, startOfWeek, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, duration, longDate, MONTHS_LONG, parseTime, parseYmd, startOfWeek, ymd } from '../lib/format';
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -100,33 +100,20 @@ export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, 
   );
 }
 
-/** Hours, minutes, seconds with tap steppers. Value in seconds. */
+/** A typed time: "15:30" or "1:13:37" (or minutes, "45"). Value in seconds. */
 export function DurationField({ label, value, onChange, id }: { label: string; value?: number; onChange: (s: number | undefined) => void; id: string }) {
-  const s = Math.round(value ?? 0);
-  const parts = [Math.floor(s / 3600), Math.floor((s % 3600) / 60), Math.round(s % 60)];
-  const names = ['hours', 'minutes', 'seconds'];
-  const max = [23, 59, 59];
-  const setPart = (i: number, n: number) => {
-    const p = [...parts];
-    p[i] = (n + (max[i] + 1)) % (max[i] + 1);
-    const total = p[0] * 3600 + p[1] * 60 + p[2];
-    onChange(total || undefined);
-  };
+  const [text, setText] = useState(value ? duration(value) : '');
+  const [bad, setBad] = useState(false);
+  useEffect(() => { if (value !== parseTime(text)) setText(value ? duration(value) : ''); /* keep in step when changed from outside */ // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
-    <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }} id={id}>
-      <legend className="label" style={{ marginBottom: 6 }}>{label}</legend>
-      <div className="duration">
-        {parts.map((p, i) => (
-          <div key={i} className="duration-col">
-            <button type="button" className="icon-btn" aria-label={`More ${names[i]}`} onClick={() => setPart(i, p + (i === 2 ? 5 : 1))}><Plus size={18} strokeWidth={2} /></button>
-            <input aria-label={names[i]} inputMode="numeric" className="duration-input" value={String(p).padStart(i ? 2 : 1, '0')} onChange={(e) => setPart(i, Math.min(max[i], Number(e.target.value.replace(/\D/g, '').slice(-2)) || 0))} />
-            <button type="button" className="icon-btn" aria-label={`Fewer ${names[i]}`} onClick={() => setPart(i, p - (i === 2 ? 5 : 1))}><Minus size={18} strokeWidth={2} /></button>
-            <span className="caption">{['h', 'min', 's'][i]}</span>
-          </div>
-        ))}
-        {value ? <button type="button" className="btn btn-ghost btn-small" onClick={() => onChange(undefined)}>Clear</button> : null}
-      </div>
-    </fieldset>
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <input id={id} className="input time-input" inputMode="numeric" placeholder="mm:ss or h:mm:ss" value={text} aria-invalid={bad || undefined} aria-describedby={`${id}-h`}
+        onChange={(e) => { const t = e.target.value.replace(/[^\d:]/g, ''); setText(t); const v = parseTime(t); setBad(!!t && v === undefined); onChange(t ? v : undefined); }}
+        onBlur={() => { const v = parseTime(text); if (v) setText(duration(v)); }} />
+      <span id={`${id}-h`} className="caption">{bad ? 'Use minutes and seconds, like 15:30, or hours too, like 1:13:37.' : 'For example 15:30 or 1:13:37.'}</span>
+    </div>
   );
 }
 

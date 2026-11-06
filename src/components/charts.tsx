@@ -17,6 +17,8 @@ export function BarChart({ bars, height = 180, format = (v: number) => v.toFixed
     <div className="well" style={{ padding: 'var(--s3)' }}>
       <svg className="chart" viewBox={`0 0 ${w} ${height}`} role="img" aria-label={summary} preserveAspectRatio="none" style={{ height }}>
         {[0.5, 1].map((f) => <line key={f} x1={pad.l} x2={w - pad.r} y1={pad.t + ih * (1 - f / 1.1)} y2={pad.t + ih * (1 - f / 1.1)} stroke="var(--hairline)" />)}
+        {/* value axis: what the two guide lines mean */}
+        {[0.5, 1].map((f) => <text key={`v${f}`} x={pad.l} y={pad.t + ih * (1 - f / 1.1) - 3} textAnchor="start" className="axis-value">{format((max / 1.1) * f)}</text>)}
         {bars.map((b, i) => {
           const x = pad.l + slot * i + slot / 2;
           const h = (b.value / max) * ih;

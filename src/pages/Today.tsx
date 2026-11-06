@@ -6,7 +6,8 @@ import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../component
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
 import { SeeMore } from '../components/setup-ui';
-import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
+import { NotFeeling, QuickAdd } from '../components/QuickAdd';
+import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, localise, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -25,8 +26,14 @@ export default function Today() {
   const [selected, setSelected] = useState(t);
   const [logFor, setLogFor] = useState<PlannedSession | 'free' | null>(null);
   const [planMsg, setPlanMsg] = useState<string>();
-  const logButton = <button className="icon-btn" aria-label="Log a run" onClick={() => setLogFor('free')}><Plus size={24} strokeWidth={2} /></button>;
-  const sheet = logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />;
+  const [adding, setAdding] = useState(false);
+  const [unwell, setUnwell] = useState(false);
+  const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
+  const sheet = <>
+    {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
+    <QuickAdd open={adding} onClose={() => setAdding(false)} />
+    {unwell && <NotFeeling onClose={() => setUnwell(false)} />}
+  </>;
 
   if (!data.activities.length && !plan) {
     return (
@@ -110,6 +117,7 @@ export default function Today() {
                 : null}
             {!done && <Link to={`/session/${s.id}`} className="btn">{s.type === 'rest' ? 'Why rest matters' : 'Session details'}</Link>}
             {isToday && s.type !== 'rest' && !done && <Link to="/coach?q=I only have 30 minutes, what should I do?" className="btn btn-ghost">Short on time?</Link>}
+            {isToday && <button className="btn btn-ghost" onClick={() => setUnwell(true)}>Not feeling 100%?</button>}
           </div>
         </section>
       ) : plan ? (
@@ -151,7 +159,9 @@ export default function Today() {
               : <div><p className="caption">Effort</p><p className="label">Easy: you can talk in full sentences</p></div>)}
             {s.hrZones && data.activities.some((a) => a.avgHr) && <ZoneTag zones={s.hrZones} />}
           </div>
-          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
+          {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
+          {s.strength && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
         </section>
       )}
 

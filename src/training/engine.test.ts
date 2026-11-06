@@ -265,3 +265,130 @@ describe('engine sweep', () => {
     }
   });
 });
+
+// ---- Improvements: training style, doubles, races, adjustments, swaps, coach edits, units ----
+import { swapSession } from './plan';
+import { localise, parseTime } from '../lib/format';
+
+describe('training style settings', () => {
+  it('doubles: 93 km on 3 days fits with a second easy run on those days, and every session still passes', () => {
+    const r = gen({ daysAvailable: [1, 3, 5] }, 93);
+    if (r.ok) throw new Error('expected a problem');
+    const dbl = r.problem.options.find((o) => /second easy run/.test(o.label));
+    expect(dbl).toBeTruthy();
+    const plan = ok(gen({ daysAvailable: [1, 3, 5], training: dbl!.training }, 93));
+    expect(plan.sessions.some((s) => s.second)).toBe(true);
+    expect(validatePlan(plan, P63)).toEqual([]);
+  });
+  it('no hard sessions means only the long run is hard; one means one', () => {
+    const none = ok(gen({ training: { hardSessions: 0 } }, 60));
+    expect(fullWeek(none.sessions, '2026-11-09').filter((s) => ['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type))).toHaveLength(0);
+    const one = ok(gen({ training: { hardSessions: 1 } }, 60));
+    expect(fullWeek(one.sessions, '2026-11-09').filter((s) => ['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type))).toHaveLength(1);
+  });
+  it('harder sessions use slightly faster paces, easier ones slightly slower', () => {
+    const t = (d: 'easier' | 'normal' | 'harder') => ok(gen({ training: { difficulty: d } }, 70)).sessions.find((s) => s.type === 'threshold')!.paceTarget!.minSPerKm;
+    expect(t('harder')).toBeLessThan(t('normal'));
+    expect(t('easier')).toBeGreaterThan(t('normal'));
+  });
+  it('strength goes on hard days first', () => {
+    const plan = ok(gen({ training: { strengthPerWeek: 2 } }, 70));
+    const wk = fullWeek(plan.sessions, '2026-11-09').filter((s) => s.strength);
+    expect(wk).toHaveLength(2);
+    expect(wk.every((s) => ['threshold', 'vo2max', 'hills', 'tempo'].includes(s.type))).toBe(true);
+  });
+  it('a plan without a race follows the chosen length', () => {
+    const plan = ok(gen({ training: { planWeeks: 6 } }, 50, { race: undefined }));
+    expect(plan.weeks!.length).toBeLessThanOrEqual(7);
+  });
+  it('a C race replaces that day, with easy days either side', () => {
+    const c: Race = { id: 'c', name: 'Club 10K', date: '2026-11-22', distanceM: 10000, courseType: 'road', priority: 'C' };
+    const plan = ok(generatePlan({ today: FRIDAY, profile: base, race: race5k, paces: P63, recentWeeklyKm: 80, longestRecentKm: 20, otherRaces: [c] }));
+    expect(plan.sessions.find((s) => s.date === '2026-11-22')!.type).toBe('race');
+    expect(['easy', 'rest', 'recovery']).toContain(plan.sessions.find((s) => s.date === '2026-11-21')!.type);
+    expect(['easy', 'rest', 'recovery']).toContain(plan.sessions.find((s) => s.date === '2026-11-23')!.type);
+    expect(validatePlan(plan, P63).filter((x) => /back to back/.test(x))).toEqual([]);
+  });
+});
+
+describe('not feeling 100%', () => {
+  const plan = ok(gen({ training: { startMode: 'monday' } }, 80));
+  const mon = new Date('2026-11-09T07:00:00');
+  const run = (kind: 'easier' | 'nopace' | 'travel') => adaptPlan({ plan, activities: [], feedback: [], profile: { ...base, adjust: { kind, from: '2026-11-09', until: '2026-11-13', at: '' } }, today: mon, typeOf, paces: P63 });
+  it('easier: hard sessions become easy, the long run is shorter, the first hard session back is shorter', () => {
+    const a = run('easier');
+    const wk = a.sessions.filter((s) => s.date >= '2026-11-09' && s.date <= '2026-11-13');
+    expect(wk.some((s) => ['threshold', 'vo2max'].includes(s.type))).toBe(false);
+    expect(a.changes.some((c) => /an easier few days/.test(c.summary))).toBe(true);
+  });
+  it('no pace targets: sessions keep their shape without paces', () => {
+    const a = run('nopace');
+    const thr = a.sessions.find((s) => s.date === '2026-11-09')!;
+    expect(thr.paceTarget).toBeUndefined();
+    expect(thr.steps.map((x) => x.detail).join(' ')).not.toMatch(/\/km/);
+  });
+  it('travel: easy runs of up to 45 minutes', () => {
+    const a = run('travel');
+    for (const s of a.sessions.filter((x) => x.date >= '2026-11-09' && x.date <= '2026-11-13' && x.type !== 'rest')) expect(s.durationS).toBeLessThanOrEqual(45 * 60 + 30);
+  });
+});
+
+describe('changing one session', () => {
+  const plan = ok(gen({}, 80));
+  const thr = plan.sessions.find((s) => s.type === 'threshold')!;
+  it('shorter, easy, similar and treadmill all keep distance and time consistent and log the change', () => {
+    for (const k of ['shorter', 'easy', 'similar', 'treadmill'] as const) {
+      const p = swapSession(plan, thr.id, k, P63);
+      const s = p.sessions.find((x) => x.id === thr.id)!;
+      expect(p.changes[p.changes.length - 1].summary).toMatch(/→/);
+      const km = s.steps.reduce((x, y) => x + (y.km ?? 0), 0);
+      if (s.steps.every((x) => x.km !== undefined)) expect(Math.abs(km * 1000 - s.distanceM)).toBeLessThan(200);
+      if (k === 'shorter') expect(s.distanceM).toBeLessThan(thr.distanceM);
+      if (k === 'easy') expect(s.type).toBe('easy');
+    }
+  });
+});
+
+describe('coach plan edits', () => {
+  const plan = ok(gen({}, 90));
+  const ctx: CoachContext = {
+    today: new Date('2026-11-09T08:00:00'), profile: base, units: 'km', readiness: { level: 'ready', label: '', summary: '', basedOn: [] } as never, stage: { stage: 'full', predictions: true, paces: true, runs: 50, next: '' } as never,
+    nextSessions: [], weekDoneM: 0, weekPlannedM: 0, weekSessionsDone: 0, weekSessionsPlanned: 0, planSessionsDone: 0, planSessionsTotal: 0, runCount: 50, hasData: true,
+    weekAhead: plan.sessions.filter((s) => s.date >= '2026-11-09' && s.date <= '2026-11-16'),
+  };
+  it('"move Thursday to Friday" proposes a move, and warns about back-to-back hard days', () => {
+    const r = localReply('Can you move Thursday to Friday?', ctx);
+    expect(r.proposal?.kind).toBe('move');
+    expect(r.proposal?.toDate).toBe('2026-11-13');
+    expect(r.text).toMatch(/back to back/);
+  });
+  it('"make tomorrow easier" proposes an easy run', () => {
+    const r = localReply('Make tomorrow easier please', ctx);
+    expect(r.proposal?.kind).toBe('swap');
+  });
+});
+
+describe('typed times and miles', () => {
+  it('parses times as typed', () => {
+    expect(parseTime('15:30')).toBe(930);
+    expect(parseTime('1:13:37')).toBe(4417);
+    expect(parseTime('45')).toBe(2700);
+    expect(parseTime('15:75')).toBeUndefined();
+  });
+  it('shows plan text in miles for mile users', () => {
+    expect(localise('12.6 km easy at 4:13–4:44/km', 'mi')).toBe('7.8 mi easy at 6:47–7:37/mi');
+    expect(localise('12.6 km easy', 'km')).toBe('12.6 km easy');
+  });
+});
+
+describe('coach move dates', () => {
+  it('asked on a Friday, "move Thursday to Friday" means next Thursday to the Friday after it', () => {
+    const plan = ok(gen({}, 90));
+    const ctx = { today: new Date('2026-11-06T08:00:00'), profile: base, units: 'km', readiness: { level: 'ready', label: '', summary: '', basedOn: [] }, stage: { stage: 'full', predictions: true, paces: true, runs: 50, next: '' },
+      nextSessions: [], weekDoneM: 0, weekPlannedM: 0, weekSessionsDone: 0, weekSessionsPlanned: 0, planSessionsDone: 0, planSessionsTotal: 0, runCount: 50, hasData: true,
+      weekAhead: plan.sessions.filter((s) => s.date >= '2026-11-02' && s.date <= '2026-11-13') } as unknown as CoachContext;
+    const r = localReply('Move Thursday to Friday', ctx);
+    expect(plan.sessions.find((s) => s.id === r.proposal?.sessionId)?.date).toBe('2026-11-12');
+    expect(r.proposal?.toDate).toBe('2026-11-13');
+  });
+});

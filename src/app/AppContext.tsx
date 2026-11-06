@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import type { Activity, CoachMessage, Plan, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
+import type { Activity, CoachMessage, LogEntry, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
@@ -15,7 +15,7 @@ import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/h
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
-import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession } from '../training/plan';
+import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
 import { fitnessStage, type StageInfo } from '../training/stage';
@@ -88,6 +88,11 @@ interface Ctx extends Derived {
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
+  swap: (sessionId: string, kind: SwapKind) => void;
+  applyCoachProposal: (messageId: string) => void;
+  setAdjust: (kind: PlanAdjust['kind'] | null, days?: number) => void;
+  addLog: (e: Omit<LogEntry, 'id' | 'at'>) => void;
+  removeLog: (id: string) => void;
   reportIllness: (days: number) => void;
   clearIllness: () => void;
   analysisFor: (a: Activity) => Analysis;
@@ -430,7 +435,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!f) return {};
     const recent = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 28; });
     const longest = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
-    const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn });
+    const t0 = ymd(today);
+    const otherRaces = d.races.filter((r) => r.id !== race?.id && r.date >= t0 && (!race || r.date < race.date));
+    const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn, otherRaces });
     if (!res.ok) return { problem: res.problem };
     const plan = res.plan;
     if (res.warnings.length) plan.changes[0].summary += ` ${res.warnings.join(' ')}`;
@@ -501,6 +508,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
+  const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
+  const applyCoachProposal = (messageId: string) => setData((d) => {
+    const m = d.coach.find((x) => x.id === messageId);
+    const p = m?.proposal;
+    if (!p || p.applied || !d.plan) return d;
+    const base = derived.plan ?? d.plan;
+    const plan = p.kind === 'move' && p.toDate ? movePlanSession(base, p.sessionId, p.toDate) : p.swap ? swapSession(base, p.sessionId, p.swap, derived.paces ?? trainingPaces(40)) : base;
+    return { ...d, plan, coach: d.coach.map((x) => (x.id === messageId ? { ...x, proposal: { ...p, applied: true } } : x)) };
+  });
+  const setAdjust = (kind: PlanAdjust['kind'] | null, days = 3) => {
+    if (!kind) { updateProfile({ adjust: undefined }); return; }
+    const from = ymd(derived.today);
+    updateProfile({ adjust: { kind, from, until: ymd(addDays(derived.today, days - 1)), at: new Date().toISOString() } });
+  };
+  const addLog = (e: Omit<LogEntry, 'id' | 'at'>) => setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), { ...e, id: uid(), at: new Date().toISOString() }] } }));
+  const removeLog = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
     if (!d.plan) return d;
@@ -542,7 +565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
       const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode).map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode }] }));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
     } finally {
@@ -662,7 +685,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, handleMissed,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

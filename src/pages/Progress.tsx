@@ -5,10 +5,11 @@ import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
 import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
-import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { easyHardBalance, monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
 import { PHASE_LABEL } from '../training/plan';
-import { estimateFitness, predictRace } from '../training/fitness';
+import { estimateFitness, predictRace, trainingPaces } from '../training/fitness';
+import { Shoes } from '../components/Shoes';
 import { zoneTime } from '../training/analysis';
 
 type Period = 'week' | 'month' | 'year';
@@ -77,7 +78,7 @@ export default function Progress() {
 
   // Estimated race times over time: monthly, last 24 months
   const est = useMemo(() => {
-    const labels: string[] = [], five: (number | null)[] = [], ten: (number | null)[] = [], half: (number | null)[] = [], mar: (number | null)[] = [];
+    const labels: string[] = [], five: (number | null)[] = [], ten: (number | null)[] = [], half: (number | null)[] = [], mar: (number | null)[] = [], tpace: (number | null)[] = [], eff: (number | null)[] = [];
     for (let i = 23; i >= 0; i -= 1) {
       const d = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
       const at = d > today ? today : d;
@@ -85,9 +86,14 @@ export default function Progress() {
       labels.push(`${MONTHS[d.getMonth()]}${d.getMonth() === 0 ? ` ${String(d.getFullYear()).slice(2)}` : ''}`);
       const pr = (m: number) => (f ? predictRace(f.vdot, m, acts, at).timeS / 60 : null);
       five.push(pr(5000)); ten.push(pr(10000)); half.push(pr(21097.5)); mar.push(pr(42195));
+      // Threshold pace that month (s per unit), from the fitness estimate
+      tpace.push(f && f.confidence !== 'low' ? ((trainingPaces(f.vdot).threshold[0] + trainingPaces(f.vdot).threshold[1]) / 2) * (U === 'km' ? 1 : 1.609344) : null);
+      // Aerobic efficiency: metres covered per heartbeat on easy runs that month
+      const easyMonth = acts.filter((a) => a.avgHr && a.startTime.slice(0, 7) === ymd(d).slice(0, 7) && ['easy', 'recovery', 'long'].includes(typeOf(a)));
+      eff.push(easyMonth.length >= 2 ? easyMonth.reduce((x, a) => x + a.distanceM / ((a.movingS / 60) * a.avgHr!), 0) / easyMonth.length : null);
     }
-    return { labels, five, ten, half, mar };
-  }, [acts, today, hr, data.races]);
+    return { labels, five, ten, half, mar, tpace, eff };
+  }, [acts, today, hr, data.races, U, typeOf]);
 
   if (!acts.length) return (
     <div className="stack-lg">
@@ -150,6 +156,15 @@ export default function Progress() {
 
       <div className="grid-2">
         <section className="card stack" aria-labelledby="zones"><h2 id="zones" className="title">Time in each zone</h2><p className="caption">Last 4 weeks, runs with heart rate</p>{zt.some((v) => v > 0) ? <ZoneBar seconds={zt} /> : <p className="muted">{acts.some((a) => a.avgHr) ? 'No heart rate data in the last 4 weeks.' : 'Zones need heart rate from a watch or chest strap. Upload a file from your watch to see them.'}</p>}</section>
+        {stage.predictions && est.tpace.some((x) => x != null) && (
+          <section className="card stack" aria-labelledby="tp"><h2 id="tp" className="title">Threshold pace</h2><p className="caption">Per {U}, last 24 months, from your fitness each month. Lower is faster.</p>
+            <LineChart labels={est.labels} every={4} format={(v) => pace(v, 'km', false)} series={[{ name: 'Threshold pace', values: est.tpace, color: 'var(--brand)' }]} /></section>
+        )}
+        {est.eff.filter((x) => x != null).length >= 3 && (
+          <section className="card stack" aria-labelledby="eff"><h2 id="eff" className="title">Aerobic efficiency</h2><p className="caption">Metres per heartbeat on easy and long runs, by month. Higher means you go further for the same effort.</p>
+            <LineChart labels={est.labels} every={4} format={(v) => v.toFixed(2)} series={[{ name: 'Metres per heartbeat', values: est.eff, color: 'var(--zone-2)' }]} /></section>
+        )}
+        <Shoes />
         <section className="card stack" aria-labelledby="long"><h2 id="long" className="title">Long-run progress</h2><p className="caption">Longest run each month, {U}</p><LineChart series={[{ name: 'Longest run', values: longRuns.vals, color: 'var(--brand)' }]} labels={longRuns.labels} every={3} /></section>
       </div>
 

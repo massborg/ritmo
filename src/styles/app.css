@@ -498,3 +498,4 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .week-preview li { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 2px; border-radius: var(--r-input); background: var(--surface-sunken); text-align: center; font-size: 12px; line-height: 16px; min-width: 0; }
 .week-preview li.muted { opacity: 0.6; }
 .week-preview .stat { font-size: 15px; }
+.chart .axis-value { font-size: 10px; fill: var(--ink-muted); }

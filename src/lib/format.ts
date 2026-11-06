@@ -110,3 +110,27 @@ export function distanceLabel(m: number) {
   const r = RACE_DISTANCES.find((x) => Math.abs(x.m - m) < 60);
   return r ? r.label : `${(m / 1000).toFixed(1)} km`;
 }
+
+/** Parse "15:30", "1:13:37" or "45" (minutes) into seconds */
+export function parseTime(t: string): number | undefined {
+  const s = t.trim().replace(/[^\d:.,]/g, '');
+  if (!s) return undefined;
+  const parts = s.split(':').map((x) => Number(x.replace(',', '.')));
+  if (parts.some((x) => !isFinite(x) || x < 0)) return undefined;
+  if (parts.length === 1) return Math.round(parts[0] * 60);
+  if (parts.length === 2) return parts[1] < 60 ? Math.round(parts[0] * 60 + parts[1]) : undefined;
+  if (parts.length === 3) return parts[1] < 60 && parts[2] < 60 ? Math.round(parts[0] * 3600 + parts[1] * 60 + parts[2]) : undefined;
+  return undefined;
+}
+
+/** Show plan text in the runner's units: "4:13–4:44/km" and "12.6 km" become per-mile and miles. */
+export function localise(text: string, u: Units): string {
+  if (u === 'km') return text;
+  const toMi = (s: number) => s * (MI / 1000);
+  const fmt = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; };
+  const sec = (m: string) => { const [a, b] = m.split(':').map(Number); return a * 60 + b; };
+  return text
+    .replace(/(\d+:\d\d)–(\d+:\d\d)\/km/g, (_, a, b) => `${fmt(toMi(sec(a)))}–${fmt(toMi(sec(b)))}/mi`)
+    .replace(/(\d+:\d\d)\/km/g, (_, a) => `${fmt(toMi(sec(a)))}/mi`)
+    .replace(/(\d+(?:\.\d+)?) ?km\b/g, (_, n) => { const m = Number(n) / 1.609344; return `${m.toFixed(m >= 20 ? 0 : 1)} mi`; });
+}

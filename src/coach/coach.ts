@@ -39,7 +39,8 @@ export interface CoachContext {
   maxEasyMin?: number;
 }
 
-export interface CoachReply { text: string; facts: string[] }
+export interface CoachProposal { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string }
+export interface CoachReply { text: string; facts: string[]; proposal?: CoachProposal }
 
 export function buildFacts(c: CoachContext): string[] {
   const f: string[] = [];
@@ -53,6 +54,7 @@ export function buildFacts(c: CoachContext): string[] {
     const s = c.todaySession;
     f.push(`Today's planned session: ${s.title} (${s.focus}), ${s.distanceM ? `${(s.distanceM / 1000).toFixed(1)} km` : s.durationS ? `${Math.round(s.durationS / 60)} minutes` : 'no running'}, phase ${PHASE_LABEL[s.phase]}. Purpose: ${s.purpose} Steps: ${s.steps.map((x) => `${x.label} ${x.detail}`).join('; ')}.`);
   }
+  if (c.weekAhead?.length) f.push(`This week and next days: ${c.weekAhead.map((x) => `${longDate(parseYmd(x.date))}: ${x.type === 'rest' ? 'rest' : `${x.title}, ${(x.distanceM / 1000).toFixed(1)} km`}${x.status === 'done' ? ' (done)' : x.status === 'missed' ? ' (missed)' : ''}`).join('; ')}.`);
   if (c.nextSessions.length) f.push(`Next sessions: ${c.nextSessions.map((s) => `${longDate(parseYmd(s.date))} ${s.title}`).join('; ')}.`);
   if (c.weekPlannedM > 0) f.push(`This week so far: ${(c.weekDoneM / 1000).toFixed(1)} km of ${(c.weekPlannedM / 1000).toFixed(1)} km planned.`);
   if (c.weekSessionsPlanned) f.push(`Sessions this week: ${c.weekSessionsDone} of ${c.weekSessionsPlanned} done.`);
@@ -90,6 +92,10 @@ export function localReply(q: string, c: CoachContext): CoachReply {
   if (/chest pain|chest tight|dizz|faint|palpitat|short of breath|can't breathe|cannot breathe/.test(lower)) {
     return { text: 'Please stop exercising. Chest pain, dizziness, fainting or unusual breathlessness need medical advice before you run again. If it is severe or happening now, call your local emergency number. I can give coaching guidance, not medical advice.', facts };
   }
+
+  // Requests to change the plan: propose the change, the runner confirms with one tap
+  const edit = planEdit(lower, c);
+  if (edit) return { ...edit, facts };
 
   // Questions about a particular day: answer with that session's real numbers
   const dayRef = namedDay(lower, c);
@@ -222,7 +228,7 @@ export async function ask(q: string, c: CoachContext, history: { role: string; t
     const status = (error as { context?: Response } | null)?.context?.status;
     if (status === 429) return { ...local, text: `${local.text}\n\nYou have asked the AI coach a lot of questions recently, so this answer comes from Ritmo's built-in coach. AI answers will be back shortly.`, source: 'local' };
     if (error || !data?.text) return { ...local, source: 'local' };
-    return { text: data.text as string, facts: local.facts, source: 'ai' };
+    return { text: data.text as string, facts: local.facts, proposal: local.proposal, source: 'ai' };
   } catch {
     return { ...local, source: 'local' };
   }
@@ -259,4 +265,54 @@ export function namedDay(lower: string, c: CoachContext): string | undefined {
   // "Thursday" means this week's Thursday (as on the week view); "next Thursday" means the coming one
   const diff = i - todayIdx;
   return add(/\bnext\b/.test(lower) ? (diff > 0 ? diff : diff + 7) : diff);
+}
+
+const HARD_T = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race'];
+/** "Move Thursday to Friday", "make tomorrow easier", "swap Saturday for an easy run" */
+function planEdit(lower: string, c: CoachContext): { text: string; proposal?: CoachProposal } | undefined {
+  if (!c.weekAhead?.length) return undefined;
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const dayOf = (word: string): string | undefined => {
+    if (word === 'today') return iso(c.today);
+    if (word === 'tomorrow') { const d = new Date(c.today); d.setDate(d.getDate() + 1); return iso(d); }
+    const i = DAY_WORDS.indexOf(word);
+    if (i < 0) return undefined;
+    const diff = i - (c.today.getDay() + 6) % 7;
+    const d = new Date(c.today); d.setDate(d.getDate() + (diff >= 0 ? diff : diff + 7)); return iso(d);
+  };
+  const words = '(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)';
+  const mv = lower.match(new RegExp(`\\b(?:move|shift|swap|change)\\b.*?${words}.*?\\b(?:to|for|with)\\b.*?${words}`));
+  if (mv) {
+    const from = dayOf(mv[1]);
+    // The target day is in the same week as the session being moved (never in the past)
+    let to = dayOf(mv[2]);
+    const wi = DAY_WORDS.indexOf(mv[2]);
+    if (from && wi >= 0) {
+      const f = parseYmd(from); const monday = new Date(f); monday.setDate(f.getDate() - ((f.getDay() + 6) % 7));
+      const cand = new Date(monday); cand.setDate(monday.getDate() + wi);
+      to = iso(cand) < iso(c.today) ? iso(new Date(cand.getTime() + 7 * 86400000)) : iso(cand);
+    }
+    const s = c.weekAhead.find((x) => x.date === from);
+    if (!s || !to || s.type === 'rest' || s.type === 'race') return { text: `There is no session to move on ${from ? longDate(parseYmd(from)) : 'that day'}.` };
+    const near = c.weekAhead.filter((x) => x.id !== s.id && x.date !== from && Math.abs((parseYmd(x.date).getTime() - parseYmd(to).getTime()) / 86400000) === 1);
+    const clash = HARD_T.includes(s.type) && near.some((x) => HARD_T.includes(x.type));
+    return {
+      text: `I can move ${s.title.toLowerCase()} from ${longDate(parseYmd(from!))} to ${longDate(parseYmd(to))}. ${c.weekAhead.find((x) => x.date === to && x.type !== 'rest') ? 'The session on that day moves to the other day.' : ''}${clash ? ' Note: that puts two hard days back to back, so take the second one easier.' : ''}`,
+      proposal: { kind: 'move', sessionId: s.id, toDate: to, label: `Move it to ${longDate(parseYmd(to))}` },
+    };
+  }
+  const ez = lower.match(new RegExp(`\\b(?:make|can i make|swap|turn|change)\\b.*?${words}.*?\\b(easier|easy|shorter|short|lighter)\\b`)) ?? lower.match(new RegExp(`\\b(easier|shorter|lighter)\\b.*?${words}`));
+  if (ez) {
+    const word = DAY_WORDS.includes(ez[1]) || ez[1] === 'today' || ez[1] === 'tomorrow' ? ez[1] : ez[2];
+    const kindWord = word === ez[1] ? ez[2] : ez[1];
+    const d = dayOf(word);
+    const s = c.weekAhead.find((x) => x.date === d);
+    if (!s || s.type === 'rest' || s.type === 'race') return { text: `There is nothing to change on ${d ? longDate(parseYmd(d)) : 'that day'}.` };
+    const shorter = /short/.test(kindWord) || s.type === 'easy' || s.type === 'recovery';
+    return {
+      text: shorter ? `I can make ${s.title.toLowerCase()} on ${longDate(parseYmd(d!))} about 30% shorter, keeping its key part.` : `I can turn ${s.title.toLowerCase()} on ${longDate(parseYmd(d!))} into an easy run. One easier day costs very little.`,
+      proposal: { kind: 'swap', sessionId: s.id, swap: shorter ? 'shorter' : 'easy', label: shorter ? 'Make it shorter' : 'Make it an easy run' },
+    };
+  }
+  return undefined;
 }

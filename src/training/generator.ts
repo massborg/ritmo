@@ -35,6 +35,8 @@ export interface GenInput {
   longestRecentKm: number;
   /** Plain words for where the paces come from, e.g. "your 10K in 33:11 on 1 Nov" */
   pacesFrom?: string;
+  /** B and C races before the main race: B races get a short taper, C races replace a session */
+  otherRaces?: Race[];
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,8 @@ export interface Resolved {
   weeklyKm: number; peakKm: number; progression: NonNullable<TrainingSettings['progression']>;
   available: number[]; daysPerWeek: number; longDay: number; dayAfterLong: 'easy' | 'off'; cutbackEvery: 3 | 4;
   maxEasyMin: number; maxQualityMin: number; maxLongMin: number; startMode: 'today' | 'monday'; dc: DistanceClass;
+  doubles: number[]; hardSessions: number; difficulty: 'easier' | 'normal' | 'harder'; longRunStyle: 'auto' | 'steady' | 'progressive' | 'fast-finish';
+  strides: boolean; strengthPerWeek: number; planWeeks: number;
 }
 
 export function resolveSettings(profile: Profile, race: Race | undefined, recentWeeklyKm: number): Resolved {
@@ -61,6 +65,9 @@ export function resolveSettings(profile: Profile, race: Race | undefined, recent
     weeklyKm, peakKm, progression, available, daysPerWeek, longDay, dayAfterLong, cutbackEvery: t.cutbackEvery ?? 4,
     maxEasyMin: t.maxEasyMin ?? 90, maxQualityMin: t.maxQualityMin ?? 105, maxLongMin: t.maxLongMin ?? LONG_CAP_MIN[dc],
     startMode: t.startMode ?? 'today', dc,
+    doubles: (t.doubles ?? []).filter((d) => available.includes(d) && d !== longDay), hardSessions: Math.max(0, Math.min(2, t.hardSessions ?? 2)),
+    difficulty: t.difficulty ?? 'normal', longRunStyle: t.longRunStyle ?? 'auto', strides: t.strides ?? true,
+    strengthPerWeek: Math.max(0, Math.min(3, t.strengthPerWeek ?? 0)), planWeeks: Math.max(4, Math.min(24, t.planWeeks ?? 12)),
   };
 }
 
@@ -72,7 +79,7 @@ export type Role = 'long' | 'q1' | 'q2' | 'easy' | 'rest';
 
 const adjacent = (a: number, b: number) => (a - b + 7) % 7 === 1 || (b - a + 7) % 7 === 1;
 
-export function weekRoles(s: Pick<Resolved, 'available' | 'daysPerWeek' | 'longDay' | 'dayAfterLong'>): { roles: Role[]; warnings: string[] } {
+export function weekRoles(s: Pick<Resolved, 'available' | 'daysPerWeek' | 'longDay' | 'dayAfterLong'> & { hardSessions?: number }): { roles: Role[]; warnings: string[] } {
   const roles: Role[] = Array(7).fill('rest');
   const warnings: string[] = [];
   const L = s.longDay;
@@ -86,8 +93,9 @@ export function weekRoles(s: Pick<Resolved, 'available' | 'daysPerWeek' | 'longD
     for (const off of prefs) { const d = at(off); if (free(d) && hardOk(d)) { roles[d] = role; n--; return true; } }
     return false;
   };
-  if (!place('q1', [2, 3, 4, 5])) warnings.push('There is no day for a threshold session that is not next to the long run.');
-  if (s.daysPerWeek >= 3 && !place('q2', [5, 4, 3, 2])) warnings.push('Only one quality session fits without two hard days back to back.');
+  const hard = s.hardSessions ?? 2;
+  if (hard >= 1 && !place('q1', [2, 3, 4, 5])) warnings.push('There is no day for a threshold session that is not next to the long run.');
+  if (hard >= 2 && s.daysPerWeek >= 3 && !place('q2', [5, 4, 3, 2])) warnings.push('Only one quality session fits without two hard days back to back.');
   // Easy days, in order of preference; the day after the long run only if the runner wants it
   const easyPrefs = [3, 6, ...(s.dayAfterLong === 'off' ? [] : [1]), 4, 2, 5];
   for (const off of easyPrefs) { if (n <= 0) break; const d = at(off); if (free(d)) { roles[d] = 'easy'; n--; } }
@@ -146,7 +154,8 @@ export function checkVolumeFit(r: Resolved, paces: TrainingPaces, vol = r.peakKm
   const test = (days: number, available: number[], v: number) => {
     const { roles } = weekRoles({ ...r, available, daysPerWeek: days });
     const c = rolesCount(roles);
-    return { split: splitWeek(v, c.nQ, c.nEasy, c.hasLong, caps), ...c };
+    const nDoubles = r.doubles.filter((d) => roles[d] !== 'rest' && roles[d] !== 'long').length;
+    return { split: splitWeek(v, c.nQ, c.nEasy + nDoubles, c.hasLong, caps), ...c, nEasy: c.nEasy + nDoubles };
   };
   const cur = test(r.daysPerWeek, r.available, vol);
   let lo = 10, hi = vol;
@@ -348,6 +357,12 @@ export function generatePlan(input: GenInput): GenResult {
     if (fit.minDays && fit.minDayList && fit.minDays > r.daysPerWeek && fit.minDays < (fit.recommendedDays ?? 8)) {
       options.push({ label: `Train ${fit.minDays} days a week`, daysAvailable: [...new Set([...r.available, ...fit.minDayList])].sort(), training: { daysPerWeek: fit.minDays } });
     }
+    // Doubles: a second easy run on the days already chosen (for experienced, high-volume runners)
+    const { roles: curRoles } = weekRoles(r);
+    const doubleDays = curRoles.map((x, i) => (x === 'q1' || x === 'q2' || x === 'easy' ? i : -1)).filter((i) => i >= 0);
+    if (doubleDays.length && r.weeklyKm >= 50 && checkVolumeFit({ ...r, doubles: doubleDays }, paces).fits) {
+      options.push({ label: `Keep ${r.daysPerWeek} days and add a second easy run on ${doubleDays.map((d) => DAY_NAMES[d]).join(', ').replace(/, ([^,]*)$/, ' and $1')}`, training: { doubles: doubleDays } });
+    }
     options.push({ label: `Lower to ${fit.maxKm} km a week on ${r.daysPerWeek} days`, training: { weeklyKm: fit.maxKm, peakKm: fit.maxKm } });
     return { ok: false, problem: {
       kind: 'doesNotFit', fit, options,
@@ -361,7 +376,7 @@ export function generatePlan(input: GenInput): GenResult {
   const today = parseYmd(ymd(input.today));
   const start = r.startMode === 'monday' && weekday(today) !== 0 ? addDays(today, 7 - weekday(today)) : today;
   const raceDate = race ? parseYmd(race.date) : undefined;
-  const end = raceDate ?? addDays(startOfWeek(start), 12 * 7 - 1);
+  const end = raceDate ?? addDays(startOfWeek(start), r.planWeeks * 7 - 1);
   const ws0 = startOfWeek(start);
   const totalWeeks = Math.max(1, Math.ceil((daysBetween(ws0, end) + 1) / 7));
   const taperStart = raceDate ? addDays(raceDate, -TAPER_DAYS[r.dc]) : undefined;
@@ -387,9 +402,13 @@ export function generatePlan(input: GenInput): GenResult {
     if (cutback) phase = 'recovery';
     // One quality session in cutback weeks and for low-volume runners; the second slot becomes easy
     const oneQ = cutback || vol < 25 || phase === 'base';
-    const split = splitWeek(vol, oneQ ? Math.min(1, counts.nQ) : counts.nQ, counts.nEasy + (oneQ && counts.nQ > 1 ? 1 : 0), counts.hasLong, caps);
-    const ctx: Ctx = { paces, race, dc: r.dc, vol };
-    const longStyle = phase === 'peak' ? (r.dc === 'M' || r.dc === 'HM' ? 'mp' : 'progressive') : phase === 'build' ? 'progressive' : 'steady';
+    const nDoubles = r.doubles.filter((d) => roles[d] !== 'rest' && roles[d] !== 'long').length;
+    const split = splitWeek(vol, oneQ ? Math.min(1, counts.nQ) : counts.nQ, counts.nEasy + nDoubles + (oneQ && counts.nQ > 1 ? 1 : 0), counts.hasLong, caps);
+    const k = r.difficulty === 'easier' ? 1.02 : r.difficulty === 'harder' ? 0.99 : 1;
+    const qp: TrainingPaces = k === 1 ? paces : { ...paces, threshold: [paces.threshold[0] * k, paces.threshold[1] * k], interval: [paces.interval[0] * k, paces.interval[1] * k], repetition: [paces.repetition[0] * k, paces.repetition[1] * k] };
+    const ctx: Ctx = { paces: qp, race, dc: r.dc, vol };
+    const autoStyle = phase === 'peak' ? (r.dc === 'M' || r.dc === 'HM' ? 'mp' : 'progressive') : phase === 'build' ? 'progressive' : 'steady';
+    const longStyle: 'steady' | 'progressive' | 'mp' = r.longRunStyle === 'auto' ? autoStyle : r.longRunStyle === 'fast-finish' ? 'mp' : r.longRunStyle;
     let weekKm = 0;
     const weekSessions: PlannedSession[] = [];
     const rebuild = new Map<string, (km: number) => PlannedSession>();
@@ -416,8 +435,8 @@ export function generatePlan(input: GenInput): GenResult {
         if (dayPhase === 'taper') {
           s = toRace <= 3 ? easyRun(date, Math.max(5, split.easyKm * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
             : role === 'q1' || toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true });
-        } else if (oneQ && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: !cutback });
-        else if (phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: true });
+        } else if (oneQ && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: !cutback && r.strides });
+        else if (phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: r.strides });
         else {
           const v = qVariant, ww = w;
           const mkQ = (k: number) => (k < 5 ? easyRun(date, Math.max(2.5, k), phase, ctx, { strides: true, why: 'Your weekly volume is still small, so this is an easy run with a few relaxed strides instead of a hard session. Hard sessions come in as your weekly distance grows.' }) : phase === 'base' ? (ww % 2 === 0 ? threshold(date, k, phase, ctx, 0, true) : hills(date, k, phase, ctx))
@@ -439,12 +458,25 @@ export function generatePlan(input: GenInput): GenResult {
       }
       weekSessions.push(s);
     }
+    // Doubles: a second easy run on chosen days (not on rest days, the long run, or in race week)
+    for (const x of weekSessions) {
+      const dw = weekday(parseYmd(x.date));
+      if (r.doubles.includes(dw) && x.type !== 'rest' && x.type !== 'long' && x.type !== 'race' && x.phase !== 'taper') {
+        const km = Math.round(Math.min(split.easyKm, caps.easyKm) * 0.8 * 10) / 10;
+        if (km >= 4) x.second = { distanceM: Math.round(km * 1000), durationS: Math.round(km * mid(paces.easy)), title: 'Second run: easy', detail: `${km} km easy at ${PR(paces.easy)}, at least 4 hours after the first run` };
+      }
+    }
+    // Strength and mobility: on hard days first, so easy days stay easy
+    if (r.strengthPerWeek > 0) {
+      const order = [...weekSessions.filter((x) => ['threshold', 'vo2max', 'hills', 'tempo'].includes(x.type)), ...weekSessions.filter((x) => x.type === 'easy' || x.type === 'recovery')].filter((x) => x.phase !== 'taper');
+      for (const x of order.slice(0, r.strengthPerWeek)) x.strength = '20 min strength and mobility after the run: squats, lunges, calf raises, hip bridges and a plank. Body weight is enough.';
+    }
     // No run may be more than 35% of what the week actually adds up to (training weeks with 3+ runs)
     const runsIn = () => weekSessions.filter((x) => x.type !== 'rest');
     // (a first week that starts mid-week only shows part of the week, so it is left alone)
     if (ws >= start && !weekSessions.some((x) => x.phase === 'taper' || x.type === 'race') && runsIn().length >= 3) {
       for (let pass = 0; pass < 4; pass++) {
-        const total = runsIn().reduce((x, y) => x + y.distanceM, 0) / 1000;
+        const total = runsIn().reduce((x, y) => x + y.distanceM + (y.second?.distanceM ?? 0), 0) / 1000;
         const big = runsIn().filter((x) => rebuild.has(x.id) && x.distanceM / 1000 > total * MAX_SHARE).sort((a, b) => b.distanceM - a.distanceM)[0];
         if (!big) break;
         const others = total - big.distanceM / 1000;
@@ -453,7 +485,7 @@ export function generatePlan(input: GenInput): GenResult {
         weekSessions[weekSessions.indexOf(big)] = next;
       }
     }
-    for (const x of weekSessions) { weekKm += x.distanceM / 1000; sessions.push(x); }
+    for (const x of weekSessions) { weekKm += (x.distanceM + (x.second?.distanceM ?? 0)) / 1000; sessions.push(x); }
     qVariant++;
     if (weekKm > 0 || w === 0) weeks.push({ start: ymd(ws), targetKm: Math.round(ws < start ? vol : weekKm), phase, cutback });
     const last = phases[phases.length - 1];
@@ -472,6 +504,24 @@ export function generatePlan(input: GenInput): GenResult {
     id: uid(), raceId: race?.id, createdAt: new Date().toISOString(), startDate: ymd(start), endDate: ymd(end), phases, sessions, weeks,
     changes: [{ id: 'built', at: new Date().toISOString(), reason: 'rebuilt', summary: describePlan(r, roles, race, input, totalWeeks, caps) }],
   };
+  // B and C races inside the plan: the race replaces that day; a B race gets two easy days before; the day after is easy or rest
+  for (const o of input.otherRaces ?? []) {
+    const i = sessions.findIndex((x) => x.date === o.date);
+    if (i < 0 || sessions[i].type === 'race') continue;
+    const sess = raceDay(o.date, o, paces);
+    sess.phase = sessions[i].phase;
+    sess.purpose = o.priority === 'B' ? 'A tune-up race: run it hard, it is great practice and a fitness check.' : 'A training race: treat it as a hard session, not an all-out effort.';
+    sessions[i] = sess;
+    const soften = (j: number, why: string) => {
+      const x = sessions[j];
+      if (!x || x.type === 'rest' || x.type === 'race' || !HARD_TYPES.includes(x.type)) return;
+      sessions[j] = { ...easyRun(x.date, Math.min(10, x.distanceM / 1000 * 0.7), x.phase, { paces, race }, { why }), id: x.id };
+    };
+    soften(i - 1, `Easy the day before ${o.name}.`);
+    if (o.priority === 'B') soften(i - 2, `Easy two days before ${o.name}, a short taper for a tune-up race.`);
+    soften(i + 1, `Easy the day after ${o.name}, to recover.`);
+  }
+
   // 3) Sanity checks: refuse to hand over a plan that breaks the rules
   const issues = validatePlan(plan, paces);
   if (issues.length) return { ok: false, problem: { kind: 'invalid', message: 'The plan did not pass its safety checks, so it was not saved. Please try different settings.', issues, options: [] } };
@@ -510,7 +560,7 @@ export function validatePlan(plan: Plan, paces: TrainingPaces): string[] {
   }
   for (const [wk, list] of byWeek) {
     const runs = list.filter((s) => s.type !== 'rest');
-    const total = runs.reduce((x, s) => x + s.distanceM, 0);
+    const total = runs.reduce((x, s) => x + s.distanceM + (s.second?.distanceM ?? 0), 0);
     // The share rule applies to full training weeks: not taper or race weeks (deliberately small),
     // and not a first week that starts part-way through (its earlier days are not in the plan)
     const partialFirst = wk < plan.startDate;

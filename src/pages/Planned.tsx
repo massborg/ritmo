@@ -5,7 +5,7 @@ import { useApp } from '../app/AppContext';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
-import { addDays, DAY_SHORT, durationWords, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, durationWords, localise, longDate, paceRange, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 
 const CONCEPTS: Record<string, string> = {
@@ -26,7 +26,8 @@ const CONCEPTS: Record<string, string> = {
 export default function Planned() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { plan, data, moveSession, today } = useApp();
+  const { plan, data, moveSession, today, swap } = useApp();
+  const [warnMove, setWarnMove] = useState<string>();
   const s = plan?.sessions.find((x) => x.id === id);
   const [moving, setMoving] = useState(false);
   const [logging, setLogging] = useState(false);
@@ -58,7 +59,9 @@ export default function Planned() {
               <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{durationWords(s.durationS)}</p></div>
             </div>
           )}
-          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{st.label}</strong> {st.detail}</li>)}</ol>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
+          {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
+          {s.strength && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
           {s.paceTarget && <div><p className="caption">Target pace</p><p className="stat">{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
           {s.hrZones && <div className="stack-sm"><p className="caption">Heart rate</p><ZoneTag zones={s.hrZones} /></div>}
         </section>
@@ -79,17 +82,36 @@ export default function Planned() {
         {!done && s.date >= ymd(today) && options.length > 0 && (
           <button className="btn" aria-expanded={moving} onClick={() => setMoving((m) => !m)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Move this session</button>
         )}
-        <Link to="/coach?q=Why is today easy?" className="btn btn-ghost">Ask your coach</Link>
+        <Link to={`/coach?q=${encodeURIComponent(`Why is ${longDate(parseYmd(s.date)).split(' ')[0]}'s session ${s.title.toLowerCase()}?`)}`} className="btn btn-ghost">Ask your coach</Link>
       </div>
+      {!done && s.date >= ymd(today) && s.type !== 'rest' && s.type !== 'race' && (
+        <section className="card stack-sm" aria-label="Change this session">
+          <span className="label">Change this session</span>
+          <div className="row wrap">
+            <button className="btn btn-small" onClick={() => swap(s.id, 'shorter')}>Make it shorter</button>
+            {s.type !== 'easy' && s.type !== 'recovery' && <button className="btn btn-small" onClick={() => swap(s.id, 'easy')}>Easy run instead</button>}
+            {['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'similar')}>Something similar</button>}
+            <button className="btn btn-small" onClick={() => swap(s.id, 'treadmill')}>Treadmill version</button>
+          </div>
+          <p className="caption">Every change is shown under Plan changes in Calendar, with the reason.</p>
+        </section>
+      )}
       {logging && <LogRunSheet open onClose={() => setLogging(false)} session={s} />}
       {moving && (
         <section className="card stack" aria-label="Choose a new day">
           <p className="label">Move to another day this week. If that day has a session, the two swap.</p>
+          {warnMove && <StatusLine kind="warning">That puts two hard days back to back. Tap the day again to move it anyway, and take the second one easier.</StatusLine>}
           <div className="row wrap">
             {options.map((d) => {
               const other = plan?.sessions.find((x) => x.date === d);
               return (
-                <button key={d} className="chip" onClick={() => { moveSession(s.id, d); setMoving(false); nav('/calendar'); }}>
+                <button key={d} className="chip" onClick={() => {
+                  const HARD = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race'];
+                  const near = [ymd(addDays(parseYmd(d), -1)), ymd(addDays(parseYmd(d), 1))].map((x) => plan?.sessions.find((y) => y.date === x && y.id !== s.id && y.date !== s.date));
+                  const clash = HARD.includes(s.type) && near.some((y) => y && HARD.includes(y.type));
+                  if (clash && warnMove !== d) { setWarnMove(d); return; }
+                  moveSession(s.id, d); setMoving(false); setWarnMove(undefined); nav('/calendar');
+                }}>
                   {DAY_SHORT[weekday(parseYmd(d))]} {parseYmd(d).getDate()}<span className="caption">{other ? other.title : 'Free'}</span>
                 </button>
               );

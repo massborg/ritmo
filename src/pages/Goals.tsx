@@ -106,6 +106,21 @@ export default function Goals() {
         <Chips label="Start the plan" value={t.startMode ?? 'today'} onChange={(v) => set({ startMode: v })} options={[{ value: 'today', label: 'Today' }, { value: 'monday', label: 'Next Monday' }]} />
       </section>
 
+      <section className="card stack" aria-labelledby="style">
+        <h2 id="style" className="title">Training style</h2>
+        <Chips label="Hard sessions a week (plus the long run)" value={t.hardSessions ?? 2} onChange={(v) => set({ hardSessions: v })} options={[{ value: 0, label: 'None' }, { value: 1, label: 'One' }, { value: 2, label: 'Two' }]} />
+        <Chips label="How hard should they feel?" value={t.difficulty ?? 'normal'} onChange={(v) => set({ difficulty: v })} options={[{ value: 'easier', label: 'Easier' }, { value: 'normal', label: 'Normal' }, { value: 'harder', label: 'Harder' }]} />
+        <Chips label="Long runs" value={t.longRunStyle ?? 'auto'} onChange={(v) => set({ longRunStyle: v })} options={[{ value: 'auto', label: 'By phase', sub: 'recommended' }, { value: 'steady', label: 'Steady' }, { value: 'progressive', label: 'Progressive' }, { value: 'fast-finish', label: 'Fast finish' }]} />
+        <Chips label="Strides on easy days" value={t.strides === false ? 'off' : 'on'} onChange={(v) => set({ strides: v === 'on' })} options={[{ value: 'on', label: 'Yes' }, { value: 'off', label: 'No' }]} />
+        <Chips label="Strength and mobility a week" value={t.strengthPerWeek ?? 0} onChange={(v) => set({ strengthPerWeek: v })} options={[0, 1, 2, 3].map((x) => ({ value: x, label: x ? `${x}` : 'None' }))} />
+        <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="label">Second easy run on (doubles, for experienced high-volume runners)</legend>
+          <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={(t.doubles ?? []).includes(i)} aria-label={`Double on ${DAY_NAMES[i]}`} disabled={i === longDay || !draft.daysAvailable.includes(i)} onClick={() => set({ doubles: (t.doubles ?? []).includes(i) ? (t.doubles ?? []).filter((x) => x !== i) : [...(t.doubles ?? []), i].sort() })}>{d}</button>)}</div>
+          <p className="caption">A short easy run at least four hours after the first. Never on the long-run day or in race week.</p>
+        </fieldset>
+        {!aRace && <Stepper id="pw" label="Plan length without a race (weeks)" value={t.planWeeks} placeholder="12" min={4} max={24} unit="weeks" onChange={(v) => set({ planWeeks: v })} />}
+      </section>
+
       <section className="card stack" aria-labelledby="caps">
         <h2 id="caps" className="title">Longest sessions</h2>
         <div className="grid-2">

@@ -4,11 +4,12 @@ import { Send, Sparkles } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, SampleChip } from '../components/app';
 import { suggestions } from '../coach/coach';
+import { localise } from '../lib/format';
 import { Sheet } from '../components/inputs';
 
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal } = useApp();
   const ai = data.profile.consents?.aiCoach;
   // Chats with the sample runner stay with the sample runner
   const chat = data.coach.filter((m) => (m.mode ?? 'real') === (data.mode === 'sample' ? 'sample' : 'real'));
@@ -49,7 +50,10 @@ export default function Coach() {
         )}
         {chat.map((m) => (
           <div key={m.id} className={`bubble ${m.role === 'coach' ? 'bubble-coach' : 'bubble-runner'}`}>
-            <p>{m.text}</p>
+            <p>{localise(m.text, data.profile.units)}</p>
+            {m.proposal && (m.proposal.applied
+              ? <p className="caption" style={{ marginTop: 6 }}>Done. Your plan is updated.</p>
+              : <button className="btn btn-small btn-primary" style={{ marginTop: 8 }} onClick={() => applyCoachProposal(m.id)}>{m.proposal.label}</button>)}
             {m.facts && m.facts.length > 0 && (
               <details style={{ marginTop: 8 }}>
                 <summary className="caption" style={{ cursor: 'pointer', minHeight: 32, display: 'flex', alignItems: 'center' }}>Data used</summary>

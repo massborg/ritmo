@@ -5,9 +5,10 @@ import { MonthCalendar, Sheet } from '../components/inputs';
 import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { Segmented, StatusLine } from '../components/ui';
-import { addDays, DAY_SHORT, dist, distanceLabel, duration, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { TYPE_LABEL } from '../training/analysis';
+import { QuickAdd } from '../components/QuickAdd';
 import type { PlannedSession, SessionType } from '../lib/types';
 
 type View = 'day' | 'week' | 'month';
@@ -21,11 +22,12 @@ const typeStyle = (t: SessionType): React.CSSProperties => {
 export default function Calendar() {
   const { date } = useParams();
   const nav = useNavigate();
-  const { data, plan, today, typeOf, buildMyPlan } = useApp();
+  const { data, plan, today, typeOf, buildMyPlan, removeLog } = useApp();
   const [view, setView] = useState<View>(date ? 'day' : 'week');
   const [cursor, setCursor] = useState<Date>(date ? parseYmd(date) : today);
   const [picking, setPicking] = useState(false);
   const [planMsg, setPlanMsg] = useState<string>();
+  const [adding, setAdding] = useState(false);
   const U = data.profile.units;
   const t = ymd(today);
 
@@ -51,7 +53,13 @@ export default function Calendar() {
             <span className="stat">{dist(a.distanceM, U)} · {duration(a.movingS)}</span>
           </Link>
         ))}
-        {!s && !acts.length && !race && <p className="muted">Nothing planned.</p>}
+        {(data.profile.log ?? []).filter((e) => e.date === d).map((e) => (
+          <div key={e.id} className="card row-between">
+            <span className="stack-sm" style={{ gap: 2 }}><span className="label">{e.kind === 'cross' ? `${e.sport}, ${e.minutes} min` : 'Note'}</span>{(e.text || e.rpe) && <span className="caption">{e.kind === 'cross' && e.rpe ? `Effort ${e.rpe}/10. ` : ''}{e.text}</span>}</span>
+            <button className="btn btn-ghost btn-small" onClick={() => removeLog(e.id)}>Remove</button>
+          </div>
+        ))}
+        {!s && !acts.length && !race && !(data.profile.log ?? []).some((e) => e.date === d) && <p className="muted">Nothing planned.</p>}
       </div>
     );
   };
@@ -62,7 +70,7 @@ export default function Calendar() {
         <span className="label">{s.title}</span>
         {s.status === 'done' ? <StatusLine kind="success">Done</StatusLine> : s.status === 'missed' ? <StatusLine kind="warning">Missed</StatusLine> : <span className="caption">{s.focus}</span>}
       </div>
-      {s.type !== 'rest' && <span className="caption">{s.distanceM > 0 ? `${dist(s.distanceM, U, 0)} · ` : `${Math.round(s.durationS / 60)} min · `}{s.steps.map((x) => x.label).join(', ')}</span>}
+      {s.type !== 'rest' && <span className="caption">{s.distanceM > 0 ? `${dist(s.distanceM, U, 0)} · ` : `${Math.round(s.durationS / 60)} min · `}{localise(s.steps.map((x) => x.label).join(', '), U)}{s.second ? ` · plus ${dist(s.second.distanceM, U)} easy later` : ''}</span>}
     </Link>
   );
 
@@ -193,7 +201,8 @@ export default function Calendar() {
         <MonthCalendar value={ymd(cursor)} marks={new Set((plan?.sessions ?? []).filter((x) => x.type !== 'rest').map((x) => x.date).concat(data.races.map((r) => r.date)))} onChange={(d) => { setCursor(parseYmd(d)); setView('day'); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark planned sessions and races.</p>
       </Sheet>
-      <button className="fab" aria-label="Add race" onClick={() => nav('/race/new')}><Plus size={26} strokeWidth={2} /></button>
+      <button className="fab" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={26} strokeWidth={2} /></button>
+      <QuickAdd open={adding} onClose={() => setAdding(false)} />
 
       {plan && plan.changes.length > 0 && (
         <section className="card stack" aria-labelledby="changes">

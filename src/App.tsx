@@ -53,6 +53,18 @@ function ThemeSync() {
   return null;
 }
 
+/** After the first screen is up, fetch the other main screens quietly so moving between tabs is instant. */
+function Prefetch() {
+  const { ready } = useApp();
+  useEffect(() => {
+    if (!ready) return;
+    const go = () => { void import('./pages/Calendar'); void import('./pages/Progress'); void import('./pages/Coach'); void import('./pages/Profile'); void import('./pages/Planned'); };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(go); else setTimeout(go, 1500);
+  }, [ready]);
+  return null;
+}
+
 function ScrollTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -231,6 +243,7 @@ export default function App() {
     <AppProvider>
       <BrowserRouter>
         <ThemeSync />
+        <Prefetch />
         <ScrollTop />
         <RecoveryRedirect />
         <SplashOnce />

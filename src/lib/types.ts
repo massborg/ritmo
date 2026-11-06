@@ -124,6 +124,9 @@ export interface Profile {
   setupCompletedAt?: string;
   /** How the runner wants to train. Anything missing falls back to a sensible default. */
   training?: TrainingSettings;
+  adjust?: PlanAdjust;
+  log?: LogEntry[];
+  shoes?: Shoe[];
 }
 
 export interface TrainingSettings {
@@ -137,7 +140,26 @@ export interface TrainingSettings {
   maxQualityMin?: number;
   maxLongMin?: number;
   startMode?: 'today' | 'monday';
+  /** Days with a second, easy run (AM and PM) for high-volume runners, 0 = Monday */
+  doubles?: number[];
+  /** Hard sessions per week (0–2; the long run is separate) */
+  hardSessions?: number;
+  difficulty?: 'easier' | 'normal' | 'harder';
+  longRunStyle?: 'auto' | 'steady' | 'progressive' | 'fast-finish';
+  strides?: boolean;
+  /** Strength and mobility sessions per week (0–3), placed on easy days */
+  strengthPerWeek?: number;
+  /** Plan length in weeks when there is no race */
+  planWeeks?: number;
 }
+
+/** Temporary changes the runner asks for: easier sessions, no pace targets, or travel */
+export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string; until: string; at: string }
+
+/** Things logged that are not runs */
+export interface LogEntry { id: string; date: string; kind: 'cross' | 'note'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string }
+
+export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean }
 
 export interface Consents {
   /** Required: processing health and training data to coach the runner */
@@ -199,6 +221,10 @@ export interface PlannedSession {
   status: 'planned' | 'done' | 'missed' | 'moved' | 'skipped';
   completedActivityId?: string;
   movedFrom?: string;
+  /** A second, easy run the same day (doubles) */
+  second?: { distanceM: number; durationS: number; title: string; detail: string };
+  /** Strength and mobility added to this day */
+  strength?: string;
 }
 
 export type Phase = 'base' | 'build' | 'peak' | 'taper' | 'recovery' | 'race';
@@ -244,4 +270,6 @@ export interface CoachMessage {
   facts?: string[]; // data the answer is grounded on
   /** Chats with sample data are kept apart from the runner's own */
   mode?: 'sample' | 'real';
+  /** A plan change the coach offered; applied once the runner confirms */
+  proposal?: { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string; applied?: boolean };
 }
