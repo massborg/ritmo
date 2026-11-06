@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import type { Activity, CoachMessage, LogEntry, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
+import type { Activity, CoachMessage, Lap, LogEntry, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
@@ -112,6 +112,8 @@ interface Ctx extends Derived {
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
   linkRunToSession: (activityId: string, sessionId: string) => void;
+  /** Save a run recorded with the Run tab; returns its id */
+  saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }) => string;
   skipSession: (sessionId: string) => void;
   /** A feature switched on for this account (Run, Hub, share cards, Body); never in sample mode */
   hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body') => boolean;
@@ -503,6 +505,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return id;
   };
 
+  const saveRecordedRun = (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }): string => {
+    const id = `gps-${r.startedAt}`;
+    const session = derived.plan?.sessions.find((s) => s.id === r.sessionId);
+    const start = new Date(r.startedAt);
+    const h = start.getHours();
+    const part = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
+    let gain = 0;
+    for (let i = 1; i < r.streams.length; i++) { const a = r.streams[i - 1].alt, b = r.streams[i].alt; if (a != null && b != null && b - a > 0.5) gain += b - a; }
+    const a: Activity = {
+      id, source: 'ritmo_gps', sourceIds: { ritmo_gps: id }, startTime: start.toISOString(),
+      name: session && session.type !== 'rest' ? session.title : `${part} run`, sport: 'run',
+      distanceM: Math.round(r.distanceM), durationS: Math.round(r.elapsedS), movingS: Math.round(r.movingS),
+      elevGainM: r.streams.some((p) => p.alt != null) ? Math.round(gain) : undefined,
+      streams: r.streams, laps: r.laps.length ? r.laps : undefined, plannedSessionId: session?.id,
+      isTimeTrial: session?.type === 'timetrial' || undefined, detailScore: 0, importedAt: new Date().toISOString(),
+    };
+    a.detailScore = detailScore(a);
+    setData((d) => {
+      const base = d.mode === 'empty' ? { ...d, mode: 'real' as const } : d;
+      return { ...base, activities: merge(base.activities, [a]).activities };
+    });
+    return id;
+  };
+
   /** "From my watch": link a run that is already imported to a planned session */
   const linkRunToSession = (activityId: string, sessionId: string) =>
     setData((d) => ({ ...d, activities: d.activities.map((a) => (a.id === activityId ? { ...a, plannedSessionId: sessionId } : a.plannedSessionId === sessionId ? { ...a, plannedSessionId: undefined } : a)) }));
@@ -777,7 +803,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, saveRecordedRun, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

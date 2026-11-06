@@ -3,7 +3,7 @@ import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, LineChart, MessageCircle, Sun, User } from 'lucide-react';
+import { CalendarDays, LineChart, MessageCircle, Play, Sun, User } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo, StatusLine } from './components/ui';
 import Today from './pages/Today';
@@ -29,6 +29,7 @@ const HealthConnect = lazyPage(() => import('./pages/HealthConnect'));
 const NotFound = lazyPage(() => import('./pages/NotFound'));
 const About = lazyPage(() => import('./pages/About'));
 const Terms = lazyPage(() => import('./pages/Terms'));
+const RunPage = lazyPage(() => import('./pages/Run'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** Desktop sidebar: everything */
@@ -192,7 +193,10 @@ function PlanProblemSheet() {
 
 function Shell() {
   const { pathname } = useLocation();
-  const { session } = useApp();
+  const { session, hasFlag } = useApp();
+  // Run (centre, orange) appears for accounts with the run_tab flag
+  const mobile: Tab[] = hasFlag('run_tab') ? [MOBILE[0], MOBILE[1], { to: '/run', label: 'Run', icon: Play }, MOBILE[2]] : MOBILE;
+  const sidebar: Tab[] = hasFlag('run_tab') ? [SIDEBAR[0], SIDEBAR[1], { to: '/run', label: 'Run', icon: Play }, ...SIDEBAR.slice(2)] : SIDEBAR;
   const bare = BARE.includes(pathname) || !session;
   return (
     <div className={`app${bare ? ' app-bare' : ''}`}>
@@ -201,7 +205,7 @@ function Shell() {
         <aside className="sidebar" aria-label="Main navigation">
           <NavLink to="/" className="sidebar-logo" aria-label="Ritmo, go to Today"><Logo variant="compact" width={112} alt="Ritmo" /></NavLink>
           <nav className="stack-sm" aria-label="Main">
-            {SIDEBAR.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+            {sidebar.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
           </nav>
           <p className="caption sidebar-foot">Train to your own rhythm.</p>
         </aside>
@@ -226,6 +230,7 @@ function Shell() {
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/progress" element={<Progress />} />
+              <Route path="/run" element={<RunPage />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
@@ -251,7 +256,7 @@ function Shell() {
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">
-          {MOBILE.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${isActive || t.also?.some((p) => pathname.startsWith(p)) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+          {mobile.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${t.to === '/run' ? ' tab-run' : ''}${isActive || t.also?.some((p) => pathname.startsWith(p)) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
         </nav>
       )}
     </div>

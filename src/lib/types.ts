@@ -8,7 +8,8 @@ export type SourceKind =
   | 'apple_health'
   | 'health_connect'
   | 'strava'
-  | 'coros';
+  | 'coros'
+  | 'ritmo_gps'; // recorded with the Run tab
 
 export type SessionType =
   | 'easy'

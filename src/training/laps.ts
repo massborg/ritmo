@@ -9,7 +9,7 @@ const paceOf = (l: ReadLap) => l.pace_s_per_km ?? (l.time_s && l.distance_m ? l.
 export function mapLaps(laps: ReadLap[]): MappedRow[] {
   const paces = laps.map(paceOf);
   const known = paces.filter((p): p is number => !!p).sort((a, b) => a - b);
-  let isWork = (_: number) => true;
+  let isWork: (i: number) => boolean = () => true;
   if (known.length >= 3) {
     const fast = known[Math.floor(known.length * 0.25)], slow = known[Math.floor(known.length * 0.75)];
     // A structured session has clearly faster and slower laps; then "work" means the faster group
