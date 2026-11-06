@@ -16,6 +16,8 @@ import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
 import { weekReview } from '../training/report';
+import { activeNiggle, areaLabel, DISCLAIMER } from '../training/body';
+import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
 
@@ -34,8 +36,36 @@ function dayTitle(d: string, t: string): string {
   return `${DAY_NAMES[(date.getDay() + 6) % 7]}'s training · ${date.getDate()} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
 }
 
+/** Body: the niggle Ritmo is looking after, a red-flag pause, or the return-to-run step */
+function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
+  const { data, today, updateBody } = useApp();
+  const b = data.profile.body;
+  const n = activeNiggle(b, today);
+  const paused = !!b?.redFlagAt && (!b.checkedAt || b.checkedAt < b.redFlagAt);
+  if (!n && !paused && !b?.rtrStep) return null;
+  const firstOfArea = n ? [...(b?.checkins ?? [])].filter((c) => c.area === n.area && c.side === n.side).sort((x, y) => x.at.localeCompare(y.at))[0] : undefined;
+  const dayN = firstOfArea ? Math.floor((today.getTime() - new Date(firstOfArea.at).getTime()) / 86400000) + 1 : 1;
+  const trend = n?.trend === 'better' ? 'improving' : n?.trend === 'worse' ? 'getting worse' : 'about the same';
+  return (
+    <section className="card stack-sm" aria-labelledby="body-card">
+      <h2 id="body-card" className="label">{paused ? 'Training paused: get checked first' : n ? `${areaLabel(n)} · day ${dayN} · ${trend} · ${n.pain}/10` : `Return to run · step ${b!.rtrStep} of 6`}</h2>
+      {paused ? <p>You reported a warning sign. See a doctor or physio, then confirm here to resume training.</p>
+        : b?.rtrStep ? <p>Each step unlocks when pain stays at 2/10 or lower during the run and the next morning. Check in after each step.</p>
+        : <p>Your plan is adjusted. Check in each day so Ritmo can bring you back at the right pace.</p>}
+      <div className="row wrap">
+        {paused ? <button className="btn btn-primary btn-small" onClick={() => updateBody({ checkedAt: new Date().toISOString() })}>I have been checked by a professional</button>
+          : <button className="btn btn-primary btn-small" onClick={onCheckIn}>Check in</button>}
+        {!paused && n && n.pain <= 2 && !b?.rtrStep && <button className="btn btn-small" onClick={() => updateBody({ rtrStep: 1 })}>Start return to run</button>}
+        {!paused && <Link to="/coach?mode=body" className="btn btn-ghost btn-small">Ask about it</Link>}
+      </div>
+      <p className="caption">{DISCLAIMER}</p>
+    </section>
+  );
+}
+
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag } = useApp();
+  const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
   const [selected, setSelected] = useState(t);
@@ -45,6 +75,7 @@ export default function Today() {
   const [unwell, setUnwell] = useState(false);
   const [logSession, setLogSession] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
+  const [hurts, setHurts] = useState(false);
   const shiftDay = (n: number) => setSelected((d) => ymd(addDays(parseYmd(d), n)));
   // ← and → change the day on a keyboard (not while typing)
   useEffect(() => {
@@ -138,6 +169,8 @@ export default function Today() {
           <WeekStrip days={days} selected={selected} onSelect={setSelected} />
         </div>
       )}
+      {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
+      {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
         <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>

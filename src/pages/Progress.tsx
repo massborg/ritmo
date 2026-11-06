@@ -14,12 +14,13 @@ import type { Activity } from '../lib/types';
 import { PHASE_LABEL } from '../training/plan';
 import { estimateFitness, predictRace, trainingPaces, zoneOf } from '../training/fitness';
 import { Shoes } from '../components/Shoes';
+import { BodySection } from '../components/BodySection';
 import { zoneTime } from '../training/analysis';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function Progress() {
-  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness, athlete } = useApp();
+  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness, athlete, hasFlag } = useApp();
   const U = data.profile.units;
   const acts = data.activities;
   const [period, setPeriod] = useState<Period>('week');
@@ -183,6 +184,7 @@ export default function Progress() {
           <section className="card stack" aria-labelledby="eff"><h2 id="eff" className="title">Aerobic efficiency</h2><p className="caption">Metres per heartbeat on easy and long runs, by month. Higher means you go further for the same effort.</p>
             <LineChart labels={est.labels} every={4} format={(v) => v.toFixed(2)} series={[{ name: 'Metres per heartbeat', values: est.eff, color: 'var(--zone-2)' }]} /></section>
         )}
+      {hasFlag('body') && <BodySection />}
         <Shoes />
         <section className="card stack" aria-labelledby="long"><h2 id="long" className="title">Long-run progress</h2><p className="caption">Longest run each month, {U}</p><LineChart series={[{ name: 'Longest run', values: longRuns.vals, color: 'var(--brand)' }]} labels={longRuns.labels} every={3} /></section>
       </div>

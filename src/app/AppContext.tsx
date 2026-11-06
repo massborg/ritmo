@@ -17,11 +17,12 @@ import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
+import { activeNiggle, applyBody, areaLabel, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
 import { fitnessStage, type StageInfo } from '../training/stage';
-import { ask, type CoachContext } from '../coach/coach';
+import { ask, askBody, type CoachContext } from '../coach/coach';
 import { logOut } from './auth';
 
 export interface ImportState {
@@ -112,6 +113,9 @@ interface Ctx extends Derived {
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
   linkRunToSession: (activityId: string, sessionId: string) => void;
+  /** Body: save a check-in (red flags are worked out here, by rules); returns the red flags found */
+  addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>) => string[];
+  updateBody: (patch: Partial<BodyState>) => void;
   /** Save a run recorded with the Run tab; returns its id */
   saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }) => string;
   skipSession: (sessionId: string) => void;
@@ -128,7 +132,7 @@ interface Ctx extends Derived {
   reportIllness: (days: number) => void;
   clearIllness: () => void;
   analysisFor: (a: Activity) => Analysis;
-  sendCoach: (text: string, useAi?: boolean) => Promise<void>;
+  sendCoach: (text: string, useAi?: boolean, topic?: 'body') => Promise<void>;
   clearCoach: () => void;
   exportData: () => Promise<void>;
   deleteEverything: () => Promise<string | undefined>;
@@ -362,9 +366,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return t;
     };
 
-    const plan = data.plan
+    const adapted = data.plan
       ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces: paces ?? trainingPaces(35) })
       : data.plan;
+    // Body (flagged): pain check-ins change the coming days; red flags pause running until checked
+    const bodyOn = data.mode === 'real' && !!data.flags?.includes('body');
+    const plan = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
     const t = ymd(today);
     const todaySession = plan?.sessions.find((s) => s.date === t);
     const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
@@ -392,7 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const groups = groupIndex(groupRuns(acts));
     const groupOf = (id: string) => groups.get(id);
     return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
-  }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode]);
+  }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode, data.flags]);
 
   // Keep the plan's change log once adaptations happen
   useEffect(() => {
@@ -529,6 +536,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return id;
   };
 
+  const addBodyCheckin = (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>): string[] => {
+    const prev = data.profile.body ?? { checkins: [] };
+    const flags = redFlags(c, prev.checkins);
+    const entry: BodyCheckin = { ...c, id: uid(), at: new Date().toISOString(), redFlags: flags };
+    const step = prev.rtrStep;
+    // Return to run: a check-in at 2/10 or lower unlocks the next step; pain above that holds the step
+    const rtrStep = flags.length ? undefined : step ? (stepUnlocked(entry) ? Math.min(step + 1, 7) : step) : undefined;
+    setData((d) => ({ ...d, profile: { ...d.profile, body: { ...prev, checkins: [...prev.checkins, entry], ...(flags.length ? { redFlagAt: entry.at } : {}), rtrStep: rtrStep && rtrStep > 6 ? undefined : rtrStep } } }));
+    return flags;
+  };
+  /** What Body answers may use: logged pain, recent load and plan changes (never shared on the Hub) */
+  const bodyFacts = (): string[] => {
+    const b = data.profile.body;
+    const n = activeNiggle(b, derived.today);
+    const last4 = data.activities.filter((a) => daysBetween(new Date(a.startTime), derived.today) < 28).reduce((x, a) => x + a.distanceM, 0) / 4000;
+    return [
+      n ? `Active niggle: ${areaLabel(n)}, pain ${n.pain}/10, ${n.when.map((w) => WHEN_LABEL[w].toLowerCase()).join(', ')}, started ${n.onset}, trend ${n.trend ?? 'unknown'}, first logged ${new Date((b!.checkins.find((c) => c.area === n.area && c.side === n.side) ?? n).at).toDateString()}.` : 'No active niggle logged.',
+      `This week so far ${(derived.athlete.weekM / 1000).toFixed(1)} km; last 4 weeks average ${last4.toFixed(0)} km a week.`,
+      ...(b?.rtrStep ? [`Return to run: step ${b.rtrStep} of 6.`] : []),
+      ...(derived.plan?.changes.filter((c) => c.reason === 'pain').slice(-3).map((c) => `Plan change: ${c.summary}`) ?? []),
+    ];
+  };
+  const updateBody = (patch: Partial<BodyState>) => setData((d) => ({ ...d, profile: { ...d.profile, body: { checkins: [], ...d.profile.body, ...patch } } }));
+
   /** "From my watch": link a run that is already imported to a planned session */
   const linkRunToSession = (activityId: string, sessionId: string) =>
     setData((d) => ({ ...d, activities: d.activities.map((a) => (a.id === activityId ? { ...a, plannedSessionId: sessionId } : a.plannedSessionId === sessionId ? { ...a, plannedSessionId: undefined } : a)) }));
@@ -652,10 +683,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reportIllness = (days: number) => updateProfile({ illnessUntil: ymd(addDays(derived.today, days - 1)) });
   const clearIllness = () => updateProfile({ illnessUntil: undefined });
 
-  const sendCoach = async (text: string, useAi?: boolean) => {
+  const sendCoach = async (text: string, useAi?: boolean, topic?: 'body') => {
     const mode = data.mode === 'sample' ? 'sample' as const : 'real' as const;
-    const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString(), mode };
+    const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString(), mode, topic };
     setData((d) => ({ ...d, coach: [...d.coach, msg] }));
+    if (topic === 'body') {
+      // Red flags are rules, checked before any AI sees the message
+      const flags = textRedFlags(text);
+      setCoachBusy(true);
+      try {
+        const reply = flags.length
+          ? { text: `Please stop running and get checked by a doctor or physio before you run again. You mentioned: ${flags.join('; ').toLowerCase()}.${flags.some((f) => /chest|dizz|faint/i.test(f)) ? ' If this is happening now, call your local emergency number.' : ''}`, facts: [] as string[], source: 'local' as const, fallback: undefined }
+          : await askBody(text, bodyFacts(), data.coach.filter((m) => m.topic === 'body').map((m) => ({ role: m.role, text: m.text })), (useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted) && data.profile.body?.aiChat !== false);
+        if (flags.length) updateBody({ redFlagAt: new Date().toISOString() });
+        setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: `${reply.text}\n\n${DISCLAIMER}`, at: new Date().toISOString(), facts: reply.facts, mode, topic, source: reply.source, fallback: reply.fallback }] }));
+      } finally { setCoachBusy(false); }
+      return;
+    }
     setCoachBusy(true);
     try {
       const t = ymd(derived.today);
@@ -682,7 +726,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         weekTargetKm: derived.plan?.weeks?.find((w) => w.start === wk)?.targetKm,
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
-      const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode).map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
+      const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode && m.topic !== 'body').map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source, fallback: reply.fallback }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
@@ -803,7 +847,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, saveRecordedRun, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

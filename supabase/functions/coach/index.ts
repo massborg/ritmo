@@ -20,6 +20,15 @@ A DRAFT from Ritmo's built-in coach is included. It may answer a different quest
 If a change to a planned session would clearly help, or the runner asks for one (moving, shortening or easing a session), write your answer first and then call propose_plan_change once. The app asks the runner to confirm, so describe the change as a suggestion. Never propose changes to races or rest days, never move a hard session next to another hard day, and never move anything into the past.
 You give coaching guidance, not medical advice. If pain, illness, chest symptoms, dizziness or injury come up, advise rest and seeing a doctor or physio, and do not propose harder training.`;
 
+// Body mode: injury and recovery support with its own safety rules (review #2 §10.6)
+const BODY_SYSTEM = `You are Ritmo's injury and recovery support for runners. You are not a doctor or physio and you never diagnose or prescribe treatment.
+Use only the runner's numbers in FACTS (training load, logged pain, plan changes). Never invent numbers.
+Never state a diagnosis as fact: you may say "this area is often linked to ..., a physio can confirm". Never recommend medication, doses, injections or supplements.
+Give general load-management guidance: whether easy running, cross-training or rest fits the pain described, using these rules: pain that eases while warming up and stays at 3/10 or lower usually allows easy running; pain that grows while running, changes how they run or lasts to the next day means rest or cross-training.
+Lead with the answer, under 130 words, plain sentences, no emoji, no headings. Always end with one sentence on when to see a physio or doctor.
+A DRAFT from Ritmo's rule-based guidance is included; stay consistent with it.`;
+const RED_FLAGS = /chest pain|dizz|faint|at night|night pain|wakes? me|at rest|\bpop(ped)?\b|\btear\b|\btore\b|can'?t (walk|put weight|bear weight)|numb|tingl|swollen|swelling|bruis|bony|stress fracture/i;
+
 const PROPOSE: Anthropic.Tool = {
   name: 'propose_plan_change',
   description: 'Offer the runner one change to a planned session from SESSIONS. The app shows it as a button the runner must confirm. action "move" moves the session to to_date (YYYY-MM-DD); "shorter" makes it about 30% shorter; "easy" turns it into an easy run.',
@@ -49,10 +58,13 @@ Deno.serve(async (req) => {
   if (quota.error) console.error('coach quota check failed', quota.error.message);
   else if (quota.data === false) return json({ error: 'rate_limited' }, 429);
 
-  let body: { question?: unknown; facts?: unknown; draft?: unknown; history?: unknown; sessions?: unknown; today?: unknown; units?: unknown };
+  let body: { question?: unknown; facts?: unknown; draft?: unknown; history?: unknown; sessions?: unknown; today?: unknown; units?: unknown; mode?: unknown };
   try { body = await req.json(); } catch { return json({ error: 'bad_request' }, 400); }
   const { question, facts, draft, history, sessions, today, units } = body;
   if (typeof question !== 'string' || question.length > 1000 || !Array.isArray(facts)) return json({ error: 'bad_request' }, 400);
+  const bodyMode = body.mode === 'body';
+  // Body mode: warning signs never reach the model (the app checks first; this is the second check)
+  if (bodyMode && RED_FLAGS.test(question)) return json({ text: 'Please stop running and get checked by a doctor or physio before you run again. If you have chest pain, dizziness or fainting now, call your local emergency number.', proposal: null });
 
   const prior = (Array.isArray(history) ? history : []).slice(-6).map((m: { role: string; text: string }) => ({
     role: (m.role === 'coach' ? 'assistant' : 'user') as 'assistant' | 'user', content: String(m.text).slice(0, 1500),
@@ -71,9 +83,8 @@ Deno.serve(async (req) => {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'low' }, // short chat answers: low effort keeps them quick and inexpensive
-      system: SYSTEM,
-      tools: [PROPOSE],
-      tool_choice: { type: 'auto' },
+      system: bodyMode ? BODY_SYSTEM : SYSTEM,
+      ...(bodyMode ? {} : { tools: [PROPOSE], tool_choice: { type: 'auto' } }),
       messages: [...prior, { role: 'user', content: prompt }],
     };
     // deno-lint-ignore no-explicit-any
