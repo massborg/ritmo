@@ -1,4 +1,4 @@
-// A test runner shaped like the review account: about 93 km a week for 18 weeks, races at
+// A test runner shaped like the November 2026 review account (anonymised): about 93 km a week for 18 weeks, races at
 // 5K 15:51 (20 Sep), half marathon 1:13:37 (4 Oct) and 10K 33:11 (1 Nov), training on Tue/Thu/Sat only.
 // Dates are relative to `today` so the fixture stays valid.
 const DAY = 86400000;
@@ -34,7 +34,7 @@ function ryanActivities(today = new Date('2026-11-06T12:00:00Z')) {
 }
 
 const ryanProfile = {
-  name: 'Ryan', units: 'km', theme: 'system', goal: 'Safi 5K AM in 15:30', daysAvailable: [1, 3, 5], longRunDay: 5, injuries: [], onboarded: true,
+  name: 'Sam', units: 'km', theme: 'system', goal: 'Safi 5K AM in 15:30', daysAvailable: [1, 3, 5], longRunDay: 5, injuries: [], onboarded: true,
   experience: 'runner', dateOfBirth: '1990-04-15', birthYear: 1990,
   consents: { healthData: { granted: true, at: '2026-11-05T08:00:00Z', version: '2026-11' }, aiCoach: { granted: false, at: '2026-11-05T08:00:00Z' } },
   healthCheck: { completedAt: '2026-11-05T08:00:00Z', doctorAdvised: false }, background: { level: 'racer', weeklyKm: 93, longestRecentKm: 21 },
