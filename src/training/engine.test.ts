@@ -392,3 +392,22 @@ describe('coach move dates', () => {
     expect(r.proposal?.toDate).toBe('2026-11-13');
   });
 });
+
+import { proposalFromAi } from '../coach/coach';
+describe('AI coach proposals are checked before they are offered', () => {
+  const plan = ok(gen({}, 90));
+  const ctx = { today: new Date('2026-11-09T08:00:00'), weekAhead: plan.sessions.filter((s) => s.date >= '2026-11-09' && s.date <= '2026-11-16') } as unknown as CoachContext;
+  const thr = ctx.weekAhead!.find((s) => s.type === 'threshold')!;
+  const rest = ctx.weekAhead!.find((s) => s.type === 'rest')!;
+  it('accepts a valid move or swap of a real session', () => {
+    expect(proposalFromAi({ action: 'move', session_id: thr.id, to_date: '2026-11-10' }, ctx)?.kind).toBe('move');
+    expect(proposalFromAi({ action: 'easy', session_id: thr.id, to_date: null }, ctx)?.swap).toBe('easy');
+  });
+  it('rejects unknown sessions, rest days, past dates and far-off dates', () => {
+    expect(proposalFromAi({ action: 'move', session_id: 'made-up', to_date: '2026-11-10' }, ctx)).toBeUndefined();
+    expect(proposalFromAi({ action: 'easy', session_id: rest.id, to_date: null }, ctx)).toBeUndefined();
+    expect(proposalFromAi({ action: 'move', session_id: thr.id, to_date: '2026-11-01' }, ctx)).toBeUndefined();
+    expect(proposalFromAi({ action: 'move', session_id: thr.id, to_date: '2027-01-01' }, ctx)).toBeUndefined();
+    expect(proposalFromAi({ action: 'delete', session_id: thr.id, to_date: null }, ctx)).toBeUndefined();
+  });
+});

@@ -56,7 +56,7 @@ export default function Coach() {
               : <button className="btn btn-small btn-primary" style={{ marginTop: 8 }} onClick={() => applyCoachProposal(m.id)}>{m.proposal.label}</button>)}
             {m.facts && m.facts.length > 0 && (
               <details style={{ marginTop: 8 }}>
-                <summary className="caption" style={{ cursor: 'pointer', minHeight: 32, display: 'flex', alignItems: 'center' }}>Data used</summary>
+                <summary className="caption" style={{ cursor: 'pointer', minHeight: 32, display: 'flex', alignItems: 'center' }}>{m.source === 'ai' ? 'AI coach · data used' : m.source === 'local' ? 'Built-in coach · data used' : 'Data used'}</summary>
                 <ul className="bullets caption" style={{ marginTop: 4 }}>{m.facts.slice(0, 8).map((f) => <li key={f}>{f}</li>)}</ul>
               </details>
             )}

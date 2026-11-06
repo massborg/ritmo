@@ -218,17 +218,37 @@ export function localReply(q: string, c: CoachContext): CoachReply {
  * Answers from the built-in coach, optionally rewritten by the AI coach. The AI is used only when the
  * person has agreed to it (useAi). Only training facts are sent: never the profile picture, name or email.
  */
+/** A plan change suggested by the AI, checked against the runner's real sessions before it is offered. */
+export function proposalFromAi(raw: unknown, c: CoachContext): CoachProposal | undefined {
+  const p = raw as { action?: string; session_id?: string; to_date?: string } | null;
+  if (!p || typeof p !== 'object') return undefined;
+  const s = c.weekAhead?.find((x) => x.id === p.session_id);
+  if (!s || s.type === 'rest' || s.type === 'race') return undefined;
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (p.action === 'move') {
+    if (!p.to_date || !/^\d{4}-\d{2}-\d{2}$/.test(p.to_date) || p.to_date < iso(c.today) || p.to_date === s.date) return undefined;
+    const days = (parseYmd(p.to_date).getTime() - c.today.getTime()) / 86400000;
+    if (days > 14) return undefined;
+    return { kind: 'move', sessionId: s.id, toDate: p.to_date, label: `Move it to ${longDate(parseYmd(p.to_date))}` };
+  }
+  if (p.action === 'shorter' || p.action === 'easy') return { kind: 'swap', sessionId: s.id, swap: p.action, label: p.action === 'shorter' ? `Make ${longDate(parseYmd(s.date)).split(' ')[0]}'s session shorter` : `Make ${longDate(parseYmd(s.date)).split(' ')[0]}'s session an easy run` };
+  return undefined;
+}
+
 export async function ask(q: string, c: CoachContext, history: { role: string; text: string }[], useAi = false): Promise<CoachReply & { source: 'ai' | 'local' }> {
   const local = localReply(q, c);
   if (!supabase || !useAi || !c.hasData || PAIN.test(q)) return { ...local, source: 'local' };
   try {
+    // The AI answers the actual question from the runner's own data: facts, this week's sessions and the chat so far.
+    // The built-in answer is passed as a hint only. Never sent: email, photo, date of birth or health check answers.
+    const sessions = (c.weekAhead ?? []).map((x) => ({ id: x.id, date: x.date, type: x.type, title: x.title, km: Math.round(x.distanceM / 100) / 10, minutes: Math.round(x.durationS / 60), status: x.status }));
     const { data, error } = await supabase.functions.invoke('coach', {
-      body: { question: q, facts: local.facts, draft: local.text, history: history.slice(-6) },
+      body: { question: q, facts: local.facts, draft: local.text, history: history.slice(-6), sessions, today: c.today.toISOString().slice(0, 10), units: c.units },
     });
     const status = (error as { context?: Response } | null)?.context?.status;
     if (status === 429) return { ...local, text: `${local.text}\n\nYou have asked the AI coach a lot of questions recently, so this answer comes from Ritmo's built-in coach. AI answers will be back shortly.`, source: 'local' };
     if (error || !data?.text) return { ...local, source: 'local' };
-    return { text: data.text as string, facts: local.facts, proposal: local.proposal, source: 'ai' };
+    return { text: data.text as string, facts: local.facts, proposal: proposalFromAi(data.proposal, c) ?? local.proposal, source: 'ai' };
   } catch {
     return { ...local, source: 'local' };
   }

@@ -272,4 +272,6 @@ export interface CoachMessage {
   mode?: 'sample' | 'real';
   /** A plan change the coach offered; applied once the runner confirms */
   proposal?: { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string; applied?: boolean };
+  /** Who wrote the answer: the AI coach, or Ritmo's built-in coach */
+  source?: 'ai' | 'local';
 }

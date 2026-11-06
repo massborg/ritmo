@@ -565,7 +565,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
       const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode).map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal }] }));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
     } finally {
