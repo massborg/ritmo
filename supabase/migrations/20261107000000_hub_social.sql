@@ -1,0 +1,6 @@
+-- Ritmo Hub (review #2 §4), applied 7 Nov 2026. Additive only. The full SQL as applied is kept in the
+-- Supabase migration history (name: hub_social). Tables: hub_profiles, follows, blocks, posts, post_media,
+-- ritmos, comments, notifications, reports; functions can_see_post, is_blocked_between; triggers for counts,
+-- notifications, follow approval, a 10-a-minute comment limit and tamper-proof counts.
+-- Verified 7 Nov 2026 in a rolled-back transaction: a stranger cannot read a followers-only post or react to it,
+-- a follower can, follow requests to private profiles wait for approval, counts cannot be forged.
