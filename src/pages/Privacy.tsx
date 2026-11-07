@@ -22,7 +22,7 @@ export default function Privacy() {
         {COMPANY.name && (
           <>
             <h2 className="title">Who is responsible for your data</h2>
-            <p>Ritmo Running is provided by <strong>{COMPANY.name}</strong>{COMPANY.registration ? `, registered in Malta (${COMPANY.registration})` : ''}{COMPANY.address ? `, ${COMPANY.address}` : ''}{COMPANY.vat ? `, VAT ${COMPANY.vat}` : ''}. {COMPANY.name} is the data controller for the personal data described here.{CONTACT_EMAIL && <> For questions, data requests or to exercise your rights, email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</>} You can also complain to the Information and Data Protection Commissioner in Malta (idpc.org.mt).</p>
+            <p>Ritmo Running is provided by <strong>{COMPANY.name}</strong>{COMPANY.registration ? `, registered in ${COMPANY.country} (${COMPANY.registration})` : ''}{COMPANY.address ? `, ${COMPANY.address}` : ''}{COMPANY.vat ? `, VAT ${COMPANY.vat}` : ''}. {COMPANY.name} is the data controller for the personal data described here.{CONTACT_EMAIL && <> For questions, data requests or to exercise your rights, email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</>} You can also complain to the data protection authority in the EU country where you live, or to {COMPANY.name}’s lead authority, the {COMPANY.authority.name} (<a href={COMPANY.authority.url} target="_blank" rel="noreferrer">{COMPANY.authority.url.replace('https://', '')}</a>).</p>
           </>
         )}
         <h2 className="title">What Ritmo uses, and why</h2>

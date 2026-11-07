@@ -4,5 +4,5 @@
     <string name="title_activity_main">Ritmo</string>
     <string name="package_name">com.ritmorunning.app</string>
     <string name="custom_url_scheme">com.ritmorunning.app</string>
-    <string name="health_connect_privacy_policy_url">https://ritmorunning.run/privacy</string>
+    <string name="health_connect_privacy_policy_url">https://app.ritmorunning.run/privacy</string>
 </resources>

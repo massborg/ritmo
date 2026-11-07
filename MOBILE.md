@@ -20,7 +20,7 @@ The iPhone and Android apps share this codebase. [Capacitor](https://capacitorjs
 ## Health data
 
 - **iOS:** HealthKit capability (`ios/App/App/App.entitlements`) and permission text in `Info.plist`. Ritmo reads workouts and heart rate, and never writes.
-- **Android:** Health Connect, min SDK 26. The manifest declares only `READ_EXERCISE`, `READ_DISTANCE`, `READ_HEART_RATE` and `READ_HEALTH_DATA_HISTORY`. All other permissions the plugin declares are removed, because Play requires each one to be justified. The privacy policy link is set in `res/values/strings.xml` and points to https://ritmorunning.run/privacy.
+- **Android:** Health Connect, min SDK 26. The manifest declares only `READ_EXERCISE`, `READ_DISTANCE`, `READ_HEART_RATE` and `READ_HEALTH_DATA_HISTORY`. All other permissions the plugin declares are removed, because Play requires each one to be justified. The privacy policy link is set in `res/values/strings.xml` and points to https://app.ritmorunning.run/privacy.
 - Runs from phones carry summaries, laps and heart rate, but no GPS splits. The analysis flags this as limited data.
 - Duplicate runs (the same run from Garmin, a file and a phone) are merged, and the most detailed version is kept.
 - The app syncs when it opens and each time it returns to the foreground. The first sync reads up to 10 years of history.
@@ -50,6 +50,6 @@ After any change in `src/`, run `npm run cap:sync`.
 
 ## Before store release
 
-- **Sign-in links:** emailed sign-in links currently open the website. Ritmo's address is https://ritmorunning.run. To open links in the app, serve `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` from that address and register it for Universal Links and App Links.
+- **Sign-in links:** emailed sign-in links currently open the website. Ritmo's address is https://app.ritmorunning.run. To open links in the app, serve `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` from that address and register it for Universal Links and App Links.
 - **Privacy:** both stores require a privacy policy URL and data-safety forms. Use the in-app Privacy page as the basis.
 - **Screenshots:** both stores need screenshots at their required sizes.

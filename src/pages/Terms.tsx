@@ -26,7 +26,7 @@ export default function Terms() {
         <p>Do not misuse Ritmo, try to access other people's data, upload files you do not have the right to share, or interfere with the service.</p>
         <h2 className="title">Changes and availability</h2>
         <p>Ritmo is in active development. Features may change, and we may update these terms; we will tell you about significant changes in the app. We aim to keep Ritmo available but cannot guarantee uninterrupted service. To the extent the law allows, Ritmo is provided "as is" and our liability is limited to the amount you have paid us in the previous 12 months.</p>
-        {COMPANY.name && <><h2 className="title">Who provides Ritmo</h2><p>Ritmo Running is provided by {COMPANY.name}{COMPANY.registration ? `, registered in Malta (${COMPANY.registration})` : ''}{COMPANY.address ? `, ${COMPANY.address}` : ''}.</p></>}
+        {COMPANY.name && <><h2 className="title">Who provides Ritmo</h2><p>Ritmo Running is provided by {COMPANY.name}{COMPANY.registration ? `, registered in ${COMPANY.country} (${COMPANY.registration})` : ''}{COMPANY.address ? `, ${COMPANY.address}` : ''}.</p></>}
         {CONTACT_EMAIL && <><h2 className="title">Contact</h2><p>Questions about these terms: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p></>}
       </section>
       <p className="caption"><Link to="/about">About Ritmo</Link> · <Link to="/privacy">Privacy</Link></p>

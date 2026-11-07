@@ -6,7 +6,7 @@ Ritmo connects to a runner's data, understands years of training, and tells them
 
 ## Status: Stage 1 (web app)
 
-Live: https://ritmorunning.run
+Live: https://app.ritmorunning.run
 
 - Splash, first-time setup (upload, import progress, running story, goals), Today, Calendar (day/week/month), training plan with explained adaptations, session analysis and feedback, races (prediction, readiness, pacing, taper, post-race review), Progress, Coach, Profile, data sources, privacy (export and delete).
 - Clearly labelled sample data runs through the same integration layer as real sources.
@@ -47,7 +47,8 @@ node scripts/phone-fit.cjs   # overflow and 44px tap targets on seven phone size
 
 ### Supabase Auth settings (dashboard)
 
-- Authentication > URL Configuration: Site URL `https://ritmorunning.run`; add `https://ritmorunning.run/**` to Redirect URLs.
+- Authentication > URL Configuration: Site URL `https://app.ritmorunning.run`; Redirect URLs `https://app.ritmorunning.run/**` and, so older sign-in links keep working, `https://ritmo-running.netlify.app/**`.
+- Addresses: `ritmorunning.run` (and www) is the separate waitlist website (Netlify site ritmorunning-website); the app is `app.ritmorunning.run`.
 - Authentication > Providers > Email: keep "Confirm email" on.
 - Authentication > Emails: set up custom SMTP before launch (the built-in sender is rate limited).
 
