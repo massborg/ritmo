@@ -2,7 +2,7 @@
 
 - `png/`: 100 cards, 1080 x 1350 (4:5), numbered card-001 to card-100.
 - `captions.md`: caption, hashtags and alt text for every card.
-- `calendar.md`: a suggested schedule, one card every 3 days from Monday 4 January 2027 (straight after post 12).
+- `calendar.md`: the schedule, one card a week, every Monday from 4 January 2027 (straight after post 12).
 - `cards.json`: the same captions, hashtags, alt text and dates in a form that scheduling tools or Claude in Chrome can read.
 - `contact-sheet.png`: all 100 on one page.
 

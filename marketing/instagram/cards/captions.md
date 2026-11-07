@@ -34,7 +34,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Start slower than you thi
 ## 002 · Training tips · Three signs your easy run is easy enough.
 
 **File:** `png/card-002-three-signs-your-easy-run-is-easy-enough.png`  
-**Suggested date:** Thu 7 Jan 2027
+**Suggested date:** Mon 11 Jan 2027
 
 **Caption**
 
@@ -59,7 +59,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Three signs your eas
 ## 003 · Myth vs fact · Every run should hurt.
 
 **File:** `png/card-003-every-run-should-hurt.png`  
-**Suggested date:** Sun 10 Jan 2027
+**Suggested date:** Mon 18 Jan 2027
 
 **Caption**
 
@@ -82,7 +82,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "E
 ## 004 · Running words · Easy run
 
 **File:** `png/card-004-easy-run.png`  
-**Suggested date:** Wed 13 Jan 2027
+**Suggested date:** Mon 25 Jan 2027
 
 **Caption**
 
@@ -105,7 +105,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Eas
 ## 005 · Waitlist · The waitlist is open.
 
 **File:** `png/card-005-the-waitlist-is-open.png`  
-**Suggested date:** Sat 16 Jan 2027
+**Suggested date:** Mon 1 Feb 2027
 
 **Caption**
 
@@ -128,7 +128,7 @@ Orange graphic with the Ritmo Running logo. Headline: "The waitlist is open." Be
 ## 006 · Feature glimpse · A plan built around your week.
 
 **File:** `png/card-006-a-plan-built-around-your-week.png`  
-**Suggested date:** Tue 19 Jan 2027
+**Suggested date:** Mon 8 Feb 2027
 
 **Caption**
 
@@ -155,7 +155,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "A plan built around 
 ## 007 · By the numbers · Mostly easy, a little hard.
 
 **File:** `png/card-007-mostly-easy-a-little-hard.png`  
-**Suggested date:** Fri 22 Jan 2027
+**Suggested date:** Mon 15 Feb 2027
 
 **Caption**
 
@@ -178,7 +178,7 @@ Dark graphite graphic with the Ritmo Running logo. A very large figure, "80/20",
 ## 008 · Coach's note · Hills are speed work in disguise.
 
 **File:** `png/card-008-hills-are-speed-work-in-disguise.png`  
-**Suggested date:** Mon 25 Jan 2027
+**Suggested date:** Mon 22 Feb 2027
 
 **Caption**
 
@@ -201,7 +201,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Hills are speed work
 ## 009 · Question · Morning runner or evening runner?
 
 **File:** `png/card-009-morning-runner-or-evening-runner.png`  
-**Suggested date:** Thu 28 Jan 2027
+**Suggested date:** Mon 1 Mar 2027
 
 **Caption**
 
@@ -224,7 +224,7 @@ Orange graphic with the Ritmo Running logo. Question in large type: "Morning run
 ## 010 · Training tips · Before your first 5K.
 
 **File:** `png/card-010-before-your-first-5k.png`  
-**Suggested date:** Sun 31 Jan 2027
+**Suggested date:** Mon 8 Mar 2027
 
 **Caption**
 
@@ -249,7 +249,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Before your first 5K
 ## 011 · Coach's note · Progress is quiet.
 
 **File:** `png/card-011-progress-is-quiet.png`  
-**Suggested date:** Wed 3 Feb 2027
+**Suggested date:** Mon 15 Mar 2027
 
 **Caption**
 
@@ -272,7 +272,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Progress is quiet.
 ## 012 · Running words · Tempo run
 
 **File:** `png/card-012-tempo-run.png`  
-**Suggested date:** Sat 6 Feb 2027
+**Suggested date:** Mon 22 Mar 2027
 
 **Caption**
 
@@ -295,7 +295,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Tem
 ## 013 · Myth vs fact · Long static stretches before a run prevent injury.
 
 **File:** `png/card-013-long-static-stretches-before-a-run-preve.png`  
-**Suggested date:** Tue 9 Feb 2027
+**Suggested date:** Mon 29 Mar 2027
 
 **Caption**
 
@@ -318,7 +318,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "Long sta
 ## 014 · Training tips · Running in the heat.
 
 **File:** `png/card-014-running-in-the-heat.png`  
-**Suggested date:** Fri 12 Feb 2027
+**Suggested date:** Mon 5 Apr 2027
 
 **Caption**
 
@@ -343,7 +343,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Running in the heat.
 ## 015 · Coach's note · Sleep is training too.
 
 **File:** `png/card-015-sleep-is-training-too.png`  
-**Suggested date:** Mon 15 Feb 2027
+**Suggested date:** Mon 12 Apr 2027
 
 **Caption**
 
@@ -366,7 +366,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Sleep is training 
 ## 016 · Feature glimpse · Know what today is for.
 
 **File:** `png/card-016-know-what-today-is-for.png`  
-**Suggested date:** Thu 18 Feb 2027
+**Suggested date:** Mon 19 Apr 2027
 
 **Caption**
 
@@ -393,7 +393,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Know what today is f
 ## 017 · Waitlist · A coach that explains itself.
 
 **File:** `png/card-017-a-coach-that-explains-itself.png`  
-**Suggested date:** Sun 21 Feb 2027
+**Suggested date:** Mon 26 Apr 2027
 
 **Caption**
 
@@ -416,7 +416,7 @@ Orange graphic with the Ritmo Running logo. Headline: "A coach that explains its
 ## 018 · Running words · Intervals
 
 **File:** `png/card-018-intervals.png`  
-**Suggested date:** Wed 24 Feb 2027
+**Suggested date:** Mon 3 May 2027
 
 **Caption**
 
@@ -439,7 +439,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Int
 ## 019 · By the numbers · Enough to make real progress.
 
 **File:** `png/card-019-enough-to-make-real-progress.png`  
-**Suggested date:** Sat 27 Feb 2027
+**Suggested date:** Mon 10 May 2027
 
 **Caption**
 
@@ -462,7 +462,7 @@ Dark graphite graphic with the Ritmo Running logo. A very large figure, "3", abo
 ## 020 · Coach's note · Steady beats heroic.
 
 **File:** `png/card-020-steady-beats-heroic.png`  
-**Suggested date:** Tue 2 Mar 2027
+**Suggested date:** Mon 17 May 2027
 
 **Caption**
 
@@ -485,7 +485,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Steady beats heroic.
 ## 021 · Question · What got you running?
 
 **File:** `png/card-021-what-got-you-running.png`  
-**Suggested date:** Fri 5 Mar 2027
+**Suggested date:** Mon 24 May 2027
 
 **Caption**
 
@@ -508,7 +508,7 @@ Orange graphic with the Ritmo Running logo. Question in large type: "What got yo
 ## 022 · Training tips · A simple warm-up.
 
 **File:** `png/card-022-a-simple-warm-up.png`  
-**Suggested date:** Mon 8 Mar 2027
+**Suggested date:** Mon 31 May 2027
 
 **Caption**
 
@@ -533,7 +533,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "A simple warm-up." A
 ## 023 · Myth vs fact · Running ruins your knees.
 
 **File:** `png/card-023-running-ruins-your-knees.png`  
-**Suggested date:** Thu 11 Mar 2027
+**Suggested date:** Mon 7 Jun 2027
 
 **Caption**
 
@@ -556,7 +556,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "R
 ## 024 · Running words · Strides
 
 **File:** `png/card-024-strides.png`  
-**Suggested date:** Sun 14 Mar 2027
+**Suggested date:** Mon 14 Jun 2027
 
 **Caption**
 
@@ -579,7 +579,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Str
 ## 025 · Coach's note · Run the kilometre you are in.
 
 **File:** `png/card-025-run-the-kilometre-you-are-in.png`  
-**Suggested date:** Wed 17 Mar 2027
+**Suggested date:** Mon 21 Jun 2027
 
 **Caption**
 
@@ -602,7 +602,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Run the kilometre you are
 ## 026 · Feature glimpse · Warm-up, strides, main run, cool-down.
 
 **File:** `png/card-026-warm-up-strides-main-run-cool-down.png`  
-**Suggested date:** Sat 20 Mar 2027
+**Suggested date:** Mon 28 Jun 2027
 
 **Caption**
 
@@ -629,7 +629,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Warm-up, strides, ma
 ## 027 · Myth vs fact · You need to run every day to improve.
 
 **File:** `png/card-027-you-need-to-run-every-day-to-improve.png`  
-**Suggested date:** Tue 23 Mar 2027
+**Suggested date:** Mon 5 Jul 2027
 
 **Caption**
 
@@ -652,7 +652,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "Y
 ## 028 · Training tips · Building up safely.
 
 **File:** `png/card-028-building-up-safely.png`  
-**Suggested date:** Fri 26 Mar 2027
+**Suggested date:** Mon 12 Jul 2027
 
 **Caption**
 
@@ -677,7 +677,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Building up safely."
 ## 029 · Waitlist · Made for everyday runners.
 
 **File:** `png/card-029-made-for-everyday-runners.png`  
-**Suggested date:** Mon 29 Mar 2027
+**Suggested date:** Mon 19 Jul 2027
 
 **Caption**
 
@@ -700,7 +700,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Made for everyday runners
 ## 030 · Running words · Long run
 
 **File:** `png/card-030-long-run.png`  
-**Suggested date:** Thu 1 Apr 2027
+**Suggested date:** Mon 26 Jul 2027
 
 **Caption**
 
@@ -723,7 +723,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Lon
 ## 031 · By the numbers · A great first goal.
 
 **File:** `png/card-031-a-great-first-goal.png`  
-**Suggested date:** Sun 4 Apr 2027
+**Suggested date:** Mon 2 Aug 2027
 
 **Caption**
 
@@ -746,7 +746,7 @@ Dark graphite graphic with the Ritmo Running logo. A very large figure, "30", ab
 ## 032 · Coach's note · A missed run is not a lost week.
 
 **File:** `png/card-032-a-missed-run-is-not-a-lost-week.png`  
-**Suggested date:** Wed 7 Apr 2027
+**Suggested date:** Mon 9 Aug 2027
 
 **Caption**
 
@@ -769,7 +769,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "A missed run is not 
 ## 033 · Question · Coast road or countryside?
 
 **File:** `png/card-033-coast-road-or-countryside.png`  
-**Suggested date:** Sat 10 Apr 2027
+**Suggested date:** Mon 16 Aug 2027
 
 **Caption**
 
@@ -792,7 +792,7 @@ Orange graphic with the Ritmo Running logo. Question in large type: "Coast road 
 ## 034 · Training tips · What to eat before a run.
 
 **File:** `png/card-034-what-to-eat-before-a-run.png`  
-**Suggested date:** Tue 13 Apr 2027
+**Suggested date:** Mon 23 Aug 2027
 
 **Caption**
 
@@ -817,7 +817,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "What to eat before a
 ## 035 · Coach's note · Warm up like you mean it.
 
 **File:** `png/card-035-warm-up-like-you-mean-it.png`  
-**Suggested date:** Fri 16 Apr 2027
+**Suggested date:** Mon 30 Aug 2027
 
 **Caption**
 
@@ -840,7 +840,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Warm up like you m
 ## 036 · Feature glimpse · Cross-training counts.
 
 **File:** `png/card-036-cross-training-counts.png`  
-**Suggested date:** Mon 19 Apr 2027
+**Suggested date:** Mon 6 Sep 2027
 
 **Caption**
 
@@ -867,7 +867,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Cross-training count
 ## 037 · Myth vs fact · Running fast all the time makes you faster.
 
 **File:** `png/card-037-running-fast-all-the-time-makes-you-fast.png`  
-**Suggested date:** Thu 22 Apr 2027
+**Suggested date:** Mon 13 Sep 2027
 
 **Caption**
 
@@ -890,7 +890,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "Running 
 ## 038 · Running words · Cadence
 
 **File:** `png/card-038-cadence.png`  
-**Suggested date:** Sun 25 Apr 2027
+**Suggested date:** Mon 20 Sep 2027
 
 **Caption**
 
@@ -913,7 +913,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Cad
 ## 039 · Coach's note · Slow down to speed up.
 
 **File:** `png/card-039-slow-down-to-speed-up.png`  
-**Suggested date:** Wed 28 Apr 2027
+**Suggested date:** Mon 27 Sep 2027
 
 **Caption**
 
@@ -936,7 +936,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Slow down to speed
 ## 040 · Training tips · After a hard session.
 
 **File:** `png/card-040-after-a-hard-session.png`  
-**Suggested date:** Sat 1 May 2027
+**Suggested date:** Mon 4 Oct 2027
 
 **Caption**
 
@@ -961,7 +961,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "After a hard session
 ## 041 · Waitlist · Your plan is waiting.
 
 **File:** `png/card-041-your-plan-is-waiting.png`  
-**Suggested date:** Tue 4 May 2027
+**Suggested date:** Mon 11 Oct 2027
 
 **Caption**
 
@@ -984,7 +984,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Your plan is waiting." Be
 ## 042 · Running words · Recovery run
 
 **File:** `png/card-042-recovery-run.png`  
-**Suggested date:** Fri 7 May 2027
+**Suggested date:** Mon 18 Oct 2027
 
 **Caption**
 
@@ -1007,7 +1007,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Rec
 ## 043 · By the numbers · Four relaxed strides.
 
 **File:** `png/card-043-four-relaxed-strides.png`  
-**Suggested date:** Mon 10 May 2027
+**Suggested date:** Mon 25 Oct 2027
 
 **Caption**
 
@@ -1030,7 +1030,7 @@ Dark graphite graphic with the Ritmo Running logo. A very large figure, "4×20s"
 ## 044 · Coach's note · Every finish line starts at your front door.
 
 **File:** `png/card-044-every-finish-line-starts-at-your-front-d.png`  
-**Suggested date:** Thu 13 May 2027
+**Suggested date:** Mon 1 Nov 2027
 
 **Caption**
 
@@ -1053,7 +1053,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Every finish line st
 ## 045 · Question · What is your next running goal?
 
 **File:** `png/card-045-what-is-your-next-running-goal.png`  
-**Suggested date:** Sun 16 May 2027
+**Suggested date:** Mon 8 Nov 2027
 
 **Caption**
 
@@ -1076,7 +1076,7 @@ Orange graphic with the Ritmo Running logo. Question in large type: "What is you
 ## 046 · Training tips · How to run hills.
 
 **File:** `png/card-046-how-to-run-hills.png`  
-**Suggested date:** Wed 19 May 2027
+**Suggested date:** Mon 15 Nov 2027
 
 **Caption**
 
@@ -1101,7 +1101,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "How to run hills." A
 ## 047 · Myth vs fact · Walking breaks are cheating.
 
 **File:** `png/card-047-walking-breaks-are-cheating.png`  
-**Suggested date:** Sat 22 May 2027
+**Suggested date:** Mon 22 Nov 2027
 
 **Caption**
 
@@ -1124,7 +1124,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "W
 ## 048 · Feature glimpse · Move a session, keep the plan.
 
 **File:** `png/card-048-move-a-session-keep-the-plan.png`  
-**Suggested date:** Tue 25 May 2027
+**Suggested date:** Mon 29 Nov 2027
 
 **Caption**
 
@@ -1151,7 +1151,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Move a session, keep
 ## 049 · Coach's note · Heat changes the pace, not the effort.
 
 **File:** `png/card-049-heat-changes-the-pace-not-the-effort.png`  
-**Suggested date:** Fri 28 May 2027
+**Suggested date:** Mon 6 Dec 2027
 
 **Caption**
 
@@ -1174,7 +1174,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Heat changes the pace, no
 ## 050 · Training tips · Choosing running shoes.
 
 **File:** `png/card-050-choosing-running-shoes.png`  
-**Suggested date:** Mon 31 May 2027
+**Suggested date:** Mon 13 Dec 2027
 
 **Caption**
 
@@ -1199,7 +1199,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Choosing running sho
 ## 051 · Coach's note · Wind is a hill you cannot see.
 
 **File:** `png/card-051-wind-is-a-hill-you-cannot-see.png`  
-**Suggested date:** Thu 3 Jun 2027
+**Suggested date:** Mon 20 Dec 2027
 
 **Caption**
 
@@ -1222,7 +1222,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Wind is a hill you
 ## 052 · Running words · Taper
 
 **File:** `png/card-052-taper.png`  
-**Suggested date:** Sun 6 Jun 2027
+**Suggested date:** Mon 27 Dec 2027
 
 **Caption**
 
@@ -1245,7 +1245,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Tap
 ## 053 · Myth vs fact · You are not a real runner unless you race.
 
 **File:** `png/card-053-you-are-not-a-real-runner-unless-you-rac.png`  
-**Suggested date:** Wed 9 Jun 2027
+**Suggested date:** Mon 3 Jan 2028
 
 **Caption**
 
@@ -1268,7 +1268,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "You are 
 ## 054 · Feature glimpse · Clear feedback after every run.
 
 **File:** `png/card-054-clear-feedback-after-every-run.png`  
-**Suggested date:** Sat 12 Jun 2027
+**Suggested date:** Mon 10 Jan 2028
 
 **Caption**
 
@@ -1295,7 +1295,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Clear feedback after
 ## 055 · Waitlist · From first run to first race.
 
 **File:** `png/card-055-from-first-run-to-first-race.png`  
-**Suggested date:** Tue 15 Jun 2027
+**Suggested date:** Mon 17 Jan 2028
 
 **Caption**
 
@@ -1318,7 +1318,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "From first run to 
 ## 056 · Training tips · Make running a habit.
 
 **File:** `png/card-056-make-running-a-habit.png`  
-**Suggested date:** Fri 18 Jun 2027
+**Suggested date:** Mon 24 Jan 2028
 
 **Caption**
 
@@ -1343,7 +1343,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Make running a habit
 ## 057 · By the numbers · Give hard sessions room.
 
 **File:** `png/card-057-give-hard-sessions-room.png`  
-**Suggested date:** Mon 21 Jun 2027
+**Suggested date:** Mon 31 Jan 2028
 
 **Caption**
 
@@ -1366,7 +1366,7 @@ Orange graphic with the Ritmo Running logo. A very large figure, "48h", above th
 ## 058 · Coach's note · Race day is the celebration.
 
 **File:** `png/card-058-race-day-is-the-celebration.png`  
-**Suggested date:** Thu 24 Jun 2027
+**Suggested date:** Mon 7 Feb 2028
 
 **Caption**
 
@@ -1389,7 +1389,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Race day is the cele
 ## 059 · Question · Solo runs or running with friends?
 
 **File:** `png/card-059-solo-runs-or-running-with-friends.png`  
-**Suggested date:** Sun 27 Jun 2027
+**Suggested date:** Mon 14 Feb 2028
 
 **Caption**
 
@@ -1412,7 +1412,7 @@ Dark graphite graphic with the Ritmo Running logo. Question in large type: "Solo
 ## 060 · Running words · Negative split
 
 **File:** `png/card-060-negative-split.png`  
-**Suggested date:** Wed 30 Jun 2027
+**Suggested date:** Mon 21 Feb 2028
 
 **Caption**
 
@@ -1435,7 +1435,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Neg
 ## 061 · Coach's note · Long runs are about time on your feet.
 
 **File:** `png/card-061-long-runs-are-about-time-on-your-feet.png`  
-**Suggested date:** Sat 3 Jul 2027
+**Suggested date:** Mon 28 Feb 2028
 
 **Caption**
 
@@ -1458,7 +1458,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Long runs are about time 
 ## 062 · Training tips · Run/walk, the smart way.
 
 **File:** `png/card-062-run-walk-the-smart-way.png`  
-**Suggested date:** Tue 6 Jul 2027
+**Suggested date:** Mon 6 Mar 2028
 
 **Caption**
 
@@ -1483,7 +1483,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Run/walk, the smart 
 ## 063 · Myth vs fact · More kilometres is always better.
 
 **File:** `png/card-063-more-kilometres-is-always-better.png`  
-**Suggested date:** Fri 9 Jul 2027
+**Suggested date:** Mon 13 Mar 2028
 
 **Caption**
 
@@ -1506,7 +1506,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "M
 ## 064 · Running words · Fartlek
 
 **File:** `png/card-064-fartlek.png`  
-**Suggested date:** Mon 12 Jul 2027
+**Suggested date:** Mon 20 Mar 2028
 
 **Caption**
 
@@ -1529,7 +1529,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Far
 ## 065 · Coach's note · Your easy pace is allowed to be slow.
 
 **File:** `png/card-065-your-easy-pace-is-allowed-to-be-slow.png`  
-**Suggested date:** Thu 15 Jul 2027
+**Suggested date:** Mon 27 Mar 2028
 
 **Caption**
 
@@ -1552,7 +1552,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Your easy pace is allowed
 ## 066 · Feature glimpse · Your best efforts, found for you.
 
 **File:** `png/card-066-your-best-efforts-found-for-you.png`  
-**Suggested date:** Sun 18 Jul 2027
+**Suggested date:** Mon 3 Apr 2028
 
 **Caption**
 
@@ -1579,7 +1579,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Your best efforts, f
 ## 067 · Waitlist · Less guessing, more running.
 
 **File:** `png/card-067-less-guessing-more-running.png`  
-**Suggested date:** Wed 21 Jul 2027
+**Suggested date:** Mon 10 Apr 2028
 
 **Caption**
 
@@ -1602,7 +1602,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Less guessing, mor
 ## 068 · Training tips · Signs you need an extra rest day.
 
 **File:** `png/card-068-signs-you-need-an-extra-rest-day.png`  
-**Suggested date:** Sat 24 Jul 2027
+**Suggested date:** Mon 17 Apr 2028
 
 **Caption**
 
@@ -1627,7 +1627,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Signs you need an ex
 ## 069 · By the numbers · Long enough to train for.
 
 **File:** `png/card-069-long-enough-to-train-for.png`  
-**Suggested date:** Tue 27 Jul 2027
+**Suggested date:** Mon 24 Apr 2028
 
 **Caption**
 
@@ -1650,7 +1650,7 @@ Orange graphic with the Ritmo Running logo. A very large figure, "5K", above the
 ## 070 · Coach's note · Run tall.
 
 **File:** `png/card-070-run-tall.png`  
-**Suggested date:** Fri 30 Jul 2027
+**Suggested date:** Mon 1 May 2028
 
 **Caption**
 
@@ -1673,7 +1673,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Run tall." Below it:
 ## 071 · Question · Music, podcast or silence?
 
 **File:** `png/card-071-music-podcast-or-silence.png`  
-**Suggested date:** Mon 2 Aug 2027
+**Suggested date:** Mon 8 May 2028
 
 **Caption**
 
@@ -1696,7 +1696,7 @@ Dark graphite graphic with the Ritmo Running logo. Question in large type: "Musi
 ## 072 · Running words · Base building
 
 **File:** `png/card-072-base-building.png`  
-**Suggested date:** Thu 5 Aug 2027
+**Suggested date:** Mon 15 May 2028
 
 **Caption**
 
@@ -1719,7 +1719,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Bas
 ## 073 · Myth vs fact · One bad run means you are losing fitness.
 
 **File:** `png/card-073-one-bad-run-means-you-are-losing-fitness.png`  
-**Suggested date:** Sun 8 Aug 2027
+**Suggested date:** Mon 22 May 2028
 
 **Caption**
 
@@ -1742,7 +1742,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "One bad 
 ## 074 · Training tips · Pacing your long run.
 
 **File:** `png/card-074-pacing-your-long-run.png`  
-**Suggested date:** Wed 11 Aug 2027
+**Suggested date:** Mon 29 May 2028
 
 **Caption**
 
@@ -1767,7 +1767,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Pacing your long run
 ## 075 · Coach's note · Short, quick, relaxed.
 
 **File:** `png/card-075-short-quick-relaxed.png`  
-**Suggested date:** Sat 14 Aug 2027
+**Suggested date:** Mon 5 Jun 2028
 
 **Caption**
 
@@ -1790,7 +1790,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Short, quick, rela
 ## 076 · Feature glimpse · Time in each heart-rate zone.
 
 **File:** `png/card-076-time-in-each-heart-rate-zone.png`  
-**Suggested date:** Tue 17 Aug 2027
+**Suggested date:** Mon 12 Jun 2028
 
 **Caption**
 
@@ -1817,7 +1817,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Time in each heart-r
 ## 077 · Myth vs fact · Beginners should run as far as they can.
 
 **File:** `png/card-077-beginners-should-run-as-far-as-they-can.png`  
-**Suggested date:** Fri 20 Aug 2027
+**Suggested date:** Mon 19 Jun 2028
 
 **Caption**
 
@@ -1840,7 +1840,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "Beginner
 ## 078 · Running words · Heart-rate zones
 
 **File:** `png/card-078-heart-rate-zones.png`  
-**Suggested date:** Mon 23 Aug 2027
+**Suggested date:** Mon 26 Jun 2028
 
 **Caption**
 
@@ -1863,7 +1863,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Hea
 ## 079 · Waitlist · Almost ready for you.
 
 **File:** `png/card-079-almost-ready-for-you.png`  
-**Suggested date:** Thu 26 Aug 2027
+**Suggested date:** Mon 3 Jul 2028
 
 **Caption**
 
@@ -1886,7 +1886,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Almost ready for y
 ## 080 · Training tips · Running in the dark.
 
 **File:** `png/card-080-running-in-the-dark.png`  
-**Suggested date:** Sun 29 Aug 2027
+**Suggested date:** Mon 10 Jul 2028
 
 **Caption**
 
@@ -1911,7 +1911,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Running in the dark.
 ## 081 · By the numbers · After every run, one thing.
 
 **File:** `png/card-081-after-every-run-one-thing.png`  
-**Suggested date:** Wed 1 Sep 2027
+**Suggested date:** Mon 17 Jul 2028
 
 **Caption**
 
@@ -1934,7 +1934,7 @@ Orange graphic with the Ritmo Running logo. A very large figure, "1", above the 
 ## 082 · Coach's note · Be patient with your pace.
 
 **File:** `png/card-082-be-patient-with-your-pace.png`  
-**Suggested date:** Sat 4 Sep 2027
+**Suggested date:** Mon 24 Jul 2028
 
 **Caption**
 
@@ -1957,7 +1957,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Be patient with your
 ## 083 · Question · What does your perfect long run look like?
 
 **File:** `png/card-083-what-does-your-perfect-long-run-look-lik.png`  
-**Suggested date:** Tue 7 Sep 2027
+**Suggested date:** Mon 31 Jul 2028
 
 **Caption**
 
@@ -1980,7 +1980,7 @@ Dark graphite graphic with the Ritmo Running logo. Question in large type: "What
 ## 084 · Running words · Training load
 
 **File:** `png/card-084-training-load.png`  
-**Suggested date:** Fri 10 Sep 2027
+**Suggested date:** Mon 7 Aug 2028
 
 **Caption**
 
@@ -2003,7 +2003,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Tra
 ## 085 · Coach's note · Cool down before you stop.
 
 **File:** `png/card-085-cool-down-before-you-stop.png`  
-**Suggested date:** Mon 13 Sep 2027
+**Suggested date:** Mon 14 Aug 2028
 
 **Caption**
 
@@ -2026,7 +2026,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Cool down before you stop
 ## 086 · Feature glimpse · Starting from zero? Start here.
 
 **File:** `png/card-086-starting-from-zero-start-here.png`  
-**Suggested date:** Thu 16 Sep 2027
+**Suggested date:** Mon 21 Aug 2028
 
 **Caption**
 
@@ -2053,7 +2053,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Starting from zero? 
 ## 087 · Myth vs fact · Strength training will slow you down.
 
 **File:** `png/card-087-strength-training-will-slow-you-down.png`  
-**Suggested date:** Sun 19 Sep 2027
+**Suggested date:** Mon 28 Aug 2028
 
 **Caption**
 
@@ -2076,7 +2076,7 @@ Dark graphite graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "S
 ## 088 · Training tips · Your race-week checklist.
 
 **File:** `png/card-088-your-race-week-checklist.png`  
-**Suggested date:** Wed 22 Sep 2027
+**Suggested date:** Mon 4 Sep 2028
 
 **Caption**
 
@@ -2101,7 +2101,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Your race-week check
 ## 089 · Coach's note · Lighter weeks are part of progress.
 
 **File:** `png/card-089-lighter-weeks-are-part-of-progress.png`  
-**Suggested date:** Sat 25 Sep 2027
+**Suggested date:** Mon 11 Sep 2028
 
 **Caption**
 
@@ -2124,7 +2124,7 @@ Orange graphic with the Ritmo Running logo. Headline: "Lighter weeks are part of
 ## 090 · Running words · Cool-down
 
 **File:** `png/card-090-cool-down.png`  
-**Suggested date:** Tue 28 Sep 2027
+**Suggested date:** Mon 18 Sep 2028
 
 **Caption**
 
@@ -2147,7 +2147,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "Coo
 ## 091 · Waitlist · Training that fits your week.
 
 **File:** `png/card-091-training-that-fits-your-week.png`  
-**Suggested date:** Fri 1 Oct 2027
+**Suggested date:** Mon 25 Sep 2028
 
 **Caption**
 
@@ -2170,7 +2170,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Training that fits
 ## 092 · Training tips · Cross-training that helps runners.
 
 **File:** `png/card-092-cross-training-that-helps-runners.png`  
-**Suggested date:** Mon 4 Oct 2027
+**Suggested date:** Mon 2 Oct 2028
 
 **Caption**
 
@@ -2195,7 +2195,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Cross-training that 
 ## 093 · By the numbers · Of easy jogging first.
 
 **File:** `png/card-093-of-easy-jogging-first.png`  
-**Suggested date:** Thu 7 Oct 2027
+**Suggested date:** Mon 9 Oct 2028
 
 **Caption**
 
@@ -2218,7 +2218,7 @@ Orange graphic with the Ritmo Running logo. A very large figure, "10 min", above
 ## 094 · Coach's note · Every run has a job.
 
 **File:** `png/card-094-every-run-has-a-job.png`  
-**Suggested date:** Sun 10 Oct 2027
+**Suggested date:** Mon 16 Oct 2028
 
 **Caption**
 
@@ -2241,7 +2241,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Every run has a job.
 ## 095 · Question · What is the hardest part of starting?
 
 **File:** `png/card-095-what-is-the-hardest-part-of-starting.png`  
-**Suggested date:** Wed 13 Oct 2027
+**Suggested date:** Mon 23 Oct 2028
 
 **Caption**
 
@@ -2264,7 +2264,7 @@ Dark graphite graphic with the Ritmo Running logo. Question in large type: "What
 ## 096 · Feature glimpse · Your data stays yours.
 
 **File:** `png/card-096-your-data-stays-yours.png`  
-**Suggested date:** Sat 16 Oct 2027
+**Suggested date:** Mon 30 Oct 2028
 
 **Caption**
 
@@ -2291,7 +2291,7 @@ Light cream graphic with the Ritmo Running logo. Headline: "Your data stays your
 ## 097 · Myth vs fact · Pace targets are only for fast runners.
 
 **File:** `png/card-097-pace-targets-are-only-for-fast-runners.png`  
-**Suggested date:** Tue 19 Oct 2027
+**Suggested date:** Mon 6 Nov 2028
 
 **Caption**
 
@@ -2314,7 +2314,7 @@ Orange graphic with the Ritmo Running logo. Myth vs fact. Crossed out: "Pace tar
 ## 098 · Running words · Warm-up
 
 **File:** `png/card-098-warm-up.png`  
-**Suggested date:** Fri 22 Oct 2027
+**Suggested date:** Mon 13 Nov 2028
 
 **Caption**
 
@@ -2337,7 +2337,7 @@ Light cream graphic with the Ritmo Running logo. Running words. Large term: "War
 ## 099 · Coach's note · Listen to small aches early.
 
 **File:** `png/card-099-listen-to-small-aches-early.png`  
-**Suggested date:** Mon 25 Oct 2027
+**Suggested date:** Mon 20 Nov 2028
 
 **Caption**
 
@@ -2360,7 +2360,7 @@ Dark graphite graphic with the Ritmo Running logo. Headline: "Listen to small ac
 ## 100 · Training tips · Strength moves for runners.
 
 **File:** `png/card-100-strength-moves-for-runners.png`  
-**Suggested date:** Thu 28 Oct 2027
+**Suggested date:** Mon 27 Nov 2028
 
 **Caption**
 

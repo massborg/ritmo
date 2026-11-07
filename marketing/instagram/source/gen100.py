@@ -433,7 +433,7 @@ def slug(s):
 
 
 START = dt.date(2027, 1, 4)  # the first 12 posts end on Friday 1 January 2027
-EVERY = 3
+EVERY = 7  # one card a week, every Monday
 cap_md = ['# Ritmo Running: 100 Instagram cards', '',
           'All cards are 1080 x 1350 (4:5) PNGs in `png/`. They follow the same rules as the first 12 posts: no emoji, no launch date, '
           'prices, user numbers, testimonials or named people, and Garmin is not mentioned. #maltarunning is in every hashtag set.',
@@ -441,8 +441,8 @@ cap_md = ['# Ritmo Running: 100 Instagram cards', '',
           'Paste the hashtags as the last paragraph of the caption, or as the first comment.', '',
           'Waitlist cards point to ritmorunning.run (the waitlist website). Make sure the bio link is set to https://ritmorunning.run before posting them.', '']
 cal_md = ['# Ritmo Running: posting calendar for the 100 cards', '',
-          f'Suggested: one card every {EVERY} days from {START.strftime("%A %-d %B %Y")}, continuing straight after post 12 (Friday 1 January 2027). '
-          'Dates are only a suggestion: the file names carry no date, so you can reorder or post more often. If you do reorder, keep a colour card next to a light card.', '',
+          f'One card a week, every Monday at 07:30 (Malta time), from {START.strftime("%A %-d %B %Y")} to the last card. This continues straight after post 12 (Friday 1 January 2027). '
+          'The file names carry no date, so you can move a card. If you reorder, keep a colour card next to a light card.', '',
           '| # | Suggested date | Type | Theme | File |', '|---|---|---|---|---|']
 TYPE = dict(coach="Coach's note", tips='Training tips', feature='Feature glimpse', myth='Myth vs fact', glossary='Running words',
             number='By the numbers', question='Question', waitlist='Waitlist')
