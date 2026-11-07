@@ -1,5 +1,5 @@
 // The runner's training plan as a calendar feed (iCalendar), for Apple Calendar, Google Calendar, Outlook and others.
-// Calendar apps cannot sign in, so the feed is reached by a long random private link (profiles.data.calendarFeed.token)
+// Calendar apps cannot sign in, so the feed is reached by a long random private link (profiles.data.profile.calendarFeed.token)
 // that the runner can reset or turn off in the app. It contains only planned sessions and races: no runs, health data,
 // locations or account details. Deploy with JWT verification off (--no-verify-jwt): the link itself is the key.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
@@ -14,11 +14,12 @@ Deno.serve(async (req) => {
   const token = new URL(req.url).searchParams.get('t') ?? '';
   if (!/^[a-f0-9]{48,128}$/.test(token)) return text('Not found', 404);
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-  const prof = await db.from('profiles').select('user_id,data').eq('data->calendarFeed->>token', token).maybeSingle();
+  // The app stores the profile nested: profiles.data = { profile, mode, sources }
+  const prof = await db.from('profiles').select('user_id,data').eq('data->profile->calendarFeed->>token', token).maybeSingle();
   if (prof.error) { console.error('calendar profile lookup', prof.error.message); return text('Temporarily unavailable', 503); }
   if (!prof.data) return text('Not found', 404);
   const uid = prof.data.user_id as string;
-  const p = (prof.data.data ?? {}) as { units?: 'km' | 'mi'; calendarFeed?: { morningHour?: number | null; eveReminder?: boolean } };
+  const p = ((prof.data.data as { profile?: unknown } | null)?.profile ?? {}) as { units?: 'km' | 'mi'; calendarFeed?: { morningHour?: number | null; eveReminder?: boolean } };
   const [plan, races] = await Promise.all([
     db.from('plans').select('data').eq('user_id', uid).order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     db.from('races').select('data').eq('user_id', uid),
