@@ -42,3 +42,18 @@ below are done, and then only for accounts with the `garmin` feature flag.
 - The webhook trusts Garmin's user ids, which are opaque; notifications for unknown users are ignored.
   If Garmin offers a signature or IP allowlist after approval, add it in `garmin-webhook`.
 - Training API (sending planned sessions to the watch) is the next step and is not built yet.
+
+## Before approval: your own runs with a Personal API key
+
+Garmin's Personal API gives each person access to their own data with a self-made key. Garmin says it is
+not intended for commercial applications serving multiple end users, so Ritmo does not call it. Instead,
+`scripts/garmin-personal-sync.mjs` runs on your own computer and downloads your new runs as Garmin's original
+files, which you upload in Ritmo like a Garmin export.
+
+1. Garmin Connect Web → Personal API Key → Create Key (choose 30 days to 1 year). Copy it; it is shown once.
+2. `GARMIN_PERSONAL_API_KEY=your-key node scripts/garmin-personal-sync.mjs` (add `--since 2026-10-01` for
+   older runs; files go to `garmin-downloads/`).
+3. Ritmo → Data sources → Upload files → choose the new `.zip` files. Duplicates are merged automatically.
+
+Keep the key private and never put it in the app, the repo or a chat. Delete it on Garmin Connect Web when
+direct sync is approved.
