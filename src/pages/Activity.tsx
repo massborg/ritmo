@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, TrendingUp, X } from 'lucide-react';
+import { Award, Check, MessageCircle, TrendingUp, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
@@ -11,6 +11,8 @@ import { TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import { raceEvidence } from '../training/fitness';
 import { ROLE_LABEL } from '../training/sessions';
 import { DayRuns } from '../components/DayRuns';
+import { Breakdown, RepChart, Sparkline } from '../components/ReportParts';
+import { buildReport } from '../training/report';
 import type { SessionFeedback } from '../lib/types';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
@@ -82,10 +84,11 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf } = useApp();
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
   const an = analysisFor(a);
+  const rep = buildReport({ a, an, planned: an.planned, all: data.activities, plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
   const group = groupOf(a.id);
   const role = group?.roles[a.id];
   const U = data.profile.units;
@@ -157,6 +160,36 @@ export default function ActivityPage() {
 
       {an.limitedData && <div className="banner" role="note"><StatusLine kind="info">Limited data</StatusLine><p>{an.limitedData}</p></div>}
 
+      <section className="card stack" aria-labelledby="verdict">
+        <div className="row" style={{ gap: 'var(--s4)', alignItems: 'flex-start' }}>
+          <ScoreRing score={an.score} />
+          <div className="stack-sm">
+            <h2 id="verdict" className="title">{rep.verdict}</h2>
+            <p className="caption">Session score {an.score}. {an.scoreReason}</p>
+          </div>
+        </div>
+        {rep.badges.length > 0 && <div className="badge-row">{rep.badges.map((b) => <span key={b} className="badge"><Award size={14} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" />{b}</span>)}</div>}
+        <Breakdown items={rep.breakdown} />
+        {rep.reps.length >= 2 && <RepChart reps={rep.reps} target={rep.target} units={U} />}
+      </section>
+
+      <div className="grid-2">
+        <section className="card stack"><h2 className="title">What went well</h2><ul className="bullets">{an.wentWell.slice(0, 3).map((x) => <li key={x}>{x}</li>)}</ul></section>
+        <section className="card stack"><h2 className="title">What to improve</h2><ul className="bullets">{an.improve.slice(0, 3).map((x) => <li key={x}>{x}</li>)}</ul></section>
+      </div>
+
+      {(rep.goalNote || rep.nextTip || rep.trend) && (
+        <section className="card stack-sm">
+          {rep.goalNote && <><h2 className="label">What this means for your goal</h2><p>{rep.goalNote}</p></>}
+          {rep.nextTip && <><h2 className="label">Next session</h2><p>{rep.nextTip}</p></>}
+          {rep.trend && <><h2 className="label">Compared with your recent {TYPE_LABEL[an.type].toLowerCase()}s</h2><Sparkline values={rep.trend.paces} labels={rep.trend.labels} units={U} /><p className="caption">Average pace, the dot is this run. Lower is faster.</p></>}
+        </section>
+      )}
+      <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(a.startTime))} go?`)}`} className="btn" style={{ alignSelf: 'flex-start' }}><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask the coach about this run</Link>
+
+      <details className="full-analysis">
+        <summary className="btn btn-ghost">Show full analysis</summary>
+        <div className="stack-lg" style={{ marginTop: 'var(--s4)' }}>
       <section className="card stack" aria-labelledby="score">
         <div className="row" style={{ gap: 'var(--s4)' }}>
           <ScoreRing score={an.score} />
@@ -182,10 +215,6 @@ export default function ActivityPage() {
         )}
       </section>
 
-      <div className="grid-2">
-        <section className="card stack"><h2 className="title">What went well</h2><ul className="bullets">{an.wentWell.map((x) => <li key={x}>{x}</li>)}</ul></section>
-        <section className="card stack"><h2 className="title">What to improve</h2><ul className="bullets">{an.improve.map((x) => <li key={x}>{x}</li>)}</ul></section>
-      </div>
       <section className="band stack">
         <h2 className="title">How this changes the coming days</h2>
         <p>{an.nextDays}</p>
@@ -235,6 +264,9 @@ export default function ActivityPage() {
         </section>
       )}
       {a.streams?.some((p) => p.lat != null && p.lon != null) && <section className="card stack"><h2 className="title">Route</h2><RouteMap points={a.streams} /></section>}
+
+        </div>
+      </details>
 
       {fb && feelSection}
     </div>

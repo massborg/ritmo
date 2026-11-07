@@ -2,7 +2,7 @@ import { zoneTimeFromHistogram } from '../training/derive';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchHrBands } from '../data/store';
 import { Link } from 'react-router-dom';
-import { Award, Flame, Lock, Share2 } from 'lucide-react';
+import { Award, Flame, Lock, MessageCircle, Settings, Share2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
@@ -115,7 +115,7 @@ export default function Progress() {
 
   if (!acts.length) return (
     <div className="stack-lg">
-      <AppHeader title="Progress" right={<><SampleChip /><Avatar /></>} />
+      <AppHeader title="You" eyebrow="Progress" right={<><SampleChip /><Link to="/profile" className="icon-btn" aria-label="Profile and settings"><Settings size={22} strokeWidth={2} aria-hidden="true" /></Link><Avatar /></>} />
       <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/">Log a run on Today</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
         Your distance, streaks and personal bests appear here after your first run. Log one by hand, or upload files from a watch.
       </Empty>
@@ -130,9 +130,10 @@ export default function Progress() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Progress" right={<><SampleChip /><Avatar /></>} />
-      <div className="row">
+      <AppHeader title="You" eyebrow="Progress" right={<><SampleChip /><Link to="/profile" className="icon-btn" aria-label="Profile and settings"><Settings size={22} strokeWidth={2} aria-hidden="true" /></Link><Avatar /></>} />
+      <div className="row-between wrap" style={{ gap: 8 }}>
         <Segmented label="Units" value={U} onChange={(u) => updateProfile({ units: u })} options={[{ value: 'km', label: 'km' }, { value: 'mi', label: 'miles' }]} />
+        <Link to="/coach" className="btn btn-small"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask your coach</Link>
       </div>
 
       <section className="card stack" aria-labelledby="mileage">

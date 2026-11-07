@@ -62,8 +62,12 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
   };
   for (const inc of incoming) {
     const t = new Date(inc.startTime).getTime();
-    const match = findNear(t).find((i) => isSameRun(list[i], inc));
-    if (match === undefined) {
+    // A run logged by hand ("I've done this run") has a rough time and distance: the watch file that arrives
+    // later for the same day replaces it instead of adding a duplicate
+    const day = inc.startTime.slice(0, 10);
+    const match = findNear(t).find((i) => isSameRun(list[i], inc))
+      ?? (inc.source !== 'manual' ? list.findIndex((x) => x.source === 'manual' && x.startTime.slice(0, 10) === day && Math.abs(x.distanceM - inc.distanceM) / Math.max(x.distanceM, inc.distanceM, 1) < 0.15) : -1);
+    if (match === undefined || match < 0) {
       let pos = times.findIndex((x) => x > t);
       if (pos < 0) pos = times.length;
       list.splice(pos, 0, inc);
@@ -73,7 +77,9 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       const cur = list[match];
       const sourceIds = { ...cur.sourceIds, ...inc.sourceIds };
       if (inc.detailScore > cur.detailScore) {
-        list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, name: cur.name !== 'Run' ? cur.name : inc.name };
+        // What the runner told us stays: the planned session link, reps they entered, race marks
+        list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
+          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name };
         replaced++;
       } else {
         list[match] = { ...cur, sourceIds };

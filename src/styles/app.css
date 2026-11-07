@@ -64,7 +64,7 @@ h1, h2, h3, h4 { margin: 0; }
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   background: var(--surface-raised); border-top: 1px solid var(--hairline);
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding-bottom: env(safe-area-inset-bottom);
 }
 @media (min-width: 820px) { .tabbar { display: none; } .main { padding-bottom: var(--s7); } }
@@ -510,7 +510,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 
 /* "A new version is ready" */
 .update-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 900; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; background: var(--surface-raised); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-card); padding: 8px 12px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); max-width: calc(100vw - 32px); }
-@media (min-width: 900px) { .update-toast { bottom: 24px; } }
+@media (min-width: 820px) { .update-toast { bottom: 24px; } }
 
 .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--s3); margin: 0; }
 .report-grid dd { margin: 0; font-size: 20px; }
@@ -519,3 +519,32 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 
 .session-parts { list-style: none; margin: 0; padding: 0 0 0 var(--s3); border-left: 2px solid var(--hairline); display: grid; gap: 2px; }
 .session-parts a { text-decoration: none; color: inherit; min-height: 36px; align-items: center; }
+
+/* "You" stays highlighted on Profile, Coach and Goals */
+.tab.active { color: var(--ink); }
+.tab.active svg { color: var(--brand); background: var(--surface-sunken); }
+
+/* Floating coach button on Training, run and session pages */
+.coach-fab { position: fixed; right: var(--s4); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 26; width: 56px; height: 56px; border-radius: 50%; background: var(--ink); color: var(--surface); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgb(0 0 0 / 0.22); text-decoration: none; transition: transform 150ms; }
+.coach-fab:active { transform: scale(0.94); }
+@media (min-width: 820px) { .coach-fab { bottom: 24px; right: 24px; } }
+
+/* Log this session: screenshots and rep table */
+.drop-zone { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: var(--s5) var(--s4); border: 2px dashed var(--border); border-radius: var(--r-card); cursor: pointer; color: var(--ink); }
+.drop-zone:hover, .drop-zone:focus-within { border-color: var(--brand); }
+.shot-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--s2); }
+.shot-img { display: block; width: 100%; aspect-ratio: 9 / 16; padding: 0; border: 1px solid var(--hairline); border-radius: var(--r-input); overflow: hidden; background: var(--surface-sunken); cursor: zoom-in; }
+.shot-img img { width: 100%; height: 100%; object-fit: cover; }
+.rep-table th[scope='row'] { text-align: left; font-weight: 600; white-space: nowrap; }
+.rep-table tr.muted th, .rep-table tr.muted td { color: var(--ink-muted); }
+.input-sm { min-height: 44px; padding: 6px 8px; width: 84px; font-variant-numeric: tabular-nums; }
+.input.unsure { border-color: #D99A00; background: color-mix(in srgb, #F5C542 18%, var(--surface)); }
+
+/* Run feedback report */
+.breakdown { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.breakdown-bar { display: block; height: 8px; border-radius: 4px; background: var(--surface-sunken); overflow: hidden; margin: 4px 0 2px; }
+.breakdown-bar > span { display: block; height: 100%; border-radius: 4px; }
+.badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); background: var(--surface-sunken); font: 600 13px/18px var(--font-body); }
+.full-analysis > summary { list-style: none; cursor: pointer; }
+.full-analysis > summary::-webkit-details-marker { display: none; }

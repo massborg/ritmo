@@ -42,6 +42,11 @@ export interface ManualRun {
   pain: SessionFeedback['pain'];
   notes?: string;
   sessionId?: string;
+  avgHr?: number;
+  reps?: Activity['reps'];
+  media?: string[];
+  /** Start time of day (HH:MM), when known */
+  time?: string;
 }
 
 
@@ -106,6 +111,10 @@ interface Ctx extends Derived {
   logFeedback: (f: SessionFeedback) => void;
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
+  linkRunToSession: (activityId: string, sessionId: string) => void;
+  skipSession: (sessionId: string) => void;
+  /** A feature switched on for this account (Run, Hub, share cards, Body); never in sample mode */
+  hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body') => boolean;
   /** Mark runs as races (true), not races (false), or back to automatic detection (null) */
   setRaceFlag: (ids: string[], race: boolean | null) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
@@ -474,12 +483,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = `manual-${uid()}`;
     const session = derived.plan?.sessions.find((s) => s.id === r.sessionId);
     const isToday = r.date === ymd(new Date());
-    const start = isToday ? new Date(Date.now() - r.durationS * 1000) : new Date(`${r.date}T12:00:00`);
+    const start = r.time ? new Date(`${r.date}T${r.time}:00`) : isToday ? new Date(Date.now() - r.durationS * 1000) : new Date(`${r.date}T12:00:00`);
     const a: Activity = {
       id, source: 'manual', sourceIds: { manual: id }, startTime: start.toISOString(),
       name: session && session.type !== 'rest' ? session.title : 'Run', sport: 'run',
       distanceM: Math.round(r.distanceM), durationS: Math.round(r.durationS), movingS: Math.round(r.durationS),
       isTimeTrial: session?.type === 'timetrial' || undefined,
+      avgHr: r.avgHr, plannedSessionId: session?.id, reps: r.reps?.length ? r.reps : undefined, media: r.media?.length ? r.media : undefined,
       detailScore: 0, importedAt: new Date().toISOString(),
     };
     a.detailScore = detailScore(a);
@@ -492,6 +502,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return id;
   };
+
+  /** "From my watch": link a run that is already imported to a planned session */
+  const linkRunToSession = (activityId: string, sessionId: string) =>
+    setData((d) => ({ ...d, activities: d.activities.map((a) => (a.id === activityId ? { ...a, plannedSessionId: sessionId } : a.plannedSessionId === sessionId ? { ...a, plannedSessionId: undefined } : a)) }));
+  /** "I skipped it": the session stays in the plan as skipped (no catch-up) */
+  const skipSession = (sessionId: string) =>
+    setData((d) => (d.plan ? { ...d, plan: { ...d.plan, sessions: d.plan.sessions.map((s) => (s.id === sessionId ? { ...s, status: 'skipped' as const } : s)) } } : d));
 
   const updateProfile = (p: Partial<Profile>) => setData((d) => ({ ...d, profile: { ...d.profile, ...p } }));
 
@@ -575,6 +592,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return finishBuild({ ...d, profile });
   };
 
+  const hasFlag = (f: string) => data.mode === 'real' && !!data.flags?.includes(f);
   const setRaceFlag = (ids: string[], race: boolean | null) => {
     const set = new Set(ids);
     setData((d) => ({ ...d, activities: d.activities.map((a) => (set.has(a.id) ? { ...a, isRace: race === true, notRace: race === false } : a)) }));
@@ -759,7 +777,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

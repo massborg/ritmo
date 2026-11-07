@@ -63,6 +63,12 @@ export interface Activity {
   isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
   /** The runner said this was not a race (so race detection leaves it alone) */
   notRace?: boolean;
+  /** The planned session this run was logged against ("I've done this run") */
+  plannedSessionId?: string;
+  /** Screenshots stored with the run (private storage paths) */
+  media?: string[];
+  /** Lap or rep table the runner entered or confirmed from screenshots */
+  reps?: { label: string; distanceM?: number; timeS?: number; avgHr?: number; kind?: 'warmup' | 'work' | 'recovery' | 'cooldown' }[];
   /** Stored summary (best efforts, structure), so history works without loading every run's streams */
   derived?: ActivityDerived;
   detailScore: number; // higher = more detailed, used to choose the best duplicate

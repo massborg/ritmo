@@ -25,9 +25,9 @@ function jwt(user) {
 
 function createMock() {
   const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
-  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions'];
+  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags'];
   TABLES.forEach((t) => (state.tables[t] = []));
-  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'] };
+  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'] };
   let clock = 0;
   const stamp = () => { const t = Math.max(Date.now(), clock + 1); clock = t; return new Date(t).toISOString(); };
 
@@ -202,6 +202,11 @@ function createMock() {
       }
       return { status: 200, body: { updated, remaining: stale.length - updated.length } };
     }
+    if (name === 'read-laps') {
+      const paths = (req.postDataJSON() ?? {}).paths ?? [];
+      if (!paths.length || paths.some((p) => !p.startsWith(`${u.id}/`) || !state.files.has(`run-media/${p}`))) return { status: 400, body: { error: 'bad_request' } };
+      return state.lapRead ? { status: 200, body: state.lapRead } : { status: 503, body: { error: 'not_configured' } };
+    }
     if (name === 'coach') return state.coachStatus ? { status: state.coachStatus, body: { error: 'rate_limited' } } : { status: 503, body: { error: 'not_configured' } };
     if (name === 'delete-account') {
       for (const t of TABLES) state.tables[t] = state.tables[t].filter((r) => r.user_id !== u.id);
@@ -231,6 +236,12 @@ function createMock() {
       const a = buf.indexOf(Buffer.from([0xff, 0xd8, 0xff])), b = buf.lastIndexOf(Buffer.from([0xff, 0xd9]));
       state.files.set(`avatars/${m[1]}`, a >= 0 && b > a ? buf.subarray(a, b + 2) : buf);
       return { status: 200, body: { Key: `avatars/${m[1]}`, Id: crypto.randomUUID() } };
+    }
+    // Private run screenshots: run-media/<user id>/...
+    if ((m = path.match(/^\/object\/run-media\/(.+)$/)) && (method === 'POST' || method === 'PUT')) {
+      if (!own(m[1])) return { status: 403, body: { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' } };
+      state.files.set(`run-media/${m[1]}`, req.postDataBuffer() || Buffer.alloc(0));
+      return { status: 200, body: { Key: `run-media/${m[1]}`, Id: crypto.randomUUID() } };
     }
     if (path === '/object/avatars' && method === 'DELETE') {
       const out = [];

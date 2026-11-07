@@ -234,6 +234,8 @@ export interface Analysis {
   improve: string[];
   nextDays: string;
   limitedData?: string;
+  /** Pace of the fast parts, for structured sessions */
+  workPace?: number;
 }
 
 export function analyse(opts: {
@@ -424,6 +426,7 @@ export function analyse(opts: {
     improve,
     nextDays,
     limitedData,
+    workPace: cls.workPace,
   };
 }
 
