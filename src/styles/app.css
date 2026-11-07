@@ -591,3 +591,21 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 /* Weather on runs */
 .weather-note { font-size: 15px; line-height: 1.45; padding: var(--s2) var(--s3); border-left: 3px solid var(--brand); background: var(--surface-sunken); border-radius: 0 var(--r-input) var(--r-input) 0; }
 .run-weather a { color: inherit; }
+
+/* Explain this week */
+.explain-btn { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 15px; }
+.explain-week { font-size: 16px; line-height: 1.5; padding: var(--s3); background: var(--surface-sunken); border-radius: var(--r-card); }
+.preset { display: flex; gap: var(--s3); align-items: center; padding: var(--s3); border: 2px solid var(--brand); border-radius: var(--r-card); }
+.preset .btn[aria-pressed='true'] { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* Race-day mode */
+.warmup-now { display: flex; flex-direction: column; gap: 6px; padding: var(--s4); background: var(--surface-sunken); border-radius: var(--r-card); text-align: center; align-items: center; }
+.warmup-now .stat-xl { font-size: 56px; line-height: 1; }
+.warmup-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.warmup-steps li { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: var(--r-input); border: 1px solid var(--line, rgba(0,0,0,.1)); }
+.warmup-steps li.now { border-color: var(--brand); font-weight: 600; }
+.warmup-steps li.done { opacity: .55; text-decoration: line-through; }
+.diff-fast { color: var(--success, #1f7a4d); }
+.diff-slow { color: var(--danger, #b3261e); }
+.cal-link { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 12px; padding: var(--s2) var(--s3); background: var(--surface-sunken); border-radius: var(--r-input); }
+.shoe-alert { display: block; text-decoration: none; color: inherit; }

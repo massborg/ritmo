@@ -16,6 +16,8 @@ import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
 import { weekReview } from '../training/report';
+import { explainWeek } from '../training/explain';
+import { shoeAlert, shoeTotals } from '../training/shoes';
 import { activeNiggle, areaLabel, DISCLAIMER } from '../training/body';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions } from '../training/plan';
@@ -64,11 +66,12 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
 }
 
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag, typeOf } = useApp();
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
   const [selected, setSelected] = useState(t);
+  const [explaining, setExplaining] = useState(false);
   const [logFor, setLogFor] = useState<PlannedSession | 'free' | null>(null);
   const [planMsg, setPlanMsg] = useState<string>();
   const [adding, setAdding] = useState(false);
@@ -167,8 +170,28 @@ export default function Today() {
             <button className="icon-btn" aria-label="Next week" onClick={() => shiftDay(7)}><ChevronRight size={22} strokeWidth={2} /></button>
           </div>
           <WeekStrip days={days} selected={selected} onSelect={setSelected} />
+          {plan && (() => {
+            const text = explainWeek(plan, ymd(startOfWeek(parseYmd(selected))), data.races, data.profile.units);
+            if (!text) return null;
+            return (
+              <div className="stack-sm">
+                <button type="button" className="link-btn explain-btn" aria-expanded={explaining} onClick={() => setExplaining((x) => !x)}>
+                  <Lightbulb size={16} strokeWidth={2} aria-hidden="true" />{explaining ? 'Hide the explanation' : 'Explain this week'}
+                </button>
+                {explaining && <p className="explain-week">{text}</p>}
+              </div>
+            );
+          })()}
         </div>
       )}
+      {isToday && (() => {
+        const shoes = data.profile.shoes ?? [];
+        if (!shoes.length) return null;
+        const totals = shoeTotals(data.activities, shoes, typeOf);
+        const worn = shoes.map((sh) => ({ sh, km: totals.get(sh.id) ?? 0 })).find(({ sh, km }) => shoeAlert(sh, km));
+        if (!worn) return null;
+        return <Link to="/progress#shoes-card" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
+      })()}
       {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
       {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">

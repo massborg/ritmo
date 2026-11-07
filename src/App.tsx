@@ -22,6 +22,7 @@ const Privacy = lazyPage(() => import('./pages/Privacy'));
 const ActivityPage = lazyPage(() => import('./pages/Activity'));
 const PlannedPage = lazyPage(() => import('./pages/Planned'));
 const RacePage = lazyPage(() => import('./pages/Race'));
+const RaceDay = lazyPage(() => import('./pages/RaceDay'));
 const Setup = lazyPage(() => import('./pages/Setup'));
 const Story = lazyPage(() => import('./pages/Story'));
 const Review = lazyPage(() => import('./pages/Review'));
@@ -233,6 +234,7 @@ function Shell() {
               <Route path="/session/:id" element={<PlannedPage />} />
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />
+              <Route path="/race/:id/day" element={<RaceDay />} />
               <Route path="/progress" element={<Progress />} />
               <Route path="/run" element={<RunPage />} />
               <Route path="/hub" element={<HubPage />} />

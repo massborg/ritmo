@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { garminAttribution } from '../data/garmin';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Award, Check, MessageCircle, Share2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
@@ -18,7 +18,9 @@ import { weatherLine } from '../training/weather';
 import { PostToHub } from '../components/PostToHub';
 import { shareableRoute } from '../data/hub';
 const ShareSheet = lazy(() => import('../components/ShareSheet').then((m) => ({ default: m.ShareSheet })));
-import type { SessionFeedback } from '../lib/types';
+import type { Activity, SessionFeedback } from '../lib/types';
+import { isDuplicatePair } from '../data/quality';
+import { shoeForRun } from '../training/shoes';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
 const AREAS = ['Foot', 'Ankle', 'Achilles', 'Left calf', 'Right calf', 'Shin', 'Knee', 'Hamstring', 'Hip', 'Lower back', 'Chest pain, dizziness or feeling faint'];
@@ -298,7 +300,65 @@ export default function ActivityPage() {
       </details>
 
       {fb && feelSection}
+
+      <FixRun run={a} />
     </div>
+  );
+}
+
+/** Data-quality tools for one run: possible duplicate (merge), shoes, leave out of stats, correct the distance. */
+function FixRun({ run }: { run: Activity }) {
+  const { data, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, typeOf } = useApp();
+  const nav = useNavigate();
+  const U = data.profile.units;
+  const toU = (m: number) => (U === 'mi' ? m / 1609.344 : m / 1000);
+  const [km, setKm] = useState('');
+  const [msg, setMsg] = useState<string>();
+  const shoes = (data.profile.shoes ?? []).filter((s) => !s.retired || s.id === run.shoeId);
+  const auto = shoeForRun({ startTime: run.startTime }, typeOf(run), data.profile.shoes ?? []);
+  const t = new Date(run.startTime).getTime();
+  const dup = data.activities.find((x) => x.id !== run.id && Math.abs(new Date(x.startTime).getTime() - t) < 3.1 * 3600000 && isDuplicatePair(run, x));
+  const newM = Number(km.replace(',', '.')) * (U === 'mi' ? 1609.344 : 1000);
+  const valid = newM > 100 && Math.abs(newM - run.distanceM) > 5 && newM < run.distanceM * 3;
+  return (
+    <section className="card stack fix-run" aria-labelledby="fix-run">
+      <h2 id="fix-run" className="title">Fix this run</h2>
+      {dup && (
+        <div className="banner stack-sm" role="note">
+          <StatusLine kind="warning">This looks like a duplicate</StatusLine>
+          <p>Another run on {longDate(new Date(dup.startTime))} has the same distance and time ({dist(dup.distanceM, U)}, {duration(dup.movingS)}), starting at {new Date(dup.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}. It is often the same run imported twice, with the clock an hour out.</p>
+          <div className="row wrap">
+            <button className="btn btn-small btn-primary" onClick={async () => { const err = await mergeRuns(run, dup); if (err) setMsg(err); else nav(`/activity/${run.detailScore >= dup.detailScore ? run.id : dup.id}`, { replace: true }); }}>Merge the two</button>
+            <Link to={`/activity/${dup.id}`} className="btn btn-small">See the other run</Link>
+          </div>
+          <p className="caption">Merging keeps the more detailed copy and anything you set on either one (race, notes, linked session).</p>
+        </div>
+      )}
+      {shoes.length > 0 && (
+        <div className="field">
+          <label htmlFor="run-shoe">Shoes</label>
+          <select id="run-shoe" className="input" value={run.shoeId ?? ''} onChange={(e) => setRunShoe(run.id, e.target.value || undefined)}>
+            <option value="">Automatic{auto ? ` (${auto.name})` : ''}</option>
+            {shoes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+      )}
+      <label className="row" style={{ gap: 10, minHeight: 44 }}>
+        <input type="checkbox" checked={!!run.hidden} onChange={(e) => setRunHidden(run.id, e.target.checked)} />
+        <span>Leave out of my stats<span className="caption" style={{ display: 'block' }}>Not counted in fitness, personal bests, volume or reviews. The run stays here.</span></span>
+      </label>
+      <div className="stack-sm">
+        <label htmlFor="fix-km" className="label">Correct the distance</label>
+        <p className="caption">For a treadmill run or a watch that measured wrong. Pace, splits and best efforts are recalculated.{run.distFrom ? ` Originally ${dist(run.distFrom, U, 2)}.` : ''}</p>
+        <div className="row wrap">
+          <input id="fix-km" className="input" style={{ maxWidth: 160 }} inputMode="decimal" placeholder={toU(run.distanceM).toFixed(2)} value={km} onChange={(e) => setKm(e.target.value)} aria-describedby="fix-km-unit" />
+          <span id="fix-km-unit" className="label">{U}</span>
+          <button className="btn btn-small" disabled={!valid} onClick={() => { fixRunDistance(run, newM); setKm(''); setMsg(`Distance set to ${dist(newM, U, 2)}.`); }}>Save distance</button>
+          {run.distFrom && <button className="btn btn-small btn-ghost" onClick={() => { fixRunDistance(run, run.distFrom!); setMsg('Original distance restored.'); }}>Restore original</button>}
+        </div>
+      </div>
+      {msg && <p role="status" className="caption">{msg}</p>}
+    </section>
   );
 }
 

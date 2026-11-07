@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileUp, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -7,7 +7,9 @@ import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { SOURCES } from '../data/integration';
 import { healthKind } from '../data/health';
-import { relTime } from '../lib/format';
+import { dist, duration, relTime } from '../lib/format';
+import { findDuplicates } from '../data/quality';
+import type { Activity } from '../lib/types';
 
 export function UploadPanel({ onDone }: { onDone?: () => void }) {
   const { importFiles, importState } = useApp();
@@ -65,6 +67,32 @@ export function GarminExportSteps() {
   );
 }
 
+/** Likely duplicate runs the import did not catch, with a one-tap merge for each pair. */
+function Duplicates() {
+  const { data, mergeRuns } = useApp();
+  const pairs = useMemo(() => findDuplicates(data.activities).slice(0, 20), [data.activities]);
+  const [msg, setMsg] = useState<string>();
+  if (data.mode !== 'real' || !pairs.length) return null;
+  const U = data.profile.units;
+  const when = (a: Activity) => `${new Date(a.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+  return (
+    <section className="card stack" aria-labelledby="dups">
+      <h2 id="dups" className="title">Possible duplicates</h2>
+      <p className="caption">These look like the same run imported twice: same distance and time, often with the clock an hour out. Merging keeps the more detailed copy and anything you set on either one.</p>
+      <ul className="list">{pairs.map(([x, y]) => (
+        <li key={x.id + y.id} className="list-item row-between wrap" style={{ gap: 8 }}>
+          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{dist(x.distanceM, U)} · {duration(x.movingS)}</span><span className="caption">{when(x)} and {when(y)}</span></span>
+          <span className="row" style={{ gap: 6 }}>
+            <Link to={`/activity/${x.id}`} className="btn btn-small btn-ghost">Look</Link>
+            <button className="btn btn-small" onClick={async () => setMsg(await mergeRuns(x, y))}>Merge</button>
+          </span>
+        </li>
+      ))}</ul>
+      {msg && <StatusLine kind="warning">{msg}</StatusLine>}
+    </section>
+  );
+}
+
 export default function DataSources() {
   const nav = useNavigate();
   const { data, loadSample, disconnectSource, startFresh, hasFlag, connectGarmin, syncGarminNow, garminSyncing } = useApp();
@@ -76,6 +104,7 @@ export default function DataSources() {
   return (
     <div className="stack-lg">
       <AppHeader title="Data sources" back />
+      <Duplicates />
 
       {data.mode === 'sample' && (
         <div className="banner" role="note"><p>You are viewing <strong>sample data</strong>. Uploading your own runs replaces it.</p></div>

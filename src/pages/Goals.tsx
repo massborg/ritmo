@@ -8,6 +8,7 @@ import { StatusLine } from '../components/ui';
 import { DAY_NAMES, DAY_SHORT, daysBetween, distanceLabel, shortDate, parseYmd, startOfWeek, ymd } from '../lib/format';
 import type { Injury, TrainingSettings } from '../lib/types';
 import { checkVolumeFit, resolveSettings, sessionCaps, splitWeek, weekRoles } from '../training/generator';
+import { forStats } from '../data/quality';
 
 const MI = 1.609344;
 
@@ -25,13 +26,13 @@ export default function Goals() {
   // Recent volume, to pre-fill and to compare against
   const recent = useMemo(() => {
     const weeks = new Map<string, number>();
-    for (const a of data.activities) {
+    for (const a of forStats(data.activities)) {
       const d = daysBetween(new Date(a.startTime), today);
       if (d < 0 || d >= 56) continue;
       const k = ymd(startOfWeek(new Date(a.startTime)));
       weeks.set(k, (weeks.get(k) ?? 0) + a.distanceM / 1000);
     }
-    const last4 = data.activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; }).reduce((x, a) => x + a.distanceM, 0) / 4000;
+    const last4 = forStats(data.activities).filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; }).reduce((x, a) => x + a.distanceM, 0) / 4000;
     return { avg: Math.round(last4), longestWeek: Math.round(Math.max(0, ...weeks.values())) };
   }, [data.activities, today]);
 
@@ -61,7 +62,23 @@ export default function Goals() {
     if (andRebuild || setup) { setTimeout(() => setMsg(buildMyPlan()), 0); if (setup) nav('/'); }
     else nav(-1);
   };
-  const roleName = { long: 'Long run', q1: 'Quality', q2: 'Quality', easy: 'Easy', rest: 'Rest' } as const;
+  const classic = !!preview && longDay === 5 && preview.roles[0] === 'q1' && preview.roles[3] === 'q2';
+  const roleName = { long: 'Long run', q1: classic ? 'Threshold' : 'Quality', q2: classic ? 'Intervals' : 'Quality', easy: 'Easy', rest: 'Rest' } as const;
+  /** "Classic week": threshold on Monday, intervals on Thursday, long run on Saturday, easy days between */
+  const useClassic = () => {
+    let list = [...new Set([...days, 0, 3, 5])].sort((a, b) => a - b);
+    let n = Math.max(4, t.daysPerWeek ?? resolved.daysPerWeek);
+    // If the weekly volume does not fit safely in that many days, add the days the fit check recommends
+    if (paces) {
+      const tt = { ...t, hardSessions: 2, daysPerWeek: n };
+      const f = checkVolumeFit(resolveSettings({ ...p, daysAvailable: list, longRunDay: 5, training: tt }, aRace, recent.avg || 30), paces);
+      if (!f.fits && f.recommendedDays && f.recommendedDayList) { n = f.recommendedDays; list = [...new Set([...list, ...f.recommendedDayList])].sort((a, b) => a - b); }
+    }
+    setLongDay(5);
+    setDays(list);
+    set({ hardSessions: 2, daysPerWeek: n });
+    setTimeout(() => document.getElementById('fit')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  };
 
   return (
     <div className="stack-lg" style={{ maxWidth: 720 }}>
@@ -91,6 +108,13 @@ export default function Goals() {
 
       <section className="card stack" aria-labelledby="days">
         <h2 id="days" className="title">Your week</h2>
+        <div className="preset">
+          <div className="stack-sm" style={{ flex: 1 }}>
+            <span className="label">Classic week</span>
+            <span className="caption">Threshold on Monday, intervals on Thursday, long run on Saturday, easy days in between.</span>
+          </div>
+          <button type="button" className="btn btn-small" aria-pressed={classic} onClick={useClassic}>{classic ? 'In use' : 'Use it'}</button>
+        </div>
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Days you could run</legend>
           <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={days.includes(i)} aria-label={DAY_NAMES[i]} onClick={() => setDays((x) => (x.includes(i) ? x.filter((y) => y !== i) : [...x, i]))}>{d}</button>)}</div>
@@ -138,7 +162,7 @@ export default function Goals() {
               <ul className="week-preview">{preview.roles.map((r, i) => (
                 <li key={i} className={r === 'rest' ? 'muted' : ''}><span className="label">{DAY_SHORT[i]}</span><span>{roleName[r]}</span><span className="stat">{r === 'long' ? `${toU(preview.split.longKm)}` : r === 'q1' || r === 'q2' ? `${toU(preview.split.qKm)}` : r === 'easy' ? `${toU(preview.split.easyKm)}` : ''}</span></li>
               ))}</ul>
-              <p className="caption">At {toU(resolved.peakKm)} {U} a week. Distances in {U}; quality sessions include warm-up and cool-down.</p>
+              <p className="caption">At {toU(resolved.peakKm)} {U} a week. Distances in {U}; quality sessions include warm-up and cool-down.{classic ? ' Threshold and intervals as shown in build weeks; base weeks start with easier running.' : ''}</p>
               {fit.easyHeavy && <StatusLine kind="info">Easy runs are a little long.{fit.recommendedDays && fit.recommendedDays > resolved.daysPerWeek ? ` A ${fit.recommendedDays}th day would spread the volume better.` : ''}</StatusLine>}
             </>
           ) : (

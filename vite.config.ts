@@ -22,6 +22,7 @@ export default defineConfig({
           if (id.includes('@supabase')) return 'supabase'
           if (id.includes('lucide-react')) return 'icons'
           if (id.includes('@capacitor')) return 'capacitor'
+          if (id.includes('@sentry')) return 'sentry'
           return undefined
         },
       },

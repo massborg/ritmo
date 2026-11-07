@@ -76,6 +76,12 @@ export interface Activity {
   derived?: ActivityDerived;
   /** Weather at the run's starting area, halfway through it (MET Norway, looked up while the run is recent) */
   weather?: RunWeather;
+  /** Left out of fitness, PBs, volume and reviews (still listed), e.g. a run the watch recorded badly */
+  hidden?: boolean;
+  /** The distance before the runner corrected it (treadmill calibration), metres */
+  distFrom?: number;
+  /** The shoe the runner chose for this run; otherwise Ritmo picks one by session type */
+  shoeId?: string;
   /** Why this run has no weather and is never looked up (e.g. 'no_gps' for an indoor run) */
   weatherSkip?: string;
   detailScore: number; // higher = more detailed, used to choose the best duplicate
@@ -172,6 +178,8 @@ export interface Profile {
   adjust?: PlanAdjust;
   log?: LogEntry[];
   shoes?: Shoe[];
+  /** Calendar feed of the plan: the private link's token and the reminder settings */
+  calendarFeed?: { token: string; createdAt: string; morningHour: number | null; eveReminder: boolean };
   /** Body check-ins (pain and niggles) and return-to-run progress; never shown on the Hub */
   body?: import('../training/body').BodyState;
 }
@@ -206,7 +214,8 @@ export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string
 /** Things logged that are not runs */
 export interface LogEntry { id: string; date: string; kind: 'cross' | 'note'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string }
 
-export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean }
+export type ShoeUse = 'everyday' | 'fast' | 'long' | 'trail';
+export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean; /** What the shoe is for, used to assign runs automatically (default everyday) */ use?: ShoeUse; /** When it was retired (YYYY-MM-DD); runs after that never count for it */ retiredAt?: string }
 
 export interface Consents {
   /** Required: processing health and training data to coach the runner */

@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Lap, LogEntry, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
+import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
-  type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
+  type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunsInCloud, emptyData, friendlyError,
   actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushToCloud, saveUserCache,
 } from '../data/store';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
@@ -125,6 +126,11 @@ interface Ctx extends Derived {
   hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body' | 'garmin') => boolean;
   /** Mark runs as races (true), not races (false), or back to automatic detection (null) */
   setRaceFlag: (ids: string[], race: boolean | null) => void;
+  /** Data-quality tools: merge two copies of a run, leave a run out of stats, choose its shoe, correct its distance */
+  mergeRuns: (a: Activity, b: Activity) => Promise<string | undefined>;
+  setRunHidden: (id: string, hidden: boolean) => void;
+  setRunShoe: (id: string, shoeId: string | undefined) => void;
+  fixRunDistance: (run: Activity, distanceM: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
   swap: (sessionId: string, kind: SwapKind) => void;
   applyCoachProposal: (messageId: string) => void;
@@ -362,7 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ---- Derived training state ----
   const derived = useMemo<Derived>(() => {
     const today = data.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
-    const acts = data.activities;
+    const acts = forStats(data.activities);
     const hr = hrSetup(data.profile, acts, today);
     const zones = hrZones(hr);
     const fitness = estimateFitness(acts, hr, today, data.races);
@@ -680,6 +686,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const set = new Set(ids);
     setData((d) => ({ ...d, activities: d.activities.map((a) => (set.has(a.id) ? { ...a, isRace: race === true, notRace: race === false } : a)) }));
   };
+  const mergeRuns = async (a: Activity, b: Activity) => {
+    const { keep, dropId } = combineRuns(a, b);
+    try { if (dataRef.current.mode === 'real') await deleteRunsInCloud([dropId]); } catch (e) { return friendlyError(e); }
+    setData((d) => ({ ...d, activities: d.activities.filter((x) => x.id !== dropId).map((x) => (x.id === keep.id ? keep : x)),
+      feedback: d.feedback.map((f) => (f.activityId === dropId ? { ...f, activityId: keep.id } : f)) }));
+    return undefined;
+  };
+  const patchRun = (id: string, patch: Partial<Activity>) => setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+  const setRunHidden = (id: string, hidden: boolean) => patchRun(id, { hidden: hidden || undefined });
+  const setRunShoe = (id: string, shoeId: string | undefined) => patchRun(id, { shoeId });
+  const fixRunDistance = (run: Activity, distanceM: number) => {
+    const fixed = withDistance(run, distanceM);
+    setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === run.id ? { ...x, ...fixed } : x)) }));
+  };
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
   const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
@@ -925,7 +945,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
