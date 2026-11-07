@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Activity, Brain, CalendarDays, HeartPulse, Lock, Watch } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Lanes, Logo } from '../components/ui';
-import { CONTACT_EMAIL } from '../lib/contact';
+import { COMPANY, CONTACT_EMAIL } from '../lib/contact';
 
 /** Public page describing Ritmo Running, for visitors, partners and platform reviewers. */
 export default function About() {
@@ -39,7 +39,7 @@ export default function About() {
       </div>
       <section className="band stack-sm">
         <h2 className="title">Who makes Ritmo</h2>
-        <p>Ritmo Running is developed in Malta.{CONTACT_EMAIL && <> Questions, partnerships or data requests: <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--on-graphite)' }}>{CONTACT_EMAIL}</a>.</>}</p>
+        <p>Ritmo Running is developed in Malta{COMPANY.name ? ` by ${COMPANY.name}${COMPANY.registration ? ` (${COMPANY.registration})` : ''}${COMPANY.address ? `, ${COMPANY.address}` : ''}` : ''}.{CONTACT_EMAIL && <> Questions, partnerships or data requests: <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--on-graphite)' }}>{CONTACT_EMAIL}</a>.</>}</p>
       </section>
       <p className="caption" style={{ textAlign: 'center', paddingBottom: 'var(--s6)' }}>
         <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms of service</Link> · Garmin is a trademark of Garmin Ltd. or its subsidiaries.
