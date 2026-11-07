@@ -159,3 +159,9 @@ details p { color: var(--muted); padding-bottom: 12px; }
 .foot .fine { color: inherit; opacity: 0.7; flex-basis: 100%; margin: 0; }
 @media (min-width: 861px) { .hero > .lanes { bottom: 120px; right: -10%; width: 640px; } }
 @media (max-width: 860px) { .hero > .lanes { bottom: auto; top: 380px; right: -30%; width: 560px; opacity: 0.6; } }
+
+/* Social links */
+.social { display: flex; gap: 8px; }
+.soc { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid currentColor; border-radius: 999px; text-decoration: none; opacity: 0.9; }
+.soc:hover, .soc:focus-visible { opacity: 1; background: rgba(255,255,255,.08); }
+.soc-ico { flex: none; }
