@@ -45,6 +45,7 @@ export default function Privacy() {
           <li><strong>Supabase</strong> (database and accounts, EU region, Frankfurt).</li>
           <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
           <li><strong>Anthropic</strong> (the AI model behind coach answers, reading laps from screenshots and Body chat; receives only what is needed for the request you made, and does not use it for training).</li>
+          <li><strong>MET Norway</strong> (the Norwegian Meteorological Institute; the weather shown on your recent runs). Shortly after a run with GPS, Ritmo's server asks MET Norway for the weather at the run's starting area, rounded to about 1 km. Your name, email and account are never sent, and the weather is saved with the run so it is only looked up once.</li>
           <li><strong>OpenStreetMap Foundation</strong> (the map behind the route on your own run pages). To draw it, your device fetches map images for the area around the route from OpenStreetMap's servers, which receive your IP address and that map area. No account details, run data or health data are sent. You can switch maps off with "Hide map" under any route.</li>
         </ul>
         <h3 className="label">Sharing runs on the Hub (optional, off unless you turn it on)</h3>
