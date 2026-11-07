@@ -4,7 +4,7 @@ import { Download, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
-import { COMPANY_ADDRESS, COMPANY_COUNTRY, COMPANY_NAME, COMPANY_REG_NO, CONTACT_EMAIL } from '../lib/contact';
+import { COMPANY_ADDRESS, COMPANY_COUNTRY, COMPANY_NAME, COMPANY_REG_NO, COMPANY_VAT, CONTACT_EMAIL } from '../lib/contact';
 
 export default function Privacy() {
   const nav = useNavigate();
@@ -15,7 +15,7 @@ export default function Privacy() {
   const [err, setErr] = useState<string>();
   return (
     <div className="stack-lg">
-      <AppHeader title="Privacy" eyebrow="Your data, and how Ritmo uses it" back={!!session} />
+      <AppHeader title="Privacy" eyebrow="Last updated 7 November 2026" back={!!session} />
 
       <section className="card stack">
         <h2 className="title">What Ritmo uses, and why</h2>
@@ -32,18 +32,25 @@ export default function Privacy() {
           <li><strong>Screenshots of runs</strong> (optional): stored privately so you can see them with the run. If you ask Ritmo to read the laps, they are sent to the AI model for that only.</li>
         </ul>
         <p>Your data is stored in Ritmo's database in the EU and protected so that only your account can read or change it. It is also kept on your device for speed, and removed from the device when you log out. Files you upload are read on your device.</p>
-        <p>The AI coach is optional. Only if you agree, your question and a summary of the relevant training numbers are sent to an AI model to write the answer. Your email, profile picture, date of birth and health check are never sent. To keep costs fair, each person can get up to 30 AI answers an hour and 100 a day; after that the built-in coach answers. Your data is never sold and never used to train AI models. Garmin data is never used to train AI models.</p>
+        <h3 className="label">AI features (all optional)</h3>
+        <p>Ritmo uses an AI model for three things, and only when you use them:</p>
+        <ul className="bullets">
+          <li><strong>AI coach answers</strong>, only if you agree: your question and a summary of the relevant training numbers are sent to write the answer. Up to 30 AI answers an hour and 100 a day per person; after that the built-in coach answers.</li>
+          <li><strong>Reading laps from screenshots</strong>, only when you tap "Read the laps": the screenshots you chose are sent to read the lap table (times, distances, heart rate). The result is shown to you to check and edit before anything is saved. Up to 30 reads a day per person.</li>
+          <li><strong>Body chat</strong>, only if you use it with AI switched on (it has its own switch): your question and a summary of your training load and logged pain are sent for that answer. Warning signs are checked by Ritmo's own rules first and are never sent.</li>
+        </ul>
+        <p>Your email, profile picture, date of birth and health check answers are never sent to the AI model. Data sent to it is used only to produce your answer, is not used to train AI models, and is never sold. Garmin data is never used to train AI models.</p>
         <h3 className="label">Who processes your data for Ritmo</h3>
         <ul className="bullets">
           <li><strong>Supabase</strong> (database and accounts, EU region, Frankfurt).</li>
           <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
-          <li><strong>Anthropic</strong> (the AI model that writes coach answers and reads laps from screenshots; receives only the summary needed for your question, or the screenshots you ask it to read, at your request, and does not use them for training).</li>
+          <li><strong>Anthropic</strong> (the AI model behind coach answers, reading laps from screenshots and Body chat; receives only what is needed for the request you made, and does not use it for training).</li>
         </ul>
         <h3 className="label">Sharing runs on the Hub (optional, off unless you turn it on)</h3>
         <p>The Hub lets you share runs with other runners. It stays off until you agree to it separately, and Ritmo records when you did. Nothing is ever posted automatically: you choose each run, who can see it (everyone, your followers, or only you), and whether to show the route and heart rate. Routes on the Hub leave out the first and last part, so your start and finish (often your home) are not shown. Other runners see the name you choose for the Hub, never your email, date of birth, health check or how runs felt. Pain, injuries and Body check-ins are never shown on the Hub. You can delete a post at any time, and turning sharing off hides your posts.</p>
         <p>Data from connected services such as Garmin Connect is used only to give you your own analysis and coaching, and on the Hub only for runs you choose to post. It is never sold or used to train AI models. Disconnecting a service stops new data arriving; deleting your account removes everything.</p>
         <h3 className="label">Who is responsible for your data</h3>
-        <p>Ritmo Running is provided by {COMPANY_NAME}, a company registered in {COMPANY_COUNTRY} (registration number {COMPANY_REG_NO}, registered office {COMPANY_ADDRESS}), which is responsible for your data under the GDPR. You can ask for a copy of your data, ask us to correct or delete it, object to how it is used, or withdraw your consent at any time by writing to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. You can also export or delete everything yourself below. If you are unhappy with how we handle your data, you can complain to your local data protection authority.</p>
+        <p>Ritmo Running is provided by {COMPANY_NAME}, a company registered in {COMPANY_COUNTRY} (registration number {COMPANY_REG_NO}, registered office {COMPANY_ADDRESS}, VAT {COMPANY_VAT}), which is responsible for your data under the GDPR. You can ask for a copy of your data, ask us to correct or delete it, object to how it is used, or withdraw your consent at any time by writing to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. You can also export or delete everything yourself below. If you are unhappy with how we handle your data, you can complain to your local data protection authority.</p>
         <p className="caption">Ritmo gives coaching guidance, not medical advice. See a doctor or physio about ongoing pain, and get medical help straight away for chest pain, dizziness or fainting.</p>
       </section>
 
