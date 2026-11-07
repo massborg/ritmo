@@ -2,6 +2,7 @@
 // The user is identified from their own access token; the request body is ignored, so nobody can delete someone else.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { deregister } from '../_shared/garmin.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -35,6 +36,8 @@ Deno.serve(async (req) => {
       if (rm.error) return json({ error: 'delete_failed', message: `Your run screenshots could not be removed: ${rm.error.message}` }, 500);
     }
   }
+  // Garmin: tell Garmin to stop sending data before the tokens go with the account
+  await deregister(admin, uid);
   const del = await admin.auth.admin.deleteUser(data.user.id);
   if (del.error) return json({ error: 'delete_failed', message: del.error.message }, 500);
   return json({ deleted: true });

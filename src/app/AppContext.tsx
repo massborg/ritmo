@@ -12,6 +12,7 @@ import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
+import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
@@ -120,7 +121,7 @@ interface Ctx extends Derived {
   saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }) => string;
   skipSession: (sessionId: string) => void;
   /** A feature switched on for this account (Run, Hub, share cards, Body); never in sample mode */
-  hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body') => boolean;
+  hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body' | 'garmin') => boolean;
   /** Mark runs as races (true), not races (false), or back to automatic detection (null) */
   setRaceFlag: (ids: string[], race: boolean | null) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
@@ -140,6 +141,12 @@ interface Ctx extends Derived {
   connectHealth: () => Promise<string | undefined>;
   syncHealthNow: (justConnected?: boolean) => Promise<void>;
   healthSyncing: boolean;
+  /** Garmin Connect (behind the 'garmin' flag): open Garmin's consent page */
+  connectGarmin: () => Promise<string | undefined>;
+  /** Finish connecting after Garmin sends the runner back; returns an error message or undefined */
+  completeGarminConnect: (code: string, state: string) => Promise<string | undefined>;
+  syncGarminNow: () => Promise<void>;
+  garminSyncing: boolean;
   signOut: () => Promise<void>;
   finishRecovery: () => void;
   /** Signed link to the person's own profile picture, if they have one */
@@ -198,6 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [importState, setImportState] = useState<ImportState>({ running: false, done: 0, total: 0, label: '' });
   const [coachBusy, setCoachBusy] = useState(false);
   const [healthSyncing, setHealthSyncing] = useState(false);
+  const [garminSyncing, setGarminSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [avatarSrc, setAvatarSrc] = useState<string>();
   const [planProblem, setPlanProblem] = useState<PlanProblem>();
@@ -764,7 +772,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return undefined;
   };
 
-  const disconnectSource = (k: SourceKind) => setData((d) => ({ ...d, sources: d.sources.map((s) => (s.kind === k ? { ...s, connected: false } : s)) }));
+  const disconnectSource = (k: SourceKind) => {
+    // Garmin: also tell Garmin to stop sending data and remove the stored tokens (runs already saved stay)
+    if (k === 'garmin') void disconnectGarmin().catch(() => undefined);
+    setData((d) => ({ ...d, sources: d.sources.map((s) => (s.kind === k ? { ...s, connected: false } : s)) }));
+  };
+
+  // ---- Garmin Connect (behind the 'garmin' flag) ----
+  // Garmin pushes each new run to our webhook; here the app collects them and merges them like any other source.
+  const syncGarminNow = async () => {
+    if (dataRef.current.mode !== 'real' || !dataRef.current.flags?.includes('garmin')) return;
+    setGarminSyncing(true);
+    try {
+      const { runs, clear } = await pullGarminInbox();
+      setData((d) => {
+        const m = runs.length ? merge(d.activities, runs) : { activities: d.activities };
+        const sources = d.sources.filter((x) => x.kind !== 'garmin');
+        sources.push({ kind: 'garmin', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.garmin).length });
+        return { ...d, activities: m.activities, sources };
+      });
+      // Cleared only after the runs are in the app; saving to the account follows the normal autosave
+      await clear();
+    } catch (e) {
+      setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === 'garmin' ? { ...x, lastError: `Garmin sync failed: ${friendlyError(e)}` } : x)) }));
+    } finally {
+      setGarminSyncing(false);
+    }
+  };
+  const connectGarmin = async () => {
+    try { await startGarminConnect(); return undefined; } catch (e) { return friendlyError(e); }
+  };
+  const completeGarminConnect = async (code: string, state: string) => {
+    try {
+      await finishGarminConnect(code, state);
+      setData((d) => ({ ...d, sources: [...d.sources.filter((x) => x.kind !== 'garmin'), { kind: 'garmin', connected: true, activityCount: d.activities.filter((a) => a.sourceIds.garmin).length }] }));
+      void syncGarminNowRef.current();
+      return undefined;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  };
+  const syncGarminNowRef = useRef(syncGarminNow);
+  syncGarminNowRef.current = syncGarminNow;
+  const garminFlag = data.mode === 'real' && !!data.flags?.includes('garmin');
+  useEffect(() => {
+    if (!ready || !garminFlag) return;
+    let live = true;
+    const run = () => { garminConnected().then((on) => { if (live && on) void syncGarminNowRef.current(); }); };
+    run();
+    // New runs are picked up whenever the runner comes back to the app
+    const onVisible = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { live = false; document.removeEventListener('visibilitychange', onVisible); };
+  }, [ready, garminFlag]);
 
   // ---- Apple Health / Health Connect (phone app only) ----
   const syncHealthNow = async (justConnected = false) => {
@@ -849,7 +909,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
-    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
+    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

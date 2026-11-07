@@ -68,6 +68,8 @@ export interface Activity {
   plannedSessionId?: string;
   /** Screenshots stored with the run (private storage paths) */
   media?: string[];
+  /** Device that recorded the run, e.g. "Forerunner 965" (shown as Garmin attribution) */
+  device?: string;
   /** Lap or rep table the runner entered or confirmed from screenshots */
   reps?: { label: string; distanceM?: number; timeS?: number; avgHr?: number; kind?: 'warmup' | 'work' | 'recovery' | 'cooldown' }[];
   /** Stored summary (best efforts, structure), so history works without loading every run's streams */

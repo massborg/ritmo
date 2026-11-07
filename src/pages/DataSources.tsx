@@ -67,8 +67,12 @@ export function GarminExportSteps() {
 
 export default function DataSources() {
   const nav = useNavigate();
-  const { data, loadSample, disconnectSource, startFresh } = useApp();
+  const { data, loadSample, disconnectSource, startFresh, hasFlag, connectGarmin, syncGarminNow, garminSyncing } = useApp();
   const status = (k: string) => data.sources.find((s) => s.kind === k);
+  const garminOn = hasFlag('garmin');
+  const [garminErr, setGarminErr] = useState<string>();
+  const [garminBusy, setGarminBusy] = useState(false);
+  const onConnectGarmin = async () => { setGarminBusy(true); setGarminErr(await connectGarmin()); setGarminBusy(false); };
   return (
     <div className="stack-lg">
       <AppHeader title="Data sources" back />
@@ -112,11 +116,16 @@ export default function DataSources() {
               <li key={s.kind} className="list-item row-between wrap" style={{ alignItems: 'flex-start' }}>
                 <span className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 200 }}>
                   <span className="label">{s.label}</span>
-                  <span className="caption">{s.description}</span>
+                  <span className="caption">{s.description}{s.kind === 'garmin' && !garminOn ? ' Waiting for Garmin developer approval.' : ''}</span>
+                  {s.kind === 'garmin' && garminOn && !st?.connected && <span className="caption">You will be asked to sign in to Garmin and allow Ritmo to read your activities. Only you see your Garmin data.</span>}
+                  {s.kind === 'garmin' && garminErr && <StatusLine kind="danger">{garminErr}</StatusLine>}
                   {st?.lastSyncAt && <span className="caption">Last import {relTime(st.lastSyncAt)} · {st.activityCount} runs</span>}
                   {st?.lastError && <StatusLine kind="warning">{st.lastError}</StatusLine>}
                 </span>
                 {s.kind === 'upload' ? (st?.connected ? <StatusLine kind="success">Active</StatusLine> : <span className="caption">Ready</span>)
+                  : s.kind === 'garmin' && garminOn ? (st?.connected
+                    ? <button className="btn btn-small" onClick={() => void syncGarminNow()} disabled={garminSyncing}>{garminSyncing ? 'Syncing…' : 'Sync now'}</button>
+                    : <button className="btn btn-small btn-primary" onClick={onConnectGarmin} disabled={garminBusy || data.mode !== 'real'}>{garminBusy ? 'Opening Garmin…' : 'Connect Garmin'}</button>)
                   : s.availability === 'stage-2' ? <span className="tag">Coming soon</span>
                   : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="tag">In the phone app</Link>)
                   : <span className="tag">Planned</span>}
