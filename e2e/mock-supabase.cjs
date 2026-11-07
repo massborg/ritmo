@@ -25,7 +25,7 @@ function jwt(user) {
 
 function createMock() {
   const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
-  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags', 'hub_profiles', 'posts', 'ritmos', 'comments', 'notifications', 'follows', 'blocks', 'reports'];
+  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags', 'hub_profiles', 'posts', 'ritmos', 'comments', 'notifications', 'follows', 'blocks', 'reports', 'strava_inbox'];
   TABLES.forEach((t) => (state.tables[t] = []));
   const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'], hub_profiles: ['user_id'], posts: ['id'], ritmos: ['post_id', 'user_id'], comments: ['id'], notifications: ['id'], follows: ['follower_id', 'followee_id'], blocks: ['blocker_id', 'blocked_id'], reports: ['reporter_id', 'created_at'] };
   let clock = 0;
@@ -232,6 +232,29 @@ function createMock() {
       row.source_ids = { ...(row.source_ids ?? {}), weather }; row.updated_at = stamp();
       return { status: 200, body: { weather } };
     }
+    if (name === 'strava-auth') {
+      // Mirrors the real function. "start" returns a URL straight back to the app's callback, as if the runner had
+      // approved on Strava; "finish" connects and fills the inbox with state.strava.backfill (the last 30 days).
+      state.strava = state.strava ?? { connected: new Set(), states: new Map(), backfill: [], calls: [] };
+      const b = req.postDataJSON() ?? {};
+      state.strava.calls.push(b.action);
+      if (!state.tables.feature_flags.some((f) => f.user_id === u.id && f.flag === 'strava')) return { status: 403, body: { error: 'not_available', message: 'Strava sync is not available on your account yet.' } };
+      if (b.action === 'start') {
+        const st = 'state-' + Math.random().toString(16).slice(2);
+        state.strava.states.set(st, u.id);
+        return { status: 200, body: { url: `${state.strava.appUrl}/strava/callback?state=${st}&code=test-code&scope=read,activity:read_all` } };
+      }
+      if (b.action === 'finish') {
+        if (state.strava.states.get(b.state) !== u.id) return { status: 400, body: { error: 'expired', message: 'The Strava connection took too long or was started elsewhere. Please try again.' } };
+        if (!/activity:read/.test(b.scope ?? '')) return { status: 400, body: { error: 'scope', message: 'Ritmo needs permission to read your activities.' } };
+        state.strava.states.delete(b.state);
+        state.strava.connected.add(u.id);
+        for (const p of state.strava.backfill) state.tables.strava_inbox.push({ id: state.tables.strava_inbox.length + 1, user_id: u.id, activity_id: String(p.activity?.id ?? p.id), payload: p.deleted ? { deleted: true } : p, received_at: stamp() });
+        return { status: 200, body: { connected: true, backfillDays: 30 } };
+      }
+      if (b.action === 'disconnect') { state.strava.connected.delete(u.id); state.tables.strava_inbox = state.tables.strava_inbox.filter((r) => r.user_id !== u.id); return { status: 200, body: { connected: false } }; }
+      return { status: 400, body: { error: 'bad_request' } };
+    }
     if (name === 'coach') return state.coachStatus ? { status: state.coachStatus, body: { error: 'rate_limited' } } : { status: 503, body: { error: 'not_configured' } };
     if (name === 'delete-account') {
       for (const t of TABLES) state.tables[t] = state.tables[t].filter((r) => r.user_id !== u.id);
@@ -289,6 +312,7 @@ function createMock() {
       try { body = req.postDataJSON() ?? {}; } catch { body = {}; }
       let res;
       if (url.pathname.startsWith('/auth/v1')) res = auth(url.pathname.slice(8), method, url, body, req);
+      else if (url.pathname === '/rest/v1/rpc/strava_status') { state.rpc.push('strava_status'); const u = userFromReq(req); res = { status: 200, body: u && state.strava?.connected?.has(u.id) ? [{ connected: true, connected_at: new Date().toISOString(), scope: 'read,activity:read_all' }] : [] }; }
       else if (url.pathname.startsWith('/rest/v1/rpc/')) { state.rpc.push(url.pathname.slice(12)); res = { status: 204, body: null }; }
       else if (url.pathname.startsWith('/storage/v1')) res = storage(url.pathname.slice(11), method, req, body);
       else if (url.pathname.startsWith('/rest/v1/')) res = rest(url.pathname.slice(9), method, url, body, req, req.headers());

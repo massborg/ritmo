@@ -18,6 +18,7 @@ const Coach = lazyPage(() => import('./pages/Coach'));
 const Profile = lazyPage(() => import('./pages/Profile'));
 const DataSources = lazyPage(() => import('./pages/DataSources'));
 const GarminCallback = lazyPage(() => import('./pages/GarminCallback'));
+const StravaCallback = lazyPage(() => import('./pages/StravaCallback'));
 const Privacy = lazyPage(() => import('./pages/Privacy'));
 const ActivityPage = lazyPage(() => import('./pages/Activity'));
 const PlannedPage = lazyPage(() => import('./pages/Planned'));
@@ -242,6 +243,7 @@ function Shell() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
               <Route path="/garmin/callback" element={<GarminCallback />} />
+              <Route path="/strava/callback" element={<StravaCallback />} />
               <Route path="/profile/privacy" element={<Privacy />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/profile/health" element={<HealthConnect />} />
