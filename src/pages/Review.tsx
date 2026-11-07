@@ -6,6 +6,7 @@ import { Kpi, Lanes, Logo, StatusLine } from '../components/ui';
 import { dist, duration, MONTHS_LONG } from '../lib/format';
 import { personalBests } from '../training/insights';
 import { TYPE_LABEL } from '../training/analysis';
+import { forStats } from '../data/quality';
 
 export default function Review() {
   const { period = '' } = useParams();
@@ -15,13 +16,14 @@ export default function Review() {
   const [shared, setShared] = useState('');
   const isMonth = period.length === 7;
   const label = isMonth ? `${MONTHS_LONG[Number(period.slice(5)) - 1]} ${period.slice(0, 4)}` : period;
-  const acts = useMemo(() => data.activities.filter((a) => a.startTime.startsWith(period)), [data.activities, period]);
+  const all = useMemo(() => forStats(data.activities), [data.activities]);
+  const acts = useMemo(() => all.filter((a) => a.startTime.startsWith(period)), [all, period]);
   const prevKey = isMonth ? (() => { const y = Number(period.slice(0, 4)), m = Number(period.slice(5)); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; })() : String(Number(period) - 1);
-  const prev = data.activities.filter((a) => a.startTime.startsWith(prevKey));
+  const prev = all.filter((a) => a.startTime.startsWith(prevKey));
   const total = acts.reduce((x, a) => x + a.distanceM, 0), prevTotal = prev.reduce((x, a) => x + a.distanceM, 0);
   const longest = [...acts].sort((a, b) => b.distanceM - a.distanceM)[0];
-  const beforePbs = personalBests(data.activities.filter((a) => a.startTime < period));
-  const nowPbs = personalBests(data.activities.filter((a) => a.startTime.slice(0, period.length) <= period));
+  const beforePbs = personalBests(all.filter((a) => a.startTime < period));
+  const nowPbs = personalBests(all.filter((a) => a.startTime.slice(0, period.length) <= period));
   const newPbs = nowPbs.filter((p) => p.date.startsWith(period) && (!beforePbs.find((b) => b.label === p.label) || p.timeS < beforePbs.find((b) => b.label === p.label)!.timeS));
   const types = acts.reduce<Record<string, number>>((m, a) => ((m[typeOf(a)] = (m[typeOf(a)] ?? 0) + 1), m), {});
   const topType = Object.entries(types).sort((a, b) => b[1] - a[1])[0];

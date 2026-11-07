@@ -16,13 +16,14 @@ import { estimateFitness, predictRace, trainingPaces, zoneOf } from '../training
 import { Shoes } from '../components/Shoes';
 import { BodySection } from '../components/BodySection';
 import { zoneTime } from '../training/analysis';
+import { forStats } from '../data/quality';
 
 type Period = 'week' | 'month' | 'year';
 
 export default function Progress() {
   const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness, athlete, hasFlag } = useApp();
   const U = data.profile.units;
-  const acts = data.activities;
+  const acts = useMemo(() => forStats(data.activities), [data.activities]);
   const [period, setPeriod] = useState<Period>('week');
   const years = useMemo(() => [...new Set(acts.map((a) => a.startTime.slice(0, 4)))].sort().reverse(), [acts]);
   const [year, setYear] = useState(String(today.getFullYear()));
@@ -243,7 +244,7 @@ export default function Progress() {
 function PbRow({ pb }: { pb: PB }) {
   const { data } = useApp();
   const [open, setOpen] = useState(false);
-  const history = useMemo(() => (open ? pbHistory(data.activities, pb.m, data.races).reverse() : []), [open, data.activities, data.races, pb.m]);
+  const history = useMemo(() => (open ? pbHistory(forStats(data.activities), pb.m, data.races).reverse() : []), [open, data.activities, data.races, pb.m]);
   return (
     <li>
       <div className="row-between" style={{ gap: 8 }}>

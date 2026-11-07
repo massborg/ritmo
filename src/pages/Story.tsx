@@ -7,16 +7,17 @@ import { Kpi, Lanes } from '../components/ui';
 import { dist, duration, MONTHS_LONG, parseYmd, shortDate, toUnit } from '../lib/format';
 import { runningStory } from '../training/insights';
 import { estimateFitness, predictTime } from '../training/fitness';
+import { forStats } from '../data/quality';
 
 export default function Story() {
   const { data, today, hr, stage } = useApp();
   const [params] = useSearchParams();
   const setup = params.get('setup') === '1';
   const U = data.profile.units;
-  const st = useMemo(() => runningStory(data.activities, today), [data.activities, today]);
+  const st = useMemo(() => runningStory(forStats(data.activities), today), [data.activities, today]);
   const trend = useMemo(() => st.years.map((y) => {
     const end = new Date(Number(y.year), 11, 31);
-    const f = estimateFitness(data.activities, hr, end > today ? today : end);
+    const f = estimateFitness(forStats(data.activities), hr, end > today ? today : end);
     return { year: y.year, tenK: f ? predictTime(f.vdot, 10000) : undefined };
   }), [st.years, data.activities, hr, today]);
   if (!st.totalRuns) return (

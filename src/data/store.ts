@@ -82,7 +82,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -105,7 +105,10 @@ const rowToAct = (r: Row): Activity => ({
   media: ((r.x as Record<string, unknown> | null)?.media as string[] | undefined) ?? undefined,
   device: ((r.x as Record<string, unknown> | null)?.device as string | undefined) ?? undefined,
   weather: ((r.x as Record<string, unknown> | null)?.weather as Activity['weather']) ?? undefined,
-  weatherSkip: ((r.x as Record<string, unknown> | null)?.weatherSkip as string | undefined) ?? undefined, detailScore: Number(r.sc),
+  weatherSkip: ((r.x as Record<string, unknown> | null)?.weatherSkip as string | undefined) ?? undefined,
+  hidden: !!(r.x as Record<string, unknown> | null)?.hidden || undefined,
+  distFrom: num((r.x as Record<string, unknown> | null)?.distFrom),
+  shoeId: ((r.x as Record<string, unknown> | null)?.shoe as string | undefined) ?? undefined, detailScore: Number(r.sc),
   derived: r.v != null ? { v: Number(r.v), ...(r.be ? { be: r.be as Record<string, number> } : {}), ...(r.sg ? { segs: r.sg as number[] } : {}) } : undefined,
   importedAt: '',
 });
@@ -251,7 +254,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of d.activities) ps.activities.set(a.id, actPrint(a));
@@ -313,6 +316,13 @@ export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promi
     if (r.error) throw r.error;
   }
   ps.feedbackJson = feedbackJson;
+}
+
+/** Deletes runs from the account (after merging duplicates). Other devices drop them through activity_deletions. */
+export async function deleteRunsInCloud(ids: string[]) {
+  if (!supabase || !ids.length) return;
+  const r = await supabase.from('activities').delete().in('id', ids);
+  if (r.error) throw r.error;
 }
 
 export async function deleteRaceInCloud(id: string) {

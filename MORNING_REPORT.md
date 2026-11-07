@@ -89,7 +89,14 @@ Each pull request is based on the one before it. Netlify builds a preview for ea
 - **Hub:** clubs, race pages, live updates (the feed refreshes on open), push notifications, @mention notifications, photos in posts and an admin moderation view are not built yet.
 - **Body:** the body map uses area buttons, not a drawn figure. There are no exercise videos. The physio summary is a download, not a link that expires after 7 days. There is no physio directory.
 - **Run tab:** live location sharing, SOS, GPX/FIT export, Web Bluetooth heart-rate straps and following a saved route are not built. Background GPS needs the Capacitor app.
-- **§7 and §8 polish** not reached: Goals week preview and "Classic week" preset, plan length control, "Explain this week", ICS calendar feed, reminders, race-day mode, Sentry, shoe auto-assignment, duplicate tools, PWA install prompt.
+- **§7 and §8 polish.** Built after this report:
+  - **Planning:** "Classic week" preset in Goals (threshold Monday, intervals Thursday, long run Saturday), with the week preview and plan length control that were already there; "Explain this week" on the Training page.
+  - **Calendar feed:** a private, resettable link (`calendar` server function), with reminders: a morning alert and, the evening before a long run or race, a fuelling and kit reminder.
+  - **Race-day mode for A races:** target splits (even or negative), a warm-up timer, what to eat and when, and a race report comparing splits with the plan.
+  - **Sentry:** off until `VITE_SENTRY_DSN` is set, with personal data stripped.
+  - **Shoes:** assigned automatically by session type, with alerts from 100 km before retirement.
+  - **Data-quality tools:** find and merge duplicates, leave a run out of stats, correct a distance.
+  - Still open: PWA install prompt, push reminders, and the evening "not logged yet" nudge.
 
 ## Decisions I made
 

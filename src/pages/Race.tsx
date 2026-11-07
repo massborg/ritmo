@@ -89,6 +89,11 @@ export default function RacePage() {
         <h1 className="display-lg">{race.name}</h1>
         <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days} days to go</span>}</div>
       </div>
+      {race.priority === 'A' && (!past || daysUntil(today, race.date) >= -30) && (
+        <Link to={`/race/${race.id}/day`} className="btn btn-primary race-day-link" style={{ alignSelf: 'flex-start' }}>
+          {past ? 'Race report: splits against plan' : days <= 7 ? 'Open race-day mode' : 'Preview race-day mode'}
+        </Link>
+      )}
 
       {!past && !rr && (
         <section className="card stack">

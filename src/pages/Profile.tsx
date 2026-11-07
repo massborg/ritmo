@@ -9,6 +9,7 @@ import { AvatarEditor, AvatarImage } from '../components/AvatarEditor';
 import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/format';
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
+import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
   const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace } = useApp();
@@ -47,6 +48,8 @@ export default function Profile() {
         <Link to="/profile/data" className="row-between"><span className="row"><span className="row-icon"><Database size={18} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Data sources</span><span className="caption">{data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}{data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
         <Link to="/profile/privacy" className="row-between"><span className="row"><span className="row-icon"><Shield size={18} strokeWidth={2} aria-hidden="true" /></span><span className="label">Privacy and your data</span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
       </div>
+
+      <CalendarFeed />
 
       <section className="card stack" aria-labelledby="ill">
         <div className="row" style={{ gap: 8 }}><Thermometer size={20} strokeWidth={2} aria-hidden="true" /><h2 id="ill" className="title">Feeling unwell?</h2></div>
