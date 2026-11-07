@@ -216,6 +216,22 @@ function createMock() {
       if (!paths.length || paths.some((p) => !p.startsWith(`${u.id}/`) || !state.files.has(`run-media/${p}`))) return { status: 400, body: { error: 'bad_request' } };
       return state.lapRead ? { status: 200, body: state.lapRead } : { status: 503, body: { error: 'not_configured' } };
     }
+    if (name === 'weather') {
+      // Mirrors the real function: own runs only, recent runs only (3 h), needs GPS, stores the result with the run.
+      // state.weather is what MET Norway "returns"; unset means the service is unavailable.
+      state.weatherCalls = (state.weatherCalls ?? 0) + 1;
+      const id = (req.postDataJSON() ?? {}).id;
+      const row = state.tables.activities.find((r) => r.id === id && r.user_id === u.id);
+      if (!row) return { status: 404, body: { error: 'not_found' } };
+      if (row.source_ids?.weather) return { status: 200, body: { weather: row.source_ids.weather } };
+      if (Date.now() - (new Date(row.start_time).getTime() + Number(row.duration_s ?? 0) * 500) > 3 * 3600 * 1000) return { status: 422, body: { error: 'too_old' } };
+      if (row.source_ids?.weatherSkip) return { status: 422, body: { error: row.source_ids.weatherSkip } };
+      if (!row.streams?.[0] || row.streams[0].lat == null) { row.source_ids = { ...(row.source_ids ?? {}), weatherSkip: 'no_gps' }; row.updated_at = stamp(); return { status: 422, body: { error: 'no_gps' } }; }
+      if (!state.weather) return { status: 502, body: { error: 'unavailable' } };
+      const weather = { ...state.weather, at: new Date().toISOString(), src: 'met.no' };
+      row.source_ids = { ...(row.source_ids ?? {}), weather }; row.updated_at = stamp();
+      return { status: 200, body: { weather } };
+    }
     if (name === 'coach') return state.coachStatus ? { status: state.coachStatus, body: { error: 'rate_limited' } } : { status: 503, body: { error: 'not_configured' } };
     if (name === 'delete-account') {
       for (const t of TABLES) state.tables[t] = state.tables[t].filter((r) => r.user_id !== u.id);

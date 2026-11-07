@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Lap, LogEntry, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
+import { inWeatherWindow, requestWeather } from '../data/weather';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
@@ -217,6 +218,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   dataRef.current = data;
 
   // ---- Auth ----
+  // Weather for recent runs (MET Norway only has current weather): ask once per run while it is recent, as soon as
+  // the run arrives (recorded, logged or synced), so it does not depend on the run page being opened in time.
+  const weatherAsked = useRef(new Set<string>());
+  useEffect(() => {
+    if (data.mode !== 'real') return;
+    const now = Date.now();
+    for (const a of data.activities) {
+      if (a.weather || a.weatherSkip || weatherAsked.current.has(a.id) || !inWeatherWindow(a, now)) continue;
+      weatherAsked.current.add(a.id);
+      requestWeather(a.id).then((w) => {
+        if (!w) return;
+        const patch = 'skip' in w ? { weatherSkip: w.skip } : { weather: w };
+        setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === a.id ? { ...x, ...patch } : x)) }));
+      });
+    }
+  }, [data.mode, data.activities]);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data: d }) => { setSession(d.session); setAuthReady(true); });

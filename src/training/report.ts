@@ -8,6 +8,7 @@ import { TYPE_LABEL } from './analysis';
 import { predictTime, type TrainingPaces, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 import { PB_DISTANCES, pbHistory } from './insights';
+import { weatherNote } from './weather';
 
 export interface RepStat { label: string; timeS: number; distanceM?: number; paceS?: number; avgHr?: number; inTarget?: boolean }
 export interface BreakdownItem { key: 'pace' | 'consistency' | 'effort' | 'recovery' | 'completion'; label: string; value: number; note: string }
@@ -18,6 +19,8 @@ export interface Report {
   target?: [number, number];
   goalNote?: string;
   nextTip?: string;
+  /** Conditions that affect pace (heat, humidity, wind, cold). Explains the run; does not change the score */
+  weatherNote?: string;
   badges: string[];
   trend?: { labels: string[]; paces: number[] };
 }
@@ -148,7 +151,7 @@ export function buildReport(o: {
     paces: [...recent, a].map((x) => x.movingS / (x.distanceM / 1000)),
   } : undefined;
 
-  return { verdict, breakdown, reps, target, goalNote, nextTip, badges, trend };
+  return { verdict, breakdown, reps, target, goalNote, nextTip, badges, trend, weatherNote: weatherNote(a.weather, units) };
 }
 
 /** "Your week in review": volume against plan, sessions done, one insight, the focus for next week. */

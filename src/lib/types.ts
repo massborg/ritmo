@@ -74,8 +74,29 @@ export interface Activity {
   reps?: { label: string; distanceM?: number; timeS?: number; avgHr?: number; kind?: 'warmup' | 'work' | 'recovery' | 'cooldown' }[];
   /** Stored summary (best efforts, structure), so history works without loading every run's streams */
   derived?: ActivityDerived;
+  /** Weather at the run's starting area, halfway through it (MET Norway, looked up while the run is recent) */
+  weather?: RunWeather;
+  /** Why this run has no weather and is never looked up (e.g. 'no_gps' for an indoor run) */
+  weatherSkip?: string;
   detailScore: number; // higher = more detailed, used to choose the best duplicate
   importedAt: string;
+}
+
+export interface RunWeather {
+  /** Temperature and feels-like temperature, °C */
+  t: number;
+  fl: number;
+  /** Relative humidity %, dew point °C */
+  h: number;
+  dp?: number;
+  /** Wind speed km/h and the direction it blows from, degrees */
+  ws: number;
+  wd?: number;
+  /** Short description, e.g. "clear sky" */
+  c?: string;
+  /** When it was looked up (ISO) and from which service */
+  at: string;
+  src: 'met.no' | 'openweather';
 }
 
 export interface ActivityDerived {

@@ -14,6 +14,7 @@ import { ROLE_LABEL } from '../training/sessions';
 import { DayRuns } from '../components/DayRuns';
 import { Breakdown, RepChart, Sparkline } from '../components/ReportParts';
 import { buildReport } from '../training/report';
+import { weatherLine } from '../training/weather';
 import { PostToHub } from '../components/PostToHub';
 import { shareableRoute } from '../data/hub';
 const ShareSheet = lazy(() => import('../components/ShareSheet').then((m) => ({ default: m.ShareSheet })));
@@ -159,6 +160,12 @@ export default function ActivityPage() {
           {a.avgCadence && <div><p className="caption">Cadence</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.avgCadence}</p></div>}
           {a.elevGainM != null && <div><p className="caption">Climb</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.elevGainM} m</p></div>}
         </div>
+        {a.weather && (
+          <p className="caption run-weather" style={{ flexBasis: '100%' }}>
+            <span className="label">Weather</span> {weatherLine(a.weather, U)}
+            <span style={{ opacity: 0.7 }}> · <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a></span>
+          </p>
+        )}
       </section>
 
       {/* Asked near the top until answered, so it actually gets filled in */}
@@ -172,6 +179,7 @@ export default function ActivityPage() {
           <div className="stack-sm">
             <h2 id="verdict" className="title">{rep.verdict}</h2>
             <p className="caption">Session score {an.score}. {an.scoreReason}</p>
+            {rep.weatherNote && <p className="weather-note">{rep.weatherNote}</p>}
           </div>
         </div>
         {rep.badges.length > 0 && <div className="badge-row">{rep.badges.map((b) => <span key={b} className="badge"><Award size={14} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" />{b}</span>)}</div>}
@@ -291,3 +299,4 @@ export default function ActivityPage() {
     </div>
   );
 }
+
