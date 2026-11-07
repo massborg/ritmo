@@ -2,7 +2,12 @@
 // the app turns those into Ritmo runs here and merges them like any other source. Behind the 'garmin' flag.
 import type { Activity, Lap, StreamPoint } from '../lib/types';
 import { detailScore } from './integration';
-import { supabase } from './supabase';
+import { supabase as client } from './supabase';
+
+const supabase = () => {
+  if (!client) throw new Error('Ritmo is not connected to its server.');
+  return client;
+};
 
 /** Fields of a Garmin activity summary that Ritmo uses (Activity API). */
 export interface GarminSummary {
@@ -99,7 +104,7 @@ export const garminAttribution = (a: Pick<Activity, 'source' | 'sourceIds' | 'de
   a.source === 'garmin' || a.sourceIds.garmin ? (a.device ? (/^garmin/i.test(a.device) ? a.device : `Garmin ${a.device}`) : 'Garmin') : undefined;
 
 async function call<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('garmin-auth', { body });
+  const { data, error } = await supabase().functions.invoke('garmin-auth', { body });
   if (error) {
     let msg = error.message;
     try { const j = await (error as { context?: Response }).context?.json(); if (j?.message) msg = j.message; } catch { /* keep the generic message */ }
@@ -117,13 +122,14 @@ export const finishGarminConnect = (code: string, state: string) => call<{ conne
 export const disconnectGarmin = () => call<{ connected: boolean }>({ action: 'disconnect' });
 
 export async function garminConnected(): Promise<boolean> {
-  const { data, error } = await supabase.rpc('garmin_status');
+  if (!client) return false;
+  const { data, error } = await client.rpc('garmin_status');
   return !error && Array.isArray(data) && data.length > 0;
 }
 
 /** Runs Garmin has pushed since the last sync, as Ritmo runs, plus a function to clear them once saved. */
 export async function pullGarminInbox(): Promise<{ runs: Activity[]; clear: () => Promise<void> }> {
-  const { data, error } = await supabase.from('garmin_inbox').select('id,summary_id,kind,payload').order('received_at').limit(500);
+  const { data, error } = await supabase().from('garmin_inbox').select('id,summary_id,kind,payload').order('received_at').limit(500);
   if (error) throw new Error(error.message);
   const rows = data ?? [];
   const byRun = new Map<string, { summary?: GarminSummary; details?: GarminDetails }>();
@@ -134,5 +140,5 @@ export async function pullGarminInbox(): Promise<{ runs: Activity[]; clear: () =
   }
   const runs = [...byRun.values()].map((e) => garminToActivity(e.summary, e.details)).filter((a): a is Activity => !!a);
   const ids = rows.map((r) => r.id as number);
-  return { runs, clear: async () => { if (ids.length) await supabase.from('garmin_inbox').delete().in('id', ids); } };
+  return { runs, clear: async () => { if (ids.length) await supabase().from('garmin_inbox').delete().in('id', ids); } };
 }
