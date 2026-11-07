@@ -18,7 +18,7 @@ qualified lawyer (EU/Malta, GDPR) before public launch. Nothing here is legal ad
 
 ## Still missing (needs a decision or information from you)
 
-- Registered address for the privacy notice and terms. Company (TriCore Consult Ltd, Cyprus) and contact email (info@tricoreconsult.eu) are now set in `src/lib/contact.ts` and shown on About, Privacy and Terms.
+- Done: company (TriCore Consult Ltd, HE 467194), registered office (Agia Fyla, Limassol, Cyprus) and contact email (info@tricoreconsult.eu) are set in `src/lib/contact.ts` and shown on About, Privacy and Terms.
 - Governing law: the provider is a Cyprus company serving EU consumers; confirm which law and courts to name.
 - Data Protection Officer or privacy contact, if required.
 - Governing law and jurisdiction clause.

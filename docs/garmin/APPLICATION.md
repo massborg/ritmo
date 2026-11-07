@@ -20,9 +20,9 @@ Prepared 5 November 2026, updated 7 November 2026 (applicant, contact and app ad
 | Item | Status | Notes |
 |---|---|---|
 | Legal entity name | Ready | TriCore Consult Ltd. |
-| Company registration number and country | **[YOU]** | Cyprus, Registrar of Companies number. |
-| Registered address | **[YOU]** | |
-| VAT number | **[YOU]** | If registered. |
+| Company registration number and country | Ready | HE 467194, Cyprus. |
+| Registered address | Ready | Genevis 2, Geneva Court, 3rd floor, Flat/Office 301, Agia Fyla, 3116 Limassol, Cyprus. |
+| VAT number | Ready | CY60108115O (last character is the letter O). |
 | Contact name and role | **[YOU]** | The person Garmin will email. |
 | Business email address | Ready | info@tricoreconsult.eu (set in `src/lib/contact.ts`, shown on About, Privacy and Terms). |
 | Product website | Ready | https://app.ritmorunning.run/about (public, no login) |
@@ -101,7 +101,7 @@ Activities from Garmin devices will show the Garmin device model as required by 
 >
 > Hello Garmin Connect Partner Services,
 >
-> We would like to apply for Starter access to the Garmin Connect Developer Program for Ritmo Running, a running coach app for web, iPhone and Android, developed by TriCore Consult Ltd (Cyprus, registration **[number]**).
+> We would like to apply for Starter access to the Garmin Connect Developer Program for Ritmo Running, a running coach app for web, iPhone and Android, developed by TriCore Consult Ltd (Cyprus, registration HE 467194).
 >
 > Ritmo analyses each run and adapts the runner's training plan with clear explanations. With the runner's permission, we would use the Activity API (summaries, details and FIT files) to analyse each new run automatically. We may also later request the Training API, to send planned sessions to the runner's watch.
 >

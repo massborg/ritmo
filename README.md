@@ -6,7 +6,7 @@ Ritmo connects to a runner's data, understands years of training, and tells them
 
 ## Status: Stage 1 (web app)
 
-Live: https://app.ritmorunning.run (custom domain; until it is connected in Netlify, use https://ritmo-running.netlify.app)
+Live: https://app.ritmorunning.run
 
 - Splash, first-time setup (upload, import progress, running story, goals), Today, Calendar (day/week/month), training plan with explained adaptations, session analysis and feedback, races (prediction, readiness, pacing, taper, post-race review), Progress, Coach, Profile, data sources, privacy (export and delete).
 - Clearly labelled sample data runs through the same integration layer as real sources.
