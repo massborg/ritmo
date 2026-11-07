@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Send, Sparkles } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { FALLBACK_TEXT } from '../coach/coach';
+
+/** Answers written before Ritmo loaded every run (review #2 fix) may quote wrong totals */
+const DATA_FIX_AT = '2026-11-07T00:00:00.000Z';
 import { AppHeader, SampleChip } from '../components/app';
 import { suggestions } from '../coach/coach';
 import { localise } from '../lib/format';
@@ -50,7 +54,9 @@ export default function Coach() {
         )}
         {chat.map((m) => (
           <div key={m.id} className={`bubble ${m.role === 'coach' ? 'bubble-coach' : 'bubble-runner'}`}>
+            {m.fallback && <p className="caption" style={{ marginBottom: 6 }}><strong style={{ color: 'var(--ink)' }}>{m.fallback === 'health' ? 'Safety first.' : 'AI coach unavailable.'}</strong> {FALLBACK_TEXT[m.fallback]}</p>}
             <p>{localise(m.text, data.profile.units)}</p>
+            {m.role === 'coach' && m.at < DATA_FIX_AT && data.mode === 'real' && <p className="caption" style={{ marginTop: 6 }}>Written before Ritmo loaded your full history, so it may be out of date.</p>}
             {m.proposal && (m.proposal.applied
               ? <p className="caption" style={{ marginTop: 6 }}>Done. Your plan is updated.</p>
               : <button className="btn btn-small btn-primary" style={{ marginTop: 8 }} onClick={() => applyCoachProposal(m.id)}>{m.proposal.label}</button>)}
@@ -62,6 +68,11 @@ export default function Coach() {
             )}
           </div>
         ))}
+        {data.mode === 'real' && chat.some((m) => m.role === 'coach' && m.at < DATA_FIX_AT) && (
+          <div className="row" style={{ justifyContent: 'center' }}>
+            <button className="btn btn-small" onClick={clearCoach}>Clear old answers</button>
+          </div>
+        )}
         {coachBusy && <div className="bubble bubble-coach" aria-label="Coach is thinking"><p className="muted">Looking at your data…</p></div>}
         <div ref={endRef} />
       </div>

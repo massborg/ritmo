@@ -8,6 +8,9 @@ import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
 import { dist, duration, longDate, pace, type Units } from '../lib/format';
 import { TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
+import { raceEvidence } from '../training/fitness';
+import { ROLE_LABEL } from '../training/sessions';
+import { DayRuns } from '../components/DayRuns';
 import type { SessionFeedback } from '../lib/types';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
@@ -79,10 +82,12 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf } = useApp();
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
   const an = analysisFor(a);
+  const group = groupOf(a.id);
+  const role = group?.roles[a.id];
   const U = data.profile.units;
   const fb = data.feedback.find((f) => f.activityId === a.id);
 
@@ -95,8 +100,19 @@ export default function ActivityPage() {
     const dd = p.d - prev.d, dt = p.t - prev.t;
     return dd > 5 ? Math.min(600, dt / (dd / 1000)) * (U === 'km' ? 1 : 1.609344) : null;
   });
-  const labels = sampled.map((p) => (p.d / (U === 'km' ? 1000 : 1609.344)).toFixed(0));
+  // Distance ticks: one decimal on runs under 5 km/mi, so short runs do not read "0 0 0 1 1"
+  const unitM = U === 'km' ? 1000 : 1609.344;
+  const decimals = (s[s.length - 1]?.d ?? 0) / unitM < 5 ? 1 : 0;
+  const labels = sampled.map((p) => (p.d / unitM).toFixed(decimals));
   const every = Math.max(1, Math.floor(sampled.length / 8));
+
+  const feelSection = (
+    <section className="card stack" aria-labelledby="feel">
+      <h2 id="feel" className="title">How did it feel?</h2>
+      <p className="caption">Ritmo uses this in future feedback and to adjust your plan.</p>
+      <FeedbackForm activityId={a.id} existing={fb} onSave={logFeedback} />
+    </section>
+  );
 
   return (
     <div className="stack-lg">
@@ -106,7 +122,24 @@ export default function ActivityPage() {
         <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source}</p>
         <h1 className="display-lg">{a.name}</h1>
         <div className="row wrap"><span className="tag">{TYPE_LABEL[an.type]}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span></div>
+        {data.mode === 'real' && (
+          <div className="row wrap" style={{ gap: 8 }}>
+            {raceEvidence(a, data.races)
+              ? <><span className="caption">{a.isRace ? 'You marked this as a race.' : 'Ritmo thinks this was a race.'}</span>
+                {!a.isRace && <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], true)}>Yes, it was</button>}
+                <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], false)}>Not a race</button></>
+              : <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], true)}>This was a race</button>}
+          </div>
+        )}
       </div>
+
+      {group && group.parts.length > 1 && (
+        <section className="card stack-sm" aria-labelledby="session-parts">
+          <h2 id="session-parts" className="label">{role === 'main' ? 'Your session that day' : `This is the ${ROLE_LABEL[role!].toLowerCase()} of a session`}: {dist(group.totalM, U)} in total</h2>
+          <DayRuns runs={group.parts} />
+          {role !== 'main' && <p className="caption">The full feedback is on the main run. Short pieces like this one are not compared with other runs.</p>}
+        </section>
+      )}
 
       <section className="card row wrap" style={{ gap: 'var(--s5)', justifyContent: 'space-between' }}>
         <div className="row wrap" style={{ gap: 'var(--s5)' }}>
@@ -118,6 +151,9 @@ export default function ActivityPage() {
           {a.elevGainM != null && <div><p className="caption">Climb</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.elevGainM} m</p></div>}
         </div>
       </section>
+
+      {/* Asked near the top until answered, so it actually gets filled in */}
+      {!fb && feelSection}
 
       {an.limitedData && <div className="banner" role="note"><StatusLine kind="info">Limited data</StatusLine><p>{an.limitedData}</p></div>}
 
@@ -198,13 +234,9 @@ export default function ActivityPage() {
             <tbody>{a.laps.map((l) => <tr key={l.index}><td>{l.index}</td><td>{(l.distanceM / 1000).toFixed(2)}</td><td>{duration(l.durationS)}</td><td>{pace(l.durationS / (l.distanceM / 1000), U, false)}</td><td>{l.avgHr ?? '–'}</td></tr>)}</tbody></table></div>
         </section>
       )}
-      {a.streams && <section className="card stack"><h2 className="title">Route</h2><RouteMap points={a.streams} /></section>}
+      {a.streams?.some((p) => p.lat != null && p.lon != null) && <section className="card stack"><h2 className="title">Route</h2><RouteMap points={a.streams} /></section>}
 
-      <section className="card stack" aria-labelledby="feel">
-        <h2 id="feel" className="title">How did it feel?</h2>
-        <p className="caption">Ritmo uses this in future feedback and to adjust your plan.</p>
-        <FeedbackForm activityId={a.id} existing={fb} onSave={logFeedback} />
-      </section>
+      {fb && feelSection}
     </div>
   );
 }

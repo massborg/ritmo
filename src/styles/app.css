@@ -514,3 +514,8 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 
 .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--s3); margin: 0; }
 .report-grid dd { margin: 0; font-size: 20px; }
+
+.pb-history { margin: 0 0 var(--s2) var(--s4); padding-left: var(--s4); display: grid; gap: 4px; }
+
+.session-parts { list-style: none; margin: 0; padding: 0 0 0 var(--s3); border-left: 2px solid var(--hairline); display: grid; gap: 2px; }
+.session-parts a { text-decoration: none; color: inherit; min-height: 36px; align-items: center; }

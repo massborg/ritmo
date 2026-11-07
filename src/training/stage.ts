@@ -27,5 +27,10 @@ export function fitnessStage(activities: Activity[], fitness: FitnessEstimate | 
     return { stage: 'building', runs, next: 'Run a 5K time trial or a race to unlock race predictions, your fitness score and your readiness score.', paces: true, predictions: false };
   }
   const left = Math.max(1, RUNS_FOR_PACES - runs);
-  return { stage: 'starter', runs, next: `Log ${left} more run${left > 1 ? 's' : ''} to get estimated pace targets. A 5K time trial later unlocks race predictions.`, paces: false, predictions: false };
+  // Someone with a history but no recent runs is coming back, not starting out
+  const history = activities.filter((a) => a.distanceM > 0 && a.movingS > 0).length;
+  const next = history >= RUNS_FOR_PACES
+    ? `Your last runs were more than 3 months ago. Log ${left} more run${left > 1 ? 's' : ''} to refresh your pace targets.`
+    : `Log ${left} more run${left > 1 ? 's' : ''} to get estimated pace targets. A 5K time trial later unlocks race predictions.`;
+  return { stage: 'starter', runs, next, paces: false, predictions: false };
 }

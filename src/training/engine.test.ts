@@ -411,3 +411,30 @@ describe('AI coach proposals are checked before they are offered', () => {
     expect(proposalFromAi({ action: 'delete', session_id: thr.id, to_date: null }, ctx)).toBeUndefined();
   });
 });
+
+describe('review #2 §9.7: race week and easy runs', () => {
+  // Wed long run (the reviewed account), rest on Sunday = race day
+  const plan = ok(gen({ longRunDay: 2, daysAvailable: [0, 1, 2, 3, 4, 5] }, 93));
+  const raceWeek = fullWeek(plan.sessions, '2026-11-30');
+  const toRace = (s: PlannedSession) => Math.round((parseYmd('2026-12-06').getTime() - parseYmd(s.date).getTime()) / 86400000);
+  it('race week keeps 6 run days (the race included), never 7 in a row', () => {
+    expect(raceWeek.filter((s) => s.type !== 'rest').length).toBe(6);
+  });
+  it('a full rest day 2 or 3 days before a 5K', () => {
+    expect(raceWeek.some((s) => s.type === 'rest' && [2, 3].includes(toRace(s)))).toBe(true);
+  });
+  it('one race-pace sharpener 4 to 5 days out', () => {
+    const sharp = raceWeek.filter((s) => /sharpener/i.test(s.title));
+    expect(sharp.length).toBe(1);
+    expect([4, 5]).toContain(toRace(sharp[0]));
+  });
+  it('no "after the long run" label in a week without a long run', () => {
+    expect(raceWeek.some((s) => /after the long run/i.test(s.title))).toBe(false);
+  });
+  it('easy runs in a normal week are not all the same length, and the week total is unchanged', () => {
+    const wk = fullWeek(plan.sessions, '2026-11-09').filter((s) => s.type === 'easy');
+    const kms = wk.map((s) => Math.round(s.distanceM / 100) / 10);
+    expect(new Set(kms).size).toBeGreaterThan(1);
+    expect(validatePlan(plan, P63)).toEqual([]);
+  });
+});

@@ -16,6 +16,7 @@ import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetu
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
+import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
@@ -60,6 +61,23 @@ interface Derived {
   nextRace?: Race;
   aRaceReadiness?: RaceReadiness;
   typicalMovingS: number;
+  /** One source of truth for the numbers every screen and the coach show */
+  athlete: AthleteState;
+  /** The session a run belongs to (warm-up, main run and cool-down saved as separate files) */
+  groupOf: (id: string) => RunGroup | undefined;
+}
+
+export interface AthleteState {
+  runCount: number;
+  totalM: number;
+  /** Monday to today */
+  weekM: number;
+  weekRuns: number;
+  lastRun?: Activity;
+  /** Plan sessions dated today or earlier (the ones that can be done so far) */
+  planDueSoFar: number;
+  planDoneSoFar: number;
+  planStart?: string;
 }
 
 interface Ctx extends Derived {
@@ -88,6 +106,8 @@ interface Ctx extends Derived {
   logFeedback: (f: SessionFeedback) => void;
   buildMyPlan: () => string | undefined;
   moveSession: (sessionId: string, toDate: string) => void;
+  /** Mark runs as races (true), not races (false), or back to automatic detection (null) */
+  setRaceFlag: (ids: string[], race: boolean | null) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
   swap: (sessionId: string, kind: SwapKind) => void;
   applyCoachProposal: (messageId: string) => void;
@@ -345,7 +365,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       readiness = { ...readiness, label: 'Recovering well', summary: `Enjoy the rest day: you are absorbing your training. You are in good shape for ${plan?.sessions.find((x) => x.date > t && x.type !== 'rest')?.title.toLowerCase() ?? 'your next session'}.` };
     }
     const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
-    return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS };
+    const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
+    const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
+    const due = (plan?.sessions ?? []).filter((x) => x.type !== 'rest' && x.date <= tKey);
+    const athlete: AthleteState = {
+      runCount: acts.length,
+      totalM: acts.reduce((x, a) => x + a.distanceM, 0),
+      weekM: thisWeek.reduce((x, a) => x + a.distanceM, 0),
+      weekRuns: thisWeek.length,
+      lastRun: acts.length ? acts.reduce((m, a) => (a.startTime > m.startTime ? a : m)) : undefined,
+      planDueSoFar: due.length,
+      planDoneSoFar: due.filter((x) => x.status === 'done').length,
+      planStart: plan?.startDate,
+    };
+    const groups = groupIndex(groupRuns(acts));
+    const groupOf = (id: string) => groups.get(id);
+    return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
   }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode]);
 
   // Keep the plan's change log once adaptations happen
@@ -540,6 +575,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return finishBuild({ ...d, profile });
   };
 
+  const setRaceFlag = (ids: string[], race: boolean | null) => {
+    const set = new Set(ids);
+    setData((d) => ({ ...d, activities: d.activities.map((a) => (set.has(a.id) ? { ...a, isRace: race === true, notRace: race === false } : a)) }));
+  };
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
   const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
@@ -578,19 +617,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const t = ymd(derived.today);
       const wk = ymd(startOfWeek(derived.today));
       const weekEnd = ymd(addDays(startOfWeek(derived.today), 6));
-      const last = [...data.activities].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
+      const last = derived.athlete.lastRun;
       const weekSessions = (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= weekEnd && s.type !== 'rest');
       const ctx: CoachContext = {
         today: derived.today, profile: data.profile, units: data.profile.units, readiness: derived.readiness, stage: derived.stage,
         todaySession: derived.todaySession, nextSessions: (derived.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
         race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.stage.predictions ? derived.fitness : undefined, paces: derived.paces,
-        weekDoneM: data.activities.filter((a) => a.startTime.slice(0, 10) >= wk && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0),
+        weekDoneM: derived.athlete.weekM,
         weekPlannedM: weekSessions.reduce((x, s) => x + s.distanceM, 0),
         weekSessionsDone: weekSessions.filter((s) => s.status === 'done').length,
         weekSessionsPlanned: weekSessions.length,
-        planSessionsDone: (derived.plan?.sessions ?? []).filter((s) => s.status === 'done').length,
-        planSessionsTotal: (derived.plan?.sessions ?? []).filter((s) => s.type !== 'rest').length,
-        runCount: data.activities.length,
+        // Only sessions dated today or earlier count: a plan that starts next week is not "0 of 25 done"
+        planSessionsDone: derived.athlete.planDoneSoFar,
+        planSessionsTotal: derived.athlete.planDueSoFar,
+        planStart: derived.athlete.planStart,
+        runCount: derived.athlete.runCount,
         last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
         hasData: data.activities.length > 0 || !!derived.plan,
         weekAhead: (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= ymd(addDays(derived.today, 7))),
@@ -598,7 +639,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
       const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode).map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source }] }));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source, fallback: reply.fallback }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
     } finally {
@@ -718,7 +759,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

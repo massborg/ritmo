@@ -65,7 +65,9 @@ export function adaptPlan(opts: {
   // 1) Match completed runs to planned sessions (same day first, then the day after)
   for (const s of plan.sessions) {
     if (s.type === 'rest' || s.date > t) continue;
-    const pick = (byDate.get(s.date) ?? []).find((a) => !used.has(a.id))
+    // The day's main run (the longest piece) completes the session, not a warm-up or strides file
+    const longestFirst = (xs: Activity[]) => [...xs].sort((x, y) => y.distanceM - x.distanceM);
+    const pick = longestFirst(byDate.get(s.date) ?? []).find((a) => !used.has(a.id))
       ?? (byDate.get(ymd(addDays(parseYmd(s.date), 1))) ?? []).find((a) => !used.has(a.id) && !plan.sessions.some((o) => o.date === a.startTime.slice(0, 10) && o.type !== 'rest'));
     if (pick) {
       used.add(pick.id);

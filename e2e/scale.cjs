@@ -79,9 +79,11 @@ async function account(n) {
   // The newest run's summary is worked out on the server, then its 5K segment becomes the 5K PB
   await page.waitForFunction(() => document.body.innerText.includes('15:51'), null, { timeout: 30000 }).catch(() => {});
   check(await page.getByText('15:51').first().isVisible().catch(() => false), `${n}: the 5K PB (15:51) comes from inside the newest run`);
-  await page.goto(`${APP}/calendar`);
-  await page.waitForTimeout(800);
-  check(await page.getByText('Newest run').or(page.getByText(/10\.0 km done/)).first().isVisible().catch(() => false), `${n}: the newest run is on the calendar`);
+  const newestDay = new Date(today.getTime() - 3 * 3600000);
+  const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await page.goto(`${APP}/calendar/${ymdLocal(newestDay)}`);
+  await page.getByText('Newest run').first().waitFor({ timeout: 10000 }).catch(() => {});
+  check(await page.getByText('Newest run').first().isVisible().catch(() => false), `${n}: the newest run is on the calendar`);
 
   // Repeat visit: only changes since the last sync are downloaded
   await page.waitForTimeout(2500);

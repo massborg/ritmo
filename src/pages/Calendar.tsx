@@ -5,11 +5,11 @@ import { MonthCalendar, Sheet } from '../components/inputs';
 import { useApp } from '../app/AppContext';
 import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { Segmented, StatusLine } from '../components/ui';
-import { addDays, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, dist, distanceLabel, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { useDragMove } from '../lib/useDragMove';
-import { TYPE_LABEL } from '../training/analysis';
 import { QuickAdd } from '../components/QuickAdd';
+import { DayRuns } from '../components/DayRuns';
 import type { PlannedSession, SessionType } from '../lib/types';
 
 type View = 'day' | 'week' | 'month';
@@ -23,7 +23,7 @@ const typeStyle = (t: SessionType): React.CSSProperties => {
 export default function Calendar() {
   const { date } = useParams();
   const nav = useNavigate();
-  const { data, plan, today, typeOf, buildMyPlan, removeLog, moveSession } = useApp();
+  const { data, plan, today, buildMyPlan, removeLog, moveSession } = useApp();
   const [view, setView] = useState<View>(date ? 'day' : 'week');
   const [cursor, setCursor] = useState<Date>(date ? parseYmd(date) : today);
   const [picking, setPicking] = useState(false);
@@ -75,12 +75,7 @@ export default function Calendar() {
         {race && <Link to={`/race/${race.id}`} className="card card-link row-between"><span className="row" style={{ gap: 8 }}><Flag size={18} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><span className="label">{race.name}</span></span><span className="tag tag-accent">{race.priority} race</span></Link>}
         {s && !(s.type === 'rest' && acts.length) && <SessionCard s={s} />}
         {s?.type === 'rest' && acts.length > 0 && <StatusLine kind="info">Unplanned run on a rest day. It counts toward this week, and the rest of the week adjusts if needed.</StatusLine>}
-        {acts.map((a) => (
-          <Link key={a.id} to={`/activity/${a.id}`} className="card card-link row-between">
-            <span className="stack-sm"><span className="label">{a.name}</span><span className="caption">{TYPE_LABEL[typeOf(a)]}</span></span>
-            <span className="stat">{dist(a.distanceM, U)} · {duration(a.movingS)}</span>
-          </Link>
-        ))}
+        {acts.length > 0 && <div className="card"><DayRuns runs={acts} unplanned={!s || s.type === 'rest'} /></div>}
         {(data.profile.log ?? []).filter((e) => e.date === d).map((e) => (
           <div key={e.id} className="card row-between">
             <span className="stack-sm" style={{ gap: 2 }}><span className="label">{e.kind === 'cross' ? `${e.sport}, ${e.minutes} min` : 'Note'}</span>{(e.text || e.rpe) && <span className="caption">{e.kind === 'cross' && e.rpe ? `Effort ${e.rpe}/10. ` : ''}{e.text}</span>}</span>
@@ -161,7 +156,7 @@ export default function Calendar() {
                       </span>
                       <span className="stack-sm" style={{ gap: 2 }}>
                         <span className="label">{race ? race.name : acts.length && (!s || s.type === 'rest') ? 'Unplanned run' : s ? s.title : 'Nothing planned'}</span>
-                        <span className="caption">{acts.length ? `${acts.map((a) => dist(a.distanceM, U)).join(' + ')} done${s && s.type !== 'rest' ? ` of ${dist(s.distanceM, U, 0)} planned` : ''}` : s && s.type !== 'rest' ? `${s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · ${s.focus}` : ''}</span>
+                        <span className="caption">{acts.length ? `${acts.length > 1 ? `${dist(acts.reduce((x, a) => x + a.distanceM, 0), U)} in ${acts.length} runs` : dist(acts[0].distanceM, U)} done${s && s.type !== 'rest' ? ` of ${dist(s.distanceM, U, 0)} planned` : ''}` : s && s.type !== 'rest' ? `${s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · ${s.focus}` : ''}</span>
                       </span>
                       <span>{acts.length ? (s && s.type !== 'rest' ? <span className="status status-success"><Check size={18} strokeWidth={2} aria-hidden="true" /><span className="sr-only">Done</span></span> : <span className="tag">Unplanned</span>) : s?.status === 'missed' ? <span className="caption">Missed</span> : null}</span>
                     </button>

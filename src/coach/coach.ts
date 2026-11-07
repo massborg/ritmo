@@ -1,7 +1,7 @@
 // The Ritmo coach. Answers are built only from the runner's computed data (facts), never invented numbers.
 // When the Supabase "coach" function is configured with a Claude API key, it phrases answers from the same facts.
 import type { Activity, PlannedSession, Profile, Race } from '../lib/types';
-import { daysUntil, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units } from '../lib/format';
+import { daysUntil, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units, ymd } from '../lib/format';
 import type { StageInfo } from '../training/stage';
 import type { FitnessEstimate, TrainingPaces } from '../training/fitness';
 import type { Readiness } from '../training/load';
@@ -28,6 +28,7 @@ export interface CoachContext {
   weekSessionsPlanned: number;
   planSessionsDone: number;
   planSessionsTotal: number;
+  planStart?: string;
   runCount: number;
   last?: { activity: Activity; analysis: Analysis };
   hasData: boolean;
@@ -48,7 +49,9 @@ export function buildFacts(c: CoachContext): string[] {
   f.push(`Today is ${longDate(c.today)}.`);
   f.push(c.runCount ? `Runs recorded: ${c.runCount}.` : 'No runs recorded yet.');
   if (c.stage.stage !== 'full') f.push(`Fitness stage: ${c.stage.stage}. Race predictions and fitness score are not available yet. ${c.stage.next}`);
-  if (c.profile.experience === 'new') f.push(`New runner on a run/walk starter plan. Sessions completed: ${c.planSessionsDone} of ${c.planSessionsTotal}.`);
+  if (c.profile.experience === 'new') f.push(`New runner on a run/walk starter plan. Sessions done so far: ${c.planSessionsDone} of ${c.planSessionsTotal} due.`);
+  if (c.planStart && c.planStart > ymd(c.today)) f.push(`The training plan starts ${longDate(parseYmd(c.planStart))}; no plan sessions are due yet.`);
+  else if (c.planSessionsTotal) f.push(`Plan sessions due so far: ${c.planSessionsDone} of ${c.planSessionsTotal} done.`);
   f.push(`Readiness: ${c.readiness.label}. ${c.readiness.summary} Based on: ${c.readiness.basedOn.join('; ')}.`);
   if (c.todaySession) {
     const s = c.todaySession;
@@ -166,7 +169,8 @@ export function localReply(q: string, c: CoachContext): CoachReply {
 
   if (/on track|ready|predict|goal|race|finish time|marathon|half|10k|5k/.test(lower)) {
     if (!c.stage.predictions) {
-      const progress = c.planSessionsTotal ? ` You have completed ${c.planSessionsDone} of ${c.planSessionsTotal} sessions in your plan${c.weekSessionsPlanned ? `, and ${c.weekSessionsDone} of ${c.weekSessionsPlanned} this week` : ''}.` : '';
+      const progress = c.planSessionsTotal ? ` You have done ${c.planSessionsDone} of the ${c.planSessionsTotal} plan sessions due so far.`
+        : c.planStart && c.planStart > ymd(c.today) ? ` Your plan starts ${longDate(parseYmd(c.planStart))}.` : '';
       return { text: `${c.runCount ? `You have logged ${c.runCount} run${c.runCount > 1 ? 's' : ''}.` : 'You have not logged a run yet.'}${progress} Turning up regularly is what matters most right now. ${c.stage.next}`, facts };
     }
     if (!c.race || !c.raceReadiness) return { text: 'Add a target race in Calendar and I will predict your finish time and track how ready you are.', facts };
@@ -235,9 +239,20 @@ export function proposalFromAi(raw: unknown, c: CoachContext): CoachProposal | u
   return undefined;
 }
 
-export async function ask(q: string, c: CoachContext, history: { role: string; text: string }[], useAi = false): Promise<CoachReply & { source: 'ai' | 'local' }> {
+/** Why an answer came from the built-in coach although the AI coach is switched on */
+export type AiFallback = 'not_configured' | 'busy' | 'limit' | 'error' | 'health';
+export const FALLBACK_TEXT: Record<AiFallback, string> = {
+  not_configured: 'The AI coach is not set up yet, so this is a basic answer from Ritmo’s built-in coach.',
+  busy: 'The AI coach is busy right now, so this is a basic answer from Ritmo’s built-in coach.',
+  limit: 'You have asked the AI coach a lot of questions recently, so this is a basic answer from Ritmo’s built-in coach. AI answers will be back shortly.',
+  error: 'The AI coach is unavailable right now, so this is a basic answer from Ritmo’s built-in coach.',
+  health: 'Questions about pain or injury get Ritmo’s built-in, safety-first answer.',
+};
+
+export async function ask(q: string, c: CoachContext, history: { role: string; text: string }[], useAi = false): Promise<CoachReply & { source: 'ai' | 'local'; fallback?: AiFallback }> {
   const local = localReply(q, c);
-  if (!supabase || !useAi || !c.hasData || PAIN.test(q)) return { ...local, source: 'local' };
+  if (!supabase || !useAi || !c.hasData) return { ...local, source: 'local' };
+  if (PAIN.test(q)) return { ...local, source: 'local', fallback: 'health' };
   try {
     // The AI answers the actual question from the runner's own data: facts, this week's sessions and the chat so far.
     // The built-in answer is passed as a hint only. Never sent: email, photo, date of birth or health check answers.
@@ -245,12 +260,19 @@ export async function ask(q: string, c: CoachContext, history: { role: string; t
     const { data, error } = await supabase.functions.invoke('coach', {
       body: { question: q, facts: local.facts, draft: local.text, history: history.slice(-6), sessions, today: c.today.toISOString().slice(0, 10), units: c.units },
     });
-    const status = (error as { context?: Response } | null)?.context?.status;
-    if (status === 429) return { ...local, text: `${local.text}\n\nYou have asked the AI coach a lot of questions recently, so this answer comes from Ritmo's built-in coach. AI answers will be back shortly.`, source: 'local' };
-    if (error || !data?.text) return { ...local, source: 'local' };
+    const ctx = (error as { context?: Response } | null)?.context;
+    const status = ctx?.status;
+    if (error || !data?.text) {
+      let code: string | undefined;
+      try { code = ((await ctx?.clone().json()) as { error?: string } | undefined)?.error; } catch { /* not JSON */ }
+      const fallback: AiFallback = status === 429 ? 'limit' : code === 'not_configured' ? 'not_configured' : code === 'upstream_busy' ? 'busy' : 'error';
+      console.warn('AI coach fell back to the built-in coach:', status, code ?? (error as Error | null)?.message ?? 'empty answer');
+      return { ...local, source: 'local', fallback };
+    }
     return { text: data.text as string, facts: local.facts, proposal: proposalFromAi(data.proposal, c) ?? local.proposal, source: 'ai' };
-  } catch {
-    return { ...local, source: 'local' };
+  } catch (e) {
+    console.warn('AI coach fell back to the built-in coach:', e);
+    return { ...local, source: 'local', fallback: 'error' };
   }
 }
 

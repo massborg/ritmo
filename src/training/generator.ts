@@ -412,6 +412,53 @@ export function generatePlan(input: GenInput): GenResult {
     let weekKm = 0;
     const weekSessions: PlannedSession[] = [];
     const rebuild = new Map<string, (km: number) => PlannedSession>();
+
+    // Race week keeps the runner's number of run days, with a full rest day 2 days before a 5K or 10K
+    // (3 before a half or marathon), and one short race-pace sharpener 4 to 5 days out.
+    const dayRole = (d: number): Role => roles[d];
+    const forced = new Map<number, 'rest' | 'easy' | 'sharpener'>();
+    const raceIdx = raceDate ? daysBetween(ws, raceDate) : -1;
+    if (raceDate && raceIdx >= 0 && raceIdx <= 6) {
+      const restTo = r.dc === 'HM' || r.dc === 'M' ? 3 : 2;
+      const before = (k: number) => raceIdx - k; // day index k days before the race
+      const restIdx = [before(restTo), before(restTo === 2 ? 3 : 2)].find((i) => i >= 0);
+      const restsBefore = [...Array(raceIdx).keys()].filter((i) => dayRole(i) === 'rest');
+      if (restIdx != null) {
+        if (dayRole(raceIdx) === 'rest') forced.set(restIdx, 'rest'); // the race takes a rest day's place: one more rest
+        else if (!restsBefore.some((i) => i === before(2) || i === before(3))) {
+          // move the week's rest day to just before the race, and run on the old rest day instead
+          forced.set(restIdx, 'rest');
+          const old = restsBefore.find((i) => i < restIdx);
+          if (old != null) forced.set(old, 'easy');
+        }
+      }
+      const isRun = (i: number) => (forced.get(i) ?? (dayRole(i) === 'rest' ? 'rest' : 'run')) !== 'rest';
+      const sharp = [before(4), before(5)].find((i) => i >= 0 && isRun(i));
+      if (sharp != null) forced.set(sharp, 'sharpener');
+    }
+
+    // Easy runs of different lengths: shorter the day after a hard day or the long run, longer otherwise,
+    // keeping the week's total and every run within its length cap.
+    const easyIdx = [...Array(7).keys()].filter((d) => roles[d] === 'easy');
+    const afterHard = (d: number) => ['q1', 'q2', 'long'].includes(roles[(d + 6) % 7]);
+    const eMax = Math.min(caps.easyKm, 0.35 * vol);
+    const easyWeight = new Map<number, number>();
+    {
+      const short = easyIdx.filter(afterHard), long = easyIdx.filter((d) => !afterHard(d));
+      let a = 0.2;
+      if (short.length && long.length) {
+        const up = (wa: number) => 1 + (wa * short.length) / long.length;
+        while (a > 0 && split.easyKm * up(a) > eMax) a -= 0.05;
+        a = Math.max(0, a);
+        short.forEach((d) => easyWeight.set(d, 1 - a));
+        long.forEach((d) => easyWeight.set(d, up(a)));
+      } else if (easyIdx.length >= 2) {
+        // no hard days to lean on: alternate a little shorter and longer
+        const sp = split.easyKm * 1.15 > eMax ? 0 : 0.15;
+        easyIdx.forEach((d, i) => easyWeight.set(d, easyIdx.length % 2 && i === easyIdx.length - 1 ? 1 : i % 2 ? 1 + sp : 1 - sp));
+      }
+    }
+
     for (let d = 0; d < 7; d++) {
       const dateD = addDays(ws, d);
       const date = ymd(dateD);
@@ -421,8 +468,11 @@ export function generatePlan(input: GenInput): GenResult {
       const dayPhase: Phase = taperStart && dateD >= taperStart ? 'taper' : phase;
       const taperScale = r.dc === 'M' ? (toRace > 13 ? 0.75 : toRace > 6 ? 0.6 : 0.5) : r.dc === 'HM' ? (toRace > 6 ? 0.75 : 0.6) : toRace > 6 ? 0.8 : 0.7;
       let s: PlannedSession;
-      const role = roles[d];
+      const force = forced.get(d);
+      const role: Role = force === 'rest' ? 'rest' : force === 'easy' ? 'easy' : roles[d];
+      const prevSession = weekSessions[weekSessions.length - 1] ?? sessions[sessions.length - 1];
       if (race && toRace === 0) s = raceDay(date, race, paces);
+      else if (force === 'sharpener') s = racePace(date, Math.max(5, split.qKm * 0.7), 'taper', ctx, true);
       else if (race && toRace === 1) s = roles[d] !== 'rest' ? easyRun(date, Math.min(5, Math.max(3, split.easyKm * 0.4)), 'taper', ctx, { strides: true, title: 'Shakeout run with strides', why: 'A short, easy run with a few strides the day before the race keeps your legs fresh and loose.' }) : restDay(date, 'taper', 'The day before the race: rest, or a 15 minute walk.');
       else if (role === 'rest') s = restDay(date, dayPhase);
       else if (role === 'long') {
@@ -434,7 +484,7 @@ export function generatePlan(input: GenInput): GenResult {
         const qKm = split.qKm;
         if (dayPhase === 'taper') {
           s = toRace <= 3 ? easyRun(date, Math.max(5, split.easyKm * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
-            : role === 'q1' || toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true });
+            : toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true }); // race week has one sharpener (set above)
         } else if (oneQ && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: !cutback && r.strides });
         else if (phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: r.strides });
         else {
@@ -446,8 +496,9 @@ export function generatePlan(input: GenInput): GenResult {
           rebuild.set(s.id, mkQ);
         }
       } else {
-        const afterLong = roles[(d + 6) % 7] === 'long';
-        const km = dayPhase === 'taper' ? split.easyKm * taperScale : split.easyKm;
+        // Named from what actually came the day before, not from the template (race week has no long run)
+        const afterLong = prevSession?.type === 'long' && prevSession.date === ymd(addDays(dateD, -1));
+        const km = dayPhase === 'taper' ? split.easyKm * taperScale : split.easyKm * (easyWeight.get(d) ?? 1);
         const mkEasy = (k: number) => easyRun(date, k, dayPhase, ctx, { title: afterLong ? 'Easy run (after the long run)' : undefined });
         s = mkEasy(km);
         rebuild.set(s.id, mkEasy);
