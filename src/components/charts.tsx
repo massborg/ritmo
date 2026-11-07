@@ -1,5 +1,6 @@
 // Minimal SVG charts with round caps, drawn on surface-sunken wells.
-import { useId } from 'react';
+import { useId, useState } from 'react';
+import { fitView, mapsOn, setMapsOn, TILE } from '../lib/maptiles';
 
 export interface Bar { label: string; value: number; compare?: number; highlight?: boolean; title?: string }
 
@@ -85,21 +86,44 @@ export function LineChart({ series, labels, height = 180, format = (v: number) =
   );
 }
 
-/** Route trace from lat/lon points */
+/** Route over OpenStreetMap tiles (the runner's own runs only). The map can be switched off on this device. */
 export function RouteMap({ points }: { points: { lat?: number; lon?: number }[] }) {
+  const [showMap, setShowMap] = useState(mapsOn);
   const pts = points.filter((p) => p.lat != null && p.lon != null) as { lat: number; lon: number }[];
-  if (pts.length < 2) return null;
-  const lats = pts.map((p) => p.lat), lons = pts.map((p) => p.lon);
-  const minLa = Math.min(...lats), maxLa = Math.max(...lats), minLo = Math.min(...lons), maxLo = Math.max(...lons);
-  const k = Math.cos((minLa * Math.PI) / 180);
-  const spanX = (maxLo - minLo) * k || 1e-6, spanY = maxLa - minLa || 1e-6;
-  const s = 280 / Math.max(spanX, spanY);
-  const d = pts.filter((_, i) => i % 3 === 0).map((p, i) => `${i ? 'L' : 'M'}${(10 + (p.lon - minLo) * k * s).toFixed(1)},${(10 + (maxLa - p.lat) * s).toFixed(1)}`).join('');
+  const W = 640, H = 400;
+  const view = fitView(pts, W, H, 28);
+  if (!view) return null;
+  const step = Math.max(1, Math.floor(pts.length / 1500));
+  const xy = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p) => view.toView(p.lat, p.lon));
+  const d = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  const a = xy[0], b = xy[xy.length - 1];
+  const toggle = () => { setMapsOn(!showMap); setShowMap(!showMap); };
   return (
-    <div className="well" style={{ padding: 'var(--s3)' }}>
-      <svg viewBox={`0 0 ${20 + spanX * s} ${20 + spanY * s}`} style={{ width: '100%', maxHeight: 260 }} role="img" aria-label="Route shape">
-        <path d={d} fill="none" stroke="var(--brand)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <div className="stack" style={{ gap: 'var(--s2)' }}>
+      <div className="route-map" style={{ position: 'relative', borderRadius: 'var(--r-card)', overflow: 'hidden', background: 'var(--surface-sunken)' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }} role="img" aria-label={showMap ? 'Route on a map' : 'Route shape'}>
+          {showMap && view.tiles.map((t) => (
+            <image key={`${t.z}/${t.x}/${t.y}/${t.left}`} href={t.url} x={t.left} y={t.top} width={TILE} height={TILE} preserveAspectRatio="none" className="route-tile" />
+          ))}
+          <path d={d} fill="none" stroke="#fff" strokeOpacity={showMap ? 0.9 : 0} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={a.x} cy={a.y} r="8" fill="#fff" stroke="var(--brand)" strokeWidth="4"><title>Start</title></circle>
+          <circle cx={b.x} cy={b.y} r="8" fill="var(--brand)" stroke="#fff" strokeWidth="3"><title>Finish</title></circle>
+        </svg>
+        {showMap && (
+          <a className="route-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
+            style={{ position: 'absolute', right: 0, bottom: 0, padding: '2px 6px', fontSize: 11, lineHeight: 1.4, background: 'rgba(255,255,255,.85)', color: '#333', borderTopLeftRadius: 6, textDecoration: 'none' }}>
+            © OpenStreetMap contributors
+          </a>
+        )}
+      </div>
+      <div className="row caption" style={{ justifyContent: 'space-between', gap: 'var(--s2)' }}>
+        <button type="button" className="link-btn" onClick={toggle} aria-pressed={showMap}>{showMap ? 'Hide map' : 'Show map'}</button>
+        <span className="row" style={{ gap: 12 }}>
+          <span className="row" style={{ gap: 6 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', border: '3px solid var(--brand)', display: 'inline-block' }} />Start</span>
+          <span className="row" style={{ gap: 6 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--brand)', display: 'inline-block' }} />Finish</span>
+        </span>
+      </div>
     </div>
   );
 }

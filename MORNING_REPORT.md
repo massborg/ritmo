@@ -83,7 +83,7 @@ Each pull request is based on the one before it. Netlify builds a preview for ea
 - **Service worker / offline (§9.1, §8.6).** Not added. A badly cached service worker can trap people on an old version, which is the same problem as §1.4. The deploy-recovery work covers the white screen; offline support needs its own careful step.
 - **Server-side athlete stats table (§1.1).** Stats are computed on the device from run summaries instead; it's fast at 12,000 runs. A server table can come later if needed.
 - **First load under 300 KB for 10,000 runs (§9.1 test).** Not met: about 2.2 MB before gzip, roughly 400–500 KB over the network. Repeat visits are about 1 KB. Getting under 300 KB would need the server-side stats above.
-- **Maps.** Routes are drawn as lines without map tiles, because map tiles need a new outside service and a change to the content security policy. Say if you want MapLibre with OpenStreetMap tiles.
+- **Maps.** Done after this report: routes on your own run pages now sit on OpenStreetMap tiles, with the required credit and a "Hide map" switch remembered on the device. The privacy policy names the OpenStreetMap Foundation. Hub posts and share images still show the route line only, so other people never see a map of where you run.
 - **Weather (§2.5, §8.3).** Not added: it needs a weather service and a key.
 - **AI write-up of feedback (§2.5).** The structured report is complete; an AI rewording can be added now that the key exists.
 - **Hub:** clubs, race pages, live updates (the feed refreshes on open), push notifications, @mention notifications, photos in posts and an admin moderation view are not built yet.
