@@ -17,7 +17,7 @@ export const SOURCES: SourceAdapter[] = [
   { kind: 'garmin', label: 'Garmin Connect', availability: 'stage-2', description: 'Automatic sync of each new run with pace, heart rate, cadence, laps and route.' },
   { kind: 'apple_health', label: 'Apple Health', availability: 'stage-3', description: 'Available in the iPhone app. Some runs may arrive with less detail.' },
   { kind: 'health_connect', label: 'Health Connect', availability: 'stage-3', description: 'Available in the Android app. Some runs may arrive with less detail.' },
-  { kind: 'strava', label: 'Strava', availability: 'later', description: 'Planned.' },
+  { kind: 'strava', label: 'Strava', availability: 'stage-2', description: 'Automatic sync of each new run from Strava, with pace, heart rate, cadence, laps and route.' },
   { kind: 'coros', label: 'COROS', availability: 'later', description: 'Planned.' },
 ];
 

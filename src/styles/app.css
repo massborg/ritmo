@@ -609,3 +609,8 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .diff-slow { color: var(--danger, #b3261e); }
 .cal-link { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 12px; padding: var(--s2) var(--s3); background: var(--surface-sunken); border-radius: var(--r-input); }
 .shoe-alert { display: block; text-decoration: none; color: inherit; }
+
+/* Strava: connect button in Strava's orange, as their brand guidelines ask (replace with the official button image before public launch) */
+.btn.strava-connect { background: #FC5200; border-color: #FC5200; color: #fff; }
+.strava-powered { font-weight: 600; color: #FC5200; }
+.strava-link { color: #FC5200; font-weight: 600; }

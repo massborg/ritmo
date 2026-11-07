@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { garminAttribution } from '../data/garmin';
+import { isStravaRun, stravaUrl } from '../data/strava';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Award, Check, MessageCircle, Share2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -131,7 +132,7 @@ export default function ActivityPage() {
       <AppHeader title="Run" back large={false} />
       {loading && <p className="caption" role="status">Loading splits, charts and route…</p>}
       <div className="stack-sm">
-        <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {garminAttribution(a) ?? (a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source)}</p>
+        <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {isStravaRun(a) ? 'Strava' : garminAttribution(a) ?? (a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source)}{stravaUrl(a) && <> · <a className="strava-link" href={stravaUrl(a)} target="_blank" rel="noopener noreferrer">View on Strava</a></>}</p>
         <h1 className="display-lg">{a.name}</h1>
         <div className="row wrap"><span className="tag">{TYPE_LABEL[an.type]}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span></div>
         {data.mode === 'real' && (
@@ -206,8 +207,9 @@ export default function ActivityPage() {
       )}
       <div className="row wrap">
         <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(a.startTime))} go?`)}`} className="btn"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask the coach about this run</Link>
-        {hasFlag('hub') && data.profile.consents?.hubSharing?.granted && <button className="btn" onClick={() => setPosting(true)}><Users size={18} strokeWidth={2} aria-hidden="true" />Post to Hub</button>}
-        {hasFlag('share_cards') && <button className="btn" onClick={() => setSharing(true)}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share</button>}
+        {!isStravaRun(a) && hasFlag('hub') && data.profile.consents?.hubSharing?.granted && <button className="btn" onClick={() => setPosting(true)}><Users size={18} strokeWidth={2} aria-hidden="true" />Post to Hub</button>}
+        {!isStravaRun(a) && hasFlag('share_cards') && <button className="btn" onClick={() => setSharing(true)}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share</button>}
+        {isStravaRun(a) && (hasFlag('hub') || hasFlag('share_cards')) && <p className="caption" style={{ flexBasis: '100%' }}>This run came from Strava, so it stays private to you: Strava's rules do not allow posting it to the Hub or sharing it as an image.</p>}
       </div>
       {sharing && <Suspense fallback={null}><ShareSheet onClose={() => setSharing(false)} data={{
         title: a.name, date: longDate(new Date(a.startTime)), distance: dist(a.distanceM, U), time: duration(a.movingS), pace: pace(a.movingS / (a.distanceM / 1000), U),
@@ -217,7 +219,7 @@ export default function ActivityPage() {
         target: rep.target, splitsCaption: rep.reps.length >= 2 ? rep.verdict.split(':')[1]?.split(',')[0]?.trim() : `Splits per ${U}`,
         pb: (() => { const b = rep.badges.find((x) => /best effort/.test(x)); const m = b?.match(/New (.+) best effort: (.+)$/); return m ? { label: m[1], time: m[2], race: a.isRace ? a.name : undefined } : undefined; })(),
       }} /></Suspense>}
-      {posting && <PostToHub run={a} type={an.type} badges={rep.badges} compliance={rep.breakdown.find((b) => b.key === 'pace' && b.value === 100) ? 'All reps on target' : undefined} onClose={() => setPosting(false)} />}
+      {posting && !isStravaRun(a) && <PostToHub run={a} type={an.type} badges={rep.badges} compliance={rep.breakdown.find((b) => b.key === 'pace' && b.value === 100) ? 'All reps on target' : undefined} onClose={() => setPosting(false)} />}
 
       <details className="full-analysis">
         <summary className="btn btn-ghost">Show full analysis</summary>

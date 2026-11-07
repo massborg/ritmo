@@ -15,6 +15,7 @@ import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
+import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, startStravaConnect, stravaConnected } from '../data/strava';
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
@@ -123,7 +124,7 @@ interface Ctx extends Derived {
   saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }) => string;
   skipSession: (sessionId: string) => void;
   /** A feature switched on for this account (Run, Hub, share cards, Body); never in sample mode */
-  hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body' | 'garmin') => boolean;
+  hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body' | 'garmin' | 'strava') => boolean;
   /** Mark runs as races (true), not races (false), or back to automatic detection (null) */
   setRaceFlag: (ids: string[], race: boolean | null) => void;
   /** Data-quality tools: merge two copies of a run, leave a run out of stats, choose its shoe, correct its distance */
@@ -154,6 +155,11 @@ interface Ctx extends Derived {
   completeGarminConnect: (code: string, state: string) => Promise<string | undefined>;
   syncGarminNow: () => Promise<void>;
   garminSyncing: boolean;
+  /** Strava (behind the 'strava' flag): open Strava's consent page; finish after Strava sends the runner back */
+  connectStrava: () => Promise<string | undefined>;
+  completeStravaConnect: (code: string, state: string, scope: string) => Promise<string | undefined>;
+  syncStravaNow: () => Promise<void>;
+  stravaSyncing: boolean;
   signOut: () => Promise<void>;
   finishRecovery: () => void;
   /** Signed link to the person's own profile picture, if they have one */
@@ -200,6 +206,74 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
 /** Settings that belong to the person, not to the data set */
 const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt, consents: p.consents, dateOfBirth: p.dateOfBirth, avatar: p.avatar } : {});
 
+/** The training model (fitness, paces, load, readiness, the adapted plan) from the app's data. A plain function, so it
+ *  can also be computed without certain runs (Strava runs are never part of what the AI coach is told). */
+function computeDerived(data: AppData): Derived {
+  const today = data.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
+  const acts = forStats(data.activities);
+  const hr = hrSetup(data.profile, acts, today);
+  const zones = hrZones(hr);
+  const fitness = estimateFitness(acts, hr, today, data.races);
+  const stage = fitnessStage(acts, fitness, today);
+  const paces = fitness && stage.paces ? trainingPaces(fitness.vdot) : undefined;
+  const series = loadSeries(acts, hr, paces?.threshold[1], today, 400, data.profile.log);
+
+  const monthPaces = new Map<string, TrainingPaces>();
+  const pacesAt = (iso: string) => {
+    const k = iso.slice(0, 7);
+    let p = monthPaces.get(k);
+    if (!p) {
+      const end = new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)), 0);
+      const f = estimateFitness(acts, hr, end > today ? today : end, data.races);
+      p = f ? trainingPaces(f.vdot) : paces ?? trainingPaces(40);
+      monthPaces.set(k, p);
+    }
+    return p;
+  };
+  const recent = acts.filter((a) => daysBetween(new Date(a.startTime), today) <= 90).map((a) => a.movingS).sort((a, b) => a - b);
+  const typicalMovingS = recent.length ? recent[Math.floor(recent.length / 2)] : 45 * 60;
+  const typeCache = new Map<string, SessionType>();
+  const typeOf = (a: Activity) => {
+    let t = typeCache.get(a.id);
+    if (!t) { t = a.isTimeTrial ? 'timetrial' : likelyRace(a, hr, data.races) ? 'race' : classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
+    return t;
+  };
+
+  const adapted = data.plan
+    ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces: paces ?? trainingPaces(35) })
+    : data.plan;
+  // Body (flagged): pain check-ins change the coming days; red flags pause running until checked
+  const bodyOn = data.mode === 'real' && !!data.flags?.includes('body');
+  const plan = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
+  const t = ymd(today);
+  const todaySession = plan?.sessions.find((s) => s.date === t);
+  const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
+  const aRace = upcoming.find((r) => r.priority === 'A') ?? upcoming[0];
+  const nextRace = upcoming[0];
+  let readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
+  // On a planned rest day, good readiness means the rest is working, not "go and train"
+  if (todaySession?.type === 'rest' && readiness.level === 'ready') {
+    readiness = { ...readiness, label: 'Recovering well', summary: `Enjoy the rest day: you are absorbing your training. You are in good shape for ${plan?.sessions.find((x) => x.date > t && x.type !== 'rest')?.title.toLowerCase() ?? 'your next session'}.` };
+  }
+  const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
+  const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
+  const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
+  const due = (plan?.sessions ?? []).filter((x) => x.type !== 'rest' && x.date <= tKey);
+  const athlete: AthleteState = {
+    runCount: acts.length,
+    totalM: acts.reduce((x, a) => x + a.distanceM, 0),
+    weekM: thisWeek.reduce((x, a) => x + a.distanceM, 0),
+    weekRuns: thisWeek.length,
+    lastRun: acts.length ? acts.reduce((m, a) => (a.startTime > m.startTime ? a : m)) : undefined,
+    planDueSoFar: due.length,
+    planDoneSoFar: due.filter((x) => x.status === 'done').length,
+    planStart: plan?.startDate,
+  };
+  const groups = groupIndex(groupRuns(acts));
+  const groupOf = (id: string) => groups.get(id);
+  return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(!supabase);
   const [session, setSession] = useState<Session | null>(null);
@@ -213,6 +287,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [coachBusy, setCoachBusy] = useState(false);
   const [healthSyncing, setHealthSyncing] = useState(false);
   const [garminSyncing, setGarminSyncing] = useState(false);
+  const [stravaSyncing, setStravaSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [avatarSrc, setAvatarSrc] = useState<string>();
   const [planProblem, setPlanProblem] = useState<PlanProblem>();
@@ -366,71 +441,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [userId, ready]);
 
   // ---- Derived training state ----
-  const derived = useMemo<Derived>(() => {
-    const today = data.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
-    const acts = forStats(data.activities);
-    const hr = hrSetup(data.profile, acts, today);
-    const zones = hrZones(hr);
-    const fitness = estimateFitness(acts, hr, today, data.races);
-    const stage = fitnessStage(acts, fitness, today);
-    const paces = fitness && stage.paces ? trainingPaces(fitness.vdot) : undefined;
-    const series = loadSeries(acts, hr, paces?.threshold[1], today, 400, data.profile.log);
-
-    const monthPaces = new Map<string, TrainingPaces>();
-    const pacesAt = (iso: string) => {
-      const k = iso.slice(0, 7);
-      let p = monthPaces.get(k);
-      if (!p) {
-        const end = new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)), 0);
-        const f = estimateFitness(acts, hr, end > today ? today : end, data.races);
-        p = f ? trainingPaces(f.vdot) : paces ?? trainingPaces(40);
-        monthPaces.set(k, p);
-      }
-      return p;
-    };
-    const recent = acts.filter((a) => daysBetween(new Date(a.startTime), today) <= 90).map((a) => a.movingS).sort((a, b) => a - b);
-    const typicalMovingS = recent.length ? recent[Math.floor(recent.length / 2)] : 45 * 60;
-    const typeCache = new Map<string, SessionType>();
-    const typeOf = (a: Activity) => {
-      let t = typeCache.get(a.id);
-      if (!t) { t = a.isTimeTrial ? 'timetrial' : likelyRace(a, hr, data.races) ? 'race' : classify(a, pacesAt(a.startTime), a.streams ? zones : undefined, typicalMovingS).type; typeCache.set(a.id, t); }
-      return t;
-    };
-
-    const adapted = data.plan
-      ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces: paces ?? trainingPaces(35) })
-      : data.plan;
-    // Body (flagged): pain check-ins change the coming days; red flags pause running until checked
-    const bodyOn = data.mode === 'real' && !!data.flags?.includes('body');
-    const plan = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
-    const t = ymd(today);
-    const todaySession = plan?.sessions.find((s) => s.date === t);
-    const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
-    const aRace = upcoming.find((r) => r.priority === 'A') ?? upcoming[0];
-    const nextRace = upcoming[0];
-    let readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
-    // On a planned rest day, good readiness means the rest is working, not "go and train"
-    if (todaySession?.type === 'rest' && readiness.level === 'ready') {
-      readiness = { ...readiness, label: 'Recovering well', summary: `Enjoy the rest day: you are absorbing your training. You are in good shape for ${plan?.sessions.find((x) => x.date > t && x.type !== 'rest')?.title.toLowerCase() ?? 'your next session'}.` };
-    }
-    const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
-    const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
-    const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
-    const due = (plan?.sessions ?? []).filter((x) => x.type !== 'rest' && x.date <= tKey);
-    const athlete: AthleteState = {
-      runCount: acts.length,
-      totalM: acts.reduce((x, a) => x + a.distanceM, 0),
-      weekM: thisWeek.reduce((x, a) => x + a.distanceM, 0),
-      weekRuns: thisWeek.length,
-      lastRun: acts.length ? acts.reduce((m, a) => (a.startTime > m.startTime ? a : m)) : undefined,
-      planDueSoFar: due.length,
-      planDoneSoFar: due.filter((x) => x.status === 'done').length,
-      planStart: plan?.startDate,
-    };
-    const groups = groupIndex(groupRuns(acts));
-    const groupOf = (id: string) => groups.get(id);
-    return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
-  }, [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode, data.flags]);
+  // Recomputed only when these parts of the data change (not, for example, on every coach message)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const derived = useMemo<Derived>(() => computeDerived(data), [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode, data.flags]);
 
   // Keep the plan's change log once adaptations happen
   useEffect(() => {
@@ -579,15 +592,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return flags;
   };
   /** What Body answers may use: logged pain, recent load and plan changes (never shared on the Hub) */
-  const bodyFacts = (): string[] => {
+  /** What the AI may be told is built without Strava runs (Strava's terms): the same model, computed without them. */
+  const aiView = (): { d: Derived; acts: Activity[] } => {
+    if (!data.activities.some(isStravaRun)) return { d: derived, acts: data.activities };
+    const acts = data.activities.filter((a) => !isStravaRun(a));
+    return { d: computeDerived({ ...data, activities: acts }), acts };
+  };
+  const bodyFacts = (forAi = false): string[] => {
     const b = data.profile.body;
-    const n = activeNiggle(b, derived.today);
-    const last4 = data.activities.filter((a) => daysBetween(new Date(a.startTime), derived.today) < 28).reduce((x, a) => x + a.distanceM, 0) / 4000;
+    const { d: dv, acts } = forAi ? aiView() : { d: derived, acts: data.activities };
+    const n = activeNiggle(b, dv.today);
+    const last4 = acts.filter((a) => daysBetween(new Date(a.startTime), dv.today) < 28).reduce((x, a) => x + a.distanceM, 0) / 4000;
     return [
       n ? `Active niggle: ${areaLabel(n)}, pain ${n.pain}/10, ${n.when.map((w) => WHEN_LABEL[w].toLowerCase()).join(', ')}, started ${n.onset}, trend ${n.trend ?? 'unknown'}, first logged ${new Date((b!.checkins.find((c) => c.area === n.area && c.side === n.side) ?? n).at).toDateString()}.` : 'No active niggle logged.',
-      `This week so far ${(derived.athlete.weekM / 1000).toFixed(1)} km; last 4 weeks average ${last4.toFixed(0)} km a week.`,
+      `This week so far ${(dv.athlete.weekM / 1000).toFixed(1)} km; last 4 weeks average ${last4.toFixed(0)} km a week.`,
       ...(b?.rtrStep ? [`Return to run: step ${b.rtrStep} of 6.`] : []),
-      ...(derived.plan?.changes.filter((c) => c.reason === 'pain').slice(-3).map((c) => `Plan change: ${c.summary}`) ?? []),
+      ...(dv.plan?.changes.filter((c) => c.reason === 'pain').slice(-3).map((c) => `Plan change: ${c.summary}`) ?? []),
     ];
   };
   const updateBody = (patch: Partial<BodyState>) => setData((d) => ({ ...d, profile: { ...d.profile, body: { checkins: [], ...d.profile.body, ...patch } } }));
@@ -729,6 +749,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reportIllness = (days: number) => updateProfile({ illnessUntil: ymd(addDays(derived.today, days - 1)) });
   const clearIllness = () => updateProfile({ illnessUntil: undefined });
 
+  const derivedState = derived;
   const sendCoach = async (text: string, useAi?: boolean, topic?: 'body') => {
     const mode = data.mode === 'sample' ? 'sample' as const : 'real' as const;
     const msg: CoachMessage = { id: uid(), role: 'runner', text, at: new Date().toISOString(), mode, topic };
@@ -740,7 +761,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const reply = flags.length
           ? { text: `Please stop running and get checked by a doctor or physio before you run again. You mentioned: ${flags.join('; ').toLowerCase()}.${flags.some((f) => /chest|dizz|faint/i.test(f)) ? ' If this is happening now, call your local emergency number.' : ''}`, facts: [] as string[], source: 'local' as const, fallback: undefined }
-          : await askBody(text, bodyFacts(), data.coach.filter((m) => m.topic === 'body').map((m) => ({ role: m.role, text: m.text })), (useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted) && data.profile.body?.aiChat !== false);
+          : await (async () => {
+            const ai = (useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted) && data.profile.body?.aiChat !== false;
+            return askBody(text, bodyFacts(ai), data.coach.filter((m) => m.topic === 'body').map((m) => ({ role: m.role, text: m.text })), ai);
+          })();
         if (flags.length) updateBody({ redFlagAt: new Date().toISOString() });
         setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: `${reply.text}\n\n${DISCLAIMER}`, at: new Date().toISOString(), facts: reply.facts, mode, topic, source: reply.source, fallback: reply.fallback }] }));
       } finally { setCoachBusy(false); }
@@ -748,6 +772,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setCoachBusy(true);
     try {
+      const aiOn = useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted;
+      // With the AI on, everything it is told comes from runs that did not come from Strava
+      const { d: derived, acts: coachActs } = aiOn ? aiView() : { d: derivedState, acts: data.activities };
+      const lastAnalysis = (a: Activity) => (derived === derivedState ? analysisFor(a) : analyse({
+        a, all: coachActs, paces: derived.paces ?? trainingPaces(40), zones: a.avgHr ? derived.zones : undefined, typicalMovingS: derived.typicalMovingS,
+        planned: derived.plan?.sessions.find((s) => s.completedActivityId === a.id), feedback: data.feedback.find((f) => f.activityId === a.id),
+        pastFeedback: data.feedback.filter((f) => f.activityId !== a.id && daysBetween(new Date(f.loggedAt), new Date(a.startTime)) <= 30 && f.loggedAt < a.startTime),
+        units: data.profile.units, typeOf: derived.typeOf,
+      }));
       const t = ymd(derived.today);
       const wk = ymd(startOfWeek(derived.today));
       const weekEnd = ymd(addDays(startOfWeek(derived.today), 6));
@@ -766,13 +799,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         planSessionsTotal: derived.athlete.planDueSoFar,
         planStart: derived.athlete.planStart,
         runCount: derived.athlete.runCount,
-        last: last ? { activity: last, analysis: analysisFor(last) } : undefined,
-        hasData: data.activities.length > 0 || !!derived.plan,
+        last: last ? { activity: last, analysis: lastAnalysis(last) } : undefined,
+        hasData: coachActs.length > 0 || !!derived.plan,
         weekAhead: (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= ymd(addDays(derived.today, 7))),
         weekTargetKm: derived.plan?.weeks?.find((w) => w.start === wk)?.targetKm,
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
       };
-      const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode && m.topic !== 'body').map((m) => ({ role: m.role, text: m.text })), useAi ?? !!dataRef.current.profile.consents?.aiCoach?.granted);
+      const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode && m.topic !== 'body').map((m) => ({ role: m.role, text: m.text })), aiOn);
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source, fallback: reply.fallback }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
@@ -812,6 +845,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const disconnectSource = (k: SourceKind) => {
     // Garmin: also tell Garmin to stop sending data and remove the stored tokens (runs already saved stay)
     if (k === 'garmin') void disconnectGarmin().catch(() => undefined);
+    // Strava: revoke Ritmo's access at Strava and remove the stored tokens (runs already saved stay)
+    if (k === 'strava') void disconnectStrava().catch(() => undefined);
     setData((d) => ({ ...d, sources: d.sources.map((s) => (s.kind === k ? { ...s, connected: false } : s)) }));
   };
 
@@ -862,6 +897,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', onVisible);
     return () => { live = false; document.removeEventListener('visibilitychange', onVisible); };
   }, [ready, garminFlag]);
+
+  // ---- Strava (behind the 'strava' flag) ----
+  // The webhook and the first 30-day backfill fill strava_inbox; here the app turns those into runs. A run deleted on
+  // Strava is removed here too (Strava's terms), unless the runner has the same run from another source.
+  const syncStravaNow = async () => {
+    if (dataRef.current.mode !== 'real' || !dataRef.current.flags?.includes('strava')) return;
+    setStravaSyncing(true);
+    try {
+      const { runs, deleted, clear } = await pullStravaInbox();
+      const gone = new Set(deleted);
+      const dropIds = dataRef.current.activities.filter((a) => isStravaRun(a) && a.sourceIds.strava && gone.has(a.sourceIds.strava)).map((a) => a.id);
+      if (dropIds.length) await deleteRunsInCloud(dropIds);
+      setData((d) => {
+        const kept = d.activities.filter((a) => !dropIds.includes(a.id));
+        const m = runs.length ? merge(kept, runs) : { activities: kept };
+        const sources = d.sources.filter((x) => x.kind !== 'strava');
+        sources.push({ kind: 'strava', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.strava).length });
+        return { ...d, activities: m.activities, sources };
+      });
+      await clear();
+    } catch (e) {
+      setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === 'strava' ? { ...x, lastError: `Strava sync failed: ${friendlyError(e)}` } : x)) }));
+    } finally {
+      setStravaSyncing(false);
+    }
+  };
+  const connectStrava = async () => {
+    try { await startStravaConnect(); return undefined; } catch (e) { return friendlyError(e); }
+  };
+  const syncStravaNowRef = useRef(syncStravaNow);
+  syncStravaNowRef.current = syncStravaNow;
+  const completeStravaConnect = async (code: string, state: string, scope: string) => {
+    try {
+      await finishStravaConnect(code, state, scope);
+      setData((d) => ({ ...d, sources: [...d.sources.filter((x) => x.kind !== 'strava'), { kind: 'strava', connected: true, activityCount: d.activities.filter((a) => a.sourceIds.strava).length }] }));
+      // The last 30 days arrive in the background over a few seconds; pick them up shortly after connecting
+      setTimeout(() => void syncStravaNowRef.current(), 8000);
+      return undefined;
+    } catch (e) {
+      return friendlyError(e);
+    }
+  };
+  const stravaFlag = data.mode === 'real' && !!data.flags?.includes('strava');
+  useEffect(() => {
+    if (!ready || !stravaFlag) return;
+    let live = true;
+    const run = () => { stravaConnected().then((on) => { if (live && on) void syncStravaNowRef.current(); }); };
+    run();
+    const onVisible = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { live = false; document.removeEventListener('visibilitychange', onVisible); };
+  }, [ready, stravaFlag]);
 
   // ---- Apple Health / Health Connect (phone app only) ----
   const syncHealthNow = async (justConnected = false) => {
@@ -946,7 +1033,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
-    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing,
+    reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

@@ -95,12 +95,16 @@ function Duplicates() {
 
 export default function DataSources() {
   const nav = useNavigate();
-  const { data, loadSample, disconnectSource, startFresh, hasFlag, connectGarmin, syncGarminNow, garminSyncing } = useApp();
+  const { data, loadSample, disconnectSource, startFresh, hasFlag, connectGarmin, syncGarminNow, garminSyncing, connectStrava, syncStravaNow, stravaSyncing } = useApp();
   const status = (k: string) => data.sources.find((s) => s.kind === k);
   const garminOn = hasFlag('garmin');
   const [garminErr, setGarminErr] = useState<string>();
   const [garminBusy, setGarminBusy] = useState(false);
   const onConnectGarmin = async () => { setGarminBusy(true); setGarminErr(await connectGarmin()); setGarminBusy(false); };
+  const stravaOn = hasFlag('strava');
+  const [stravaErr, setStravaErr] = useState<string>();
+  const [stravaBusy, setStravaBusy] = useState(false);
+  const onConnectStrava = async () => { setStravaBusy(true); setStravaErr(await connectStrava()); setStravaBusy(false); };
   return (
     <div className="stack-lg">
       <AppHeader title="Data sources" back />
@@ -148,6 +152,9 @@ export default function DataSources() {
                   <span className="caption">{s.description}{s.kind === 'garmin' && !garminOn ? ' Waiting for Garmin developer approval.' : ''}</span>
                   {s.kind === 'garmin' && garminOn && !st?.connected && <span className="caption">You will be asked to sign in to Garmin and allow Ritmo to read your activities. Only you see your Garmin data.</span>}
                   {s.kind === 'garmin' && garminErr && <StatusLine kind="danger">{garminErr}</StatusLine>}
+                  {s.kind === 'strava' && stravaOn && <span className="caption">{st?.connected ? 'New runs on Strava appear here shortly after they upload.' : 'You will be asked to sign in to Strava and allow Ritmo to read your activities. Your last 30 days come across straight away.'} Strava runs are for your own coaching only: they cannot be posted to the Hub or shared as images, and the AI coach is never told about them.</span>}
+                  {s.kind === 'strava' && stravaOn && <span className="caption strava-powered">Powered by Strava</span>}
+                  {s.kind === 'strava' && stravaErr && <StatusLine kind="danger">{stravaErr}</StatusLine>}
                   {st?.lastSyncAt && <span className="caption">Last import {relTime(st.lastSyncAt)} · {st.activityCount} runs</span>}
                   {st?.lastError && <StatusLine kind="warning">{st.lastError}</StatusLine>}
                 </span>
@@ -155,6 +162,9 @@ export default function DataSources() {
                   : s.kind === 'garmin' && garminOn ? (st?.connected
                     ? <button className="btn btn-small" onClick={() => void syncGarminNow()} disabled={garminSyncing}>{garminSyncing ? 'Syncing…' : 'Sync now'}</button>
                     : <button className="btn btn-small btn-primary" onClick={onConnectGarmin} disabled={garminBusy || data.mode !== 'real'}>{garminBusy ? 'Opening Garmin…' : 'Connect Garmin'}</button>)
+                  : s.kind === 'strava' && stravaOn ? (st?.connected
+                    ? <button className="btn btn-small" onClick={() => void syncStravaNow()} disabled={stravaSyncing}>{stravaSyncing ? 'Syncing…' : 'Sync now'}</button>
+                    : <button className="btn btn-small strava-connect" onClick={onConnectStrava} disabled={stravaBusy || data.mode !== 'real'}>{stravaBusy ? 'Opening Strava…' : 'Connect with Strava'}</button>)
                   : s.availability === 'stage-2' ? <span className="tag">Coming soon</span>
                   : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="tag">In the phone app</Link>)
                   : <span className="tag">Planned</span>}

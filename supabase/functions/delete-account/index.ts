@@ -3,6 +3,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { deregister } from '../_shared/garmin.ts';
+import { deauthorize as stravaDeauthorize } from '../_shared/strava.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -38,6 +39,8 @@ Deno.serve(async (req) => {
   }
   // Garmin: tell Garmin to stop sending data before the tokens go with the account
   await deregister(admin, uid);
+  // Strava: revoke Ritmo's access at Strava too (its terms require it when the runner leaves)
+  await stravaDeauthorize(admin, uid);
   const del = await admin.auth.admin.deleteUser(data.user.id);
   if (del.error) return json({ error: 'delete_failed', message: del.error.message }, 500);
   return json({ deleted: true });
