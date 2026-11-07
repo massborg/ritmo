@@ -17,7 +17,7 @@ Deploy them after the migration, or the coach logs a quota warning and carries o
 - Rate limits: keep sign-ups and emails sent at the defaults or lower (for example 30 sign-ups an hour per IP).
 - Passwords: minimum length 8, require letters and digits (matches the app).
 - Turn on leaked password protection if your plan includes it.
-- URL configuration (from before): Site URL `https://ritmo-running.netlify.app`, redirect URL `https://ritmo-running.netlify.app/**`.
+- URL configuration (from before): Site URL `https://ritmorunning.run`, redirect URL `https://ritmorunning.run/**`.
 
 ## 4. Merge to main (deploys to Netlify)
 Merging `phase-1` into `main` publishes the new screens and the security headers in `netlify.toml`.

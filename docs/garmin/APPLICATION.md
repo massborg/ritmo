@@ -19,16 +19,16 @@ Prepared 5 November 2026. Fill in the items marked **[YOU]**, check the live for
 
 | Item | Status | Notes |
 |---|---|---|
-| Legal entity name | **[YOU]** | Garmin reviews companies, not individuals. Use the company that will own Ritmo, for example TriCore Consult Ltd if that is the one. |
+| Legal entity name | Ready | TriCore Consult Ltd (shown on the Privacy, Terms and About pages). |
 | Company registration number and country | **[YOU]** | Malta Business Registry number. |
 | Registered address | **[YOU]** | |
 | VAT number | **[YOU]** | If registered. |
 | Contact name and role | **[YOU]** | The person Garmin will email. |
-| Business email address | **[YOU]** | Use a company address if possible. Personal webmail is more likely to be questioned. Also set it in `src/lib/contact.ts` so it shows on the public pages. |
-| Product website | Ready | https://ritmo-running.netlify.app/about (public, no login) |
-| Privacy policy URL | Ready | https://ritmo-running.netlify.app/privacy (public). Lists data use, processors, deletion and Garmin-specific commitments. |
-| Terms of service URL | Ready, draft | https://ritmo-running.netlify.app/terms. **Have a lawyer review before launch.** |
-| OAuth redirect URL | Ready to register | `https://ritmo-running.netlify.app/garmin/callback` |
+| Business email address | Ready | info@tricoreconsult.eu (shown on the Privacy, Terms and About pages). |
+| Product website | Ready | https://ritmorunning.run/about (public, no login) |
+| Privacy policy URL | Ready | https://ritmorunning.run/privacy (public). Lists data use, processors, deletion and Garmin-specific commitments. |
+| Terms of service URL | Ready, draft | https://ritmorunning.run/terms. **Have a lawyer review before launch.** |
+| OAuth redirect URL | Ready to register | `https://ritmorunning.run/garmin/callback` |
 | Data delivery (push) endpoint | Built after approval | `https://gujuzacfqxbwfpprkgrx.supabase.co/functions/v1/garmin-webhook` |
 | Screenshots | Ready | Use the Today, session feedback, Calendar and Progress screenshots, with sample data clearly labelled. |
 | Demo account for reviewers | Optional | Create a test account with sample data if Garmin asks to try the app. |
@@ -109,9 +109,9 @@ Activities from Garmin devices will show the Garmin device model as required by 
 >
 > Data is stored in the EU (Supabase, Frankfurt) with per-user access controls, and runners can export or delete everything at any time.
 >
-> - Website: https://ritmo-running.netlify.app/about
-> - Privacy policy: https://ritmo-running.netlify.app/privacy
-> - Terms: https://ritmo-running.netlify.app/terms
+> - Website: https://ritmorunning.run/about
+> - Privacy policy: https://ritmorunning.run/privacy
+> - Terms: https://ritmorunning.run/terms
 > - Expected users: **[estimate]** in the first 12 months
 >
 > We would be grateful for access, and for confirmation of the current Starter terms, user limits and fees, and any AI-related requirements.
