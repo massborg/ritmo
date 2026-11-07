@@ -495,7 +495,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const start = r.time ? new Date(`${r.date}T${r.time}:00`) : isToday ? new Date(Date.now() - r.durationS * 1000) : new Date(`${r.date}T12:00:00`);
     const a: Activity = {
       id, source: 'manual', sourceIds: { manual: id }, startTime: start.toISOString(),
-      name: session && session.type !== 'rest' ? session.title : 'Run', sport: 'run',
+      // Named like watch imports: by time of day when there is no planned session ("Morning run")
+      name: session && session.type !== 'rest' ? session.title : `${start.getHours() < 12 ? 'Morning' : start.getHours() < 17 ? 'Afternoon' : 'Evening'} run`, sport: 'run',
       distanceM: Math.round(r.distanceM), durationS: Math.round(r.durationS), movingS: Math.round(r.durationS),
       isTimeTrial: session?.type === 'timetrial' || undefined,
       avgHr: r.avgHr, plannedSessionId: session?.id, reps: r.reps?.length ? r.reps : undefined, media: r.media?.length ? r.media : undefined,
