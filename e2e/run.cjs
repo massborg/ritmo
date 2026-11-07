@@ -45,6 +45,8 @@ async function account(mock, ctx, email, flagged) {
   const ctx2 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
   await ctx2.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
   await mock.install(ctx2, SUPA);
+  const tiles = [];
+  await ctx2.route('https://tile.openstreetmap.org/**', (r) => { tiles.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN4+/btfwAJfwPpa1fKXQAAAABJRU5ErkJggg==', 'base64') }); });
   const { page, uid } = await account(mock, ctx2, 'runner@test.ritmo', true);
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${APP}/`); await page.waitForTimeout(1200);
@@ -61,6 +63,20 @@ async function account(mock, ctx, email, flagged) {
   let d = 0, counted = 0;
   const step = async (metres, count) => { d += metres; if (count) counted += metres; await ctx2.setGeolocation({ latitude: LAT0 + d / M_PER_DEG, longitude: LON0, accuracy: 5 }); await page.waitForTimeout(500); };
   for (let i = 0; i < 60; i++) await step(2.5, true);
+  // Live map: tiles under the route, centred, at street zoom, with the credit and a Hide map switch
+  const live = page.getByRole('img', { name: 'Your route so far, on a map' });
+  check(await live.isVisible() && await page.locator('.run-route image.route-tile').count() >= 4, `live map: ${await page.locator('.run-route image.route-tile').count()} OpenStreetMap tiles under the route`);
+  const zs = [...new Set(tiles.map((u) => Number(u.split('/')[3])))];
+  check(zs.length > 0 && zs.every((z) => z <= 16), `zoomed no closer than street level (zoom ${zs.join(', ')})`);
+  check(await page.getByRole('link', { name: '© OpenStreetMap contributors' }).isVisible(), 'OpenStreetMap credit on the live map');
+  const box0 = await page.locator('.run-route svg').boundingBox();
+  const here = await page.locator('.run-route circle[r="8"]').last().boundingBox();
+  const cx = (here.x + here.width / 2 - box0.x) / box0.width, cy = (here.y + here.height / 2 - box0.y) / box0.height;
+  check(cx > 0.1 && cx < 0.9 && cy > 0.1 && cy < 0.9, `"you are here" inside the map, not stuck in a corner (${cx.toFixed(2)}, ${cy.toFixed(2)})`);
+  await page.locator('.run-route').screenshot({ path: require('path').join(__dirname, 'out', 'run-live-map.png') });
+  await page.getByRole('button', { name: 'Hide map' }).click();
+  check(await page.locator('.run-route image').count() === 0 && await page.getByRole('img', { name: 'Your route so far' }).isVisible(), 'Hide map leaves only the route');
+  await page.getByRole('button', { name: 'Show map' }).click();
   await page.getByRole('button', { name: 'Pause' }).click();
   for (let i = 0; i < 20; i++) await step(2.5, false);
   await page.getByRole('button', { name: 'Resume' }).click();

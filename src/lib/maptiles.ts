@@ -22,12 +22,13 @@ export interface MapView {
   toView: (lat: number, lon: number) => { x: number; y: number };
 }
 
-/** The highest zoom where the route fits inside w x h with padding, centred, and the tiles that cover the view. */
-export function fitView(points: { lat: number; lon: number }[], w: number, h: number, pad = 24): MapView | undefined {
-  if (points.length < 2) return undefined;
+/** The highest zoom (up to maxZoom) where the route fits inside w x h with padding, centred, and the tiles that cover
+ *  the view. A single point is centred at maxZoom (a run that has only just started). */
+export function fitView(points: { lat: number; lon: number }[], w: number, h: number, pad = 24, maxZoom = MAX_ZOOM): MapView | undefined {
+  if (!points.length) return undefined;
   const lats = points.map((p) => p.lat), lons = points.map((p) => p.lon);
   const n0 = { lat: Math.max(...lats), lon: Math.min(...lons) }, s0 = { lat: Math.min(...lats), lon: Math.max(...lons) };
-  let z = MAX_ZOOM;
+  let z = Math.min(MAX_ZOOM, maxZoom);
   for (; z > 1; z--) {
     const a = project(n0.lat, n0.lon, z), b = project(s0.lat, s0.lon, z);
     if (b.x - a.x <= w - 2 * pad && b.y - a.y <= h - 2 * pad) break;

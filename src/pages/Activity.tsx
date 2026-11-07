@@ -168,6 +168,9 @@ export default function ActivityPage() {
         )}
       </section>
 
+      {/* The route on a map, always visible for runs with GPS (not tucked inside the full analysis) */}
+      {a.streams?.some((p) => p.lat != null && p.lon != null) && <section className="card stack" aria-labelledby="route-h"><h2 id="route-h" className="title">Route</h2><RouteMap points={a.streams} /></section>}
+
       {/* Asked near the top until answered, so it actually gets filled in */}
       {!fb && feelSection}
 
@@ -290,7 +293,6 @@ export default function ActivityPage() {
             <tbody>{a.laps.map((l) => <tr key={l.index}><td>{l.index}</td><td>{(l.distanceM / 1000).toFixed(2)}</td><td>{duration(l.durationS)}</td><td>{pace(l.durationS / (l.distanceM / 1000), U, false)}</td><td>{l.avgHr ?? '–'}</td></tr>)}</tbody></table></div>
         </section>
       )}
-      {a.streams?.some((p) => p.lat != null && p.lon != null) && <section className="card stack"><h2 className="title">Route</h2><RouteMap points={a.streams} /></section>}
 
         </div>
       </details>

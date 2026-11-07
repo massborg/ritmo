@@ -562,6 +562,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .run-pause { min-height: 64px; font-size: 18px; }
 .run-controls .holding { background: var(--warning); color: var(--ink); transition: background 1.5s linear; }
 .run-route { width: 100%; max-width: 360px; aspect-ratio: 1; background: var(--surface-sunken); border-radius: var(--r-card); align-self: center; }
+.run-map-wrap { width: 100%; max-width: 360px; align-self: center; }
 .run-start { min-height: 64px; font-size: 20px; }
 .run-countdown { font: 800 120px/1 var(--font-display, var(--font-body)); text-align: center; color: var(--brand); padding: var(--s6) 0; }
 

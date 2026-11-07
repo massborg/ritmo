@@ -29,7 +29,16 @@ describe('map tiles', () => {
     expect(Math.max(...v.tiles.map((t) => t.top + TILE))).toBeGreaterThanOrEqual(400);
     expect(v.tiles[0].url).toMatch(/^https:\/\/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png$/);
   });
-  it('needs at least two points', () => {
-    expect(fitView([{ lat: 1, lon: 1 }], 640, 400)).toBeUndefined();
+  it('centres a single point at the zoom limit, and never zooms past it', () => {
+    expect(fitView([], 640, 400)).toBeUndefined();
+    const one = fitView([{ lat: 35.9, lon: 14.5 }], 360, 360, 24, 16)!;
+    expect(one.z).toBe(16);
+    const c = one.toView(35.9, 14.5);
+    expect(c.x).toBeCloseTo(180, 6); expect(c.y).toBeCloseTo(180, 6);
+    // GPS wobble of a few metres stays small instead of filling the view
+    const wobble = fitView([{ lat: 35.9, lon: 14.5 }, { lat: 35.90008, lon: 14.50005 }], 360, 360, 24, 16)!;
+    expect(wobble.z).toBe(16);
+    const a = wobble.toView(35.9, 14.5), b = wobble.toView(35.90008, 14.50005);
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(20);
   });
 });
