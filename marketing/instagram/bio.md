@@ -14,15 +14,15 @@ The name field is searchable on Instagram, so "Running coach app" helps people f
 Running coach app, coming soon. A plan built around you, a clear why for every session. Train to your own rhythm. Waitlist below.
 ```
 
-"Waitlist below" points to the link under the bio. If the link page has no waitlist form when you publish the bio, change the last sentence to "Follow for updates."
+"Waitlist below" points to the link under the bio, which is the live waitlist website.
 
 ## Link
 
 ```
-https://ritmo-running.netlify.app
+https://ritmorunning.run
 ```
 
-This is a placeholder. The website is not live yet. Replace it with the real website link (ideally its waitlist page) as soon as it is live. Posts 05 and 11 and the bio all send people to "the link in bio", so the link must work before 27 November 2026.
+This is the waitlist website, which is live. (The app itself is at app.ritmorunning.run; keep the bio pointing at the waitlist.) Posts 05 and 11, the waitlist cards in `cards/` and the bio all send people to "the link in bio" or to ritmorunning.run.
 
 To set it: Edit profile, then Links, then Add external link. Use "Join the waitlist" as the link title.
 
