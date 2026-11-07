@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Award, Check, MessageCircle, Share2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -13,10 +13,12 @@ import { ROLE_LABEL } from '../training/sessions';
 import { DayRuns } from '../components/DayRuns';
 import { Breakdown, RepChart, Sparkline } from '../components/ReportParts';
 import { buildReport } from '../training/report';
+import { weatherLine } from '../training/weather';
+import { requestWeather } from '../data/weather';
 import { PostToHub } from '../components/PostToHub';
 import { shareableRoute } from '../data/hub';
 const ShareSheet = lazy(() => import('../components/ShareSheet').then((m) => ({ default: m.ShareSheet })));
-import type { SessionFeedback } from '../lib/types';
+import type { Activity, RunWeather, SessionFeedback } from '../lib/types';
 
 const FEELS = ['Very hard', 'Hard', 'Okay', 'Good', 'Great'];
 const AREAS = ['Foot', 'Ankle', 'Achilles', 'Left calf', 'Right calf', 'Shin', 'Knee', 'Hamstring', 'Hip', 'Lower back', 'Chest pain, dizziness or feeling faint'];
@@ -87,10 +89,11 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, setWeather, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
+  useRunWeather(a, data.mode === 'real', setWeather);
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
   const an = analysisFor(a);
   const rep = buildReport({ a, an, planned: an.planned, all: data.activities, plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
@@ -158,6 +161,12 @@ export default function ActivityPage() {
           {a.avgCadence && <div><p className="caption">Cadence</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.avgCadence}</p></div>}
           {a.elevGainM != null && <div><p className="caption">Climb</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.elevGainM} m</p></div>}
         </div>
+        {a.weather && (
+          <p className="caption run-weather" style={{ flexBasis: '100%' }}>
+            <span className="label">Weather</span> {weatherLine(a.weather, U)}
+            <span style={{ opacity: 0.7 }}> · <a href="https://openweathermap.org/" target="_blank" rel="noopener noreferrer">OpenWeather</a></span>
+          </p>
+        )}
       </section>
 
       {/* Asked near the top until answered, so it actually gets filled in */}
@@ -171,6 +180,7 @@ export default function ActivityPage() {
           <div className="stack-sm">
             <h2 id="verdict" className="title">{rep.verdict}</h2>
             <p className="caption">Session score {an.score}. {an.scoreReason}</p>
+            {rep.weatherNote && <p className="weather-note">{rep.weatherNote}</p>}
           </div>
         </div>
         {rep.badges.length > 0 && <div className="badge-row">{rep.badges.map((b) => <span key={b} className="badge"><Award size={14} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" />{b}</span>)}</div>}
@@ -289,4 +299,20 @@ export default function ActivityPage() {
       {fb && feelSection}
     </div>
   );
+}
+
+const weatherAsked = new Set<string>();
+/** Looks up a run's weather once per visit (runs with GPS only), then keeps it with the run. The reply is kept even
+ *  if the page has moved on: it is saved into the app's data, not this page. */
+function useRunWeather(a: Activity | undefined, enabled: boolean, keep: (id: string, w: RunWeather) => void) {
+  const gps = !!a?.streams?.some((p) => p.lat != null && p.lon != null);
+  const id = a?.id;
+  const need = enabled && !!id && gps && !a?.weather;
+  const keepRef = useRef(keep);
+  useEffect(() => { keepRef.current = keep; });
+  useEffect(() => {
+    if (!need || !id || weatherAsked.has(id)) return;
+    weatherAsked.add(id);
+    requestWeather(id).then((w) => { if (w) keepRef.current(id, w); });
+  }, [need, id]);
 }
