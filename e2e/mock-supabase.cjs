@@ -1,6 +1,21 @@
 // A small stand-in for Supabase Auth, PostgREST and Edge Functions, used by the browser tests.
 // It enforces "each user only sees their own rows", like the real row-level security policies.
 const crypto = require('crypto');
+const path = require('path');
+
+/** The real run-summary maths (src/training/derive-core.ts), compiled on the fly, for the derive-runs function. */
+let core;
+function deriveCore() {
+  if (!core) {
+    const out = require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../src/training/derive-core.ts')], bundle: true, format: 'cjs', platform: 'node', write: false });
+    const m = { exports: {} };
+    new Function('module', 'exports', out.outputFiles[0].text)(m, m.exports);
+    core = m.exports;
+  }
+  return core;
+}
+/** Like Supabase's default: at most 1000 rows per response, whatever the request asks for. */
+const MAX_ROWS = 1000;
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function jwt(user) {
@@ -10,9 +25,12 @@ function jwt(user) {
 
 function createMock() {
   const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
-  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages'];
+  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions'];
   TABLES.forEach((t) => (state.tables[t] = []));
-  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'] };
+  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'] };
+  let clock = 0;
+  const stamp = () => { const t = Math.max(Date.now(), clock + 1); clock = t; return new Date(t).toISOString(); };
+
 
   const publicUser = (u) => ({ id: u.id, aud: 'authenticated', role: 'authenticated', email: u.email, email_confirmed_at: u.confirmed ? new Date().toISOString() : null, user_metadata: u.meta, app_metadata: { provider: 'email' }, identities: [{ id: u.id, provider: 'email' }], created_at: u.created });
   const session = (u) => {
@@ -72,23 +90,72 @@ function createMock() {
     return err(404, 'not_found', `No mock for ${method} ${path}`);
   }
 
+  // ---- PostgREST-like reads: column lists, filters (eq, neq, gt, gte, lt, lte, in, is, or), multi-column
+  // order, offset/limit with the 1000-row cap, and exact counts in Content-Range. ----
+  const getPath = (r, expr) => {
+    const parts = expr.split(/->>?/);
+    let v = r[parts[0]];
+    for (const p of parts.slice(1)) v = v == null ? undefined : v[p];
+    return v;
+  };
+  const cmp = (a, b) => (typeof a === 'number' && !isNaN(Number(b)) ? a - Number(b) : String(a).localeCompare(String(b)));
+  const test = (r, col, opval) => {
+    const i = opval.indexOf('.');
+    const op = opval.slice(0, i), val = opval.slice(i + 1);
+    const v = getPath(r, col);
+    if (op === 'is') return val === 'null' ? v == null : String(v) === val;
+    if (op === 'in') return val.replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"|"$/g, '')).includes(String(v));
+    if (v == null) return false;
+    if (op === 'eq') return String(v) === val;
+    if (op === 'neq') return String(v) !== val;
+    if (op === 'gt') return cmp(v, val) > 0;
+    if (op === 'gte') return cmp(v, val) >= 0;
+    if (op === 'lt') return cmp(v, val) < 0;
+    if (op === 'lte') return cmp(v, val) <= 0;
+    return true;
+  };
+  const orTest = (r, expr) => expr.replace(/^\(|\)$/g, '').split(',').some((c) => {
+    const m = c.match(/^([^.]+(?:->>?[^.]+)*)\.(.+)$/);
+    return m ? test(r, m[1], m[2]) : false;
+  });
+  const project = (r, sel) => {
+    if (!sel || sel === '*') return { ...r };
+    const o = {};
+    for (const part of sel.split(',')) {
+      const [alias, expr] = part.includes(':') ? part.split(':') : [part.split(/->>?/).pop(), part];
+      const v = getPath(r, expr);
+      o[alias] = v === undefined ? null : v;
+    }
+    return o;
+  };
+  const RESERVED = ['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'];
+
   function rest(table, method, url, body, req, headers) {
     const u = userFromReq(req);
     if (!u) return { status: 401, body: { code: '42501', message: 'permission denied' } };
     const rows = state.tables[table];
     if (!rows) return { status: 404, body: { message: 'no table' } };
-    const filters = [...url.searchParams.entries()].filter(([k]) => !['select', 'order', 'limit', 'on_conflict'].includes(k));
-    const match = (r) => r.user_id === u.id && filters.every(([k, v]) => {
-      const [op, val] = [v.slice(0, v.indexOf('.')), v.slice(v.indexOf('.') + 1)];
-      return op === 'eq' ? String(r[k]) === val : op === 'neq' ? String(r[k]) !== val : true;
-    });
-    if (method === 'GET') {
-      let out = rows.filter(match).map((r) => ({ ...r }));
+    const filters = [...url.searchParams.entries()].filter(([k]) => !RESERVED.includes(k));
+    const match = (r) => r.user_id === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
+    if (method === 'GET' || method === 'HEAD') {
+      let out = rows.filter(match);
+      const total = out.length;
       const order = url.searchParams.get('order');
-      if (order) { const [col, dir] = order.split('.'); out.sort((a, b) => String(a[col]).localeCompare(String(b[col])) * (dir === 'desc' ? -1 : 1)); }
-      const limit = url.searchParams.get('limit');
-      if (limit) out = out.slice(0, Number(limit));
-      return { status: 200, body: out };
+      if (order) {
+        const keys = order.split(',').map((o) => { const [col, dir] = o.split('.'); return { col, desc: dir === 'desc' }; });
+        out = [...out].sort((a, b) => { for (const k of keys) { const c = cmp(a[k.col] ?? '', b[k.col] ?? ''); if (c) return k.desc ? -c : c; } return 0; });
+      }
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      const limit = Math.min(Number(url.searchParams.get('limit') ?? Infinity), MAX_ROWS);
+      out = out.slice(offset, offset + limit).map((r) => project(r, url.searchParams.get('select')));
+      const counted = /count=exact/.test(headers['prefer'] ?? '');
+      const range = out.length ? `${offset}-${offset + out.length - 1}` : '*';
+      const h = { 'content-range': `${range}/${counted ? total : '*'}` };
+      state.served = (state.served ?? 0) + JSON.stringify(out).length;
+      if (method === 'HEAD') return { status: 200, body: null, headers: h };
+      const single = /vnd\.pgrst\.object/.test(headers['accept'] ?? '');
+      if (single) return out.length ? { status: 200, body: out[0], headers: h } : { status: 406, body: { code: 'PGRST116', message: 'no rows' } };
+      return { status: counted ? 206 : 200, body: out, headers: h };
     }
     if (method === 'POST') {
       const list = Array.isArray(body) ? body : [body];
@@ -96,21 +163,45 @@ function createMock() {
         if (r.user_id !== u.id) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
         const k = keyOf[table];
         const i = rows.findIndex((x) => k.every((c) => String(x[c]) === String(r[c])));
-        if (i >= 0) rows[i] = { ...rows[i], ...r }; else rows.push({ ...r });
+        const t = table === 'activities' ? { updated_at: stamp() } : {};
+        if (i >= 0) rows[i] = { ...rows[i], ...r, ...t }; else rows.push({ ...r, ...t });
       }
       return { status: 201, body: null };
     }
-    if (method === 'DELETE') {
-      for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) rows.splice(i, 1);
+    if (method === 'PATCH') {
+      for (const r of rows) if (match(r)) Object.assign(r, body, table === 'activities' ? { updated_at: stamp() } : {});
       return { status: 204, body: null };
     }
-    void headers;
+    if (method === 'DELETE') {
+      for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) {
+        if (table === 'activities') {
+          const d = state.tables.activity_deletions;
+          const j = d.findIndex((x) => x.user_id === u.id && x.id === rows[i].id);
+          const entry = { user_id: u.id, id: rows[i].id, deleted_at: stamp() };
+          if (j >= 0) d[j] = entry; else d.push(entry);
+        }
+        rows.splice(i, 1);
+      }
+      return { status: 204, body: null };
+    }
     return { status: 405, body: null };
   }
 
   function functions(name, req) {
     const u = userFromReq(req);
     if (!u) return { status: 401, body: { error: 'not_signed_in' } };
+    if (name === 'derive-runs') {
+      const { deriveCore: derive, DERIVED_VERSION } = deriveCore();
+      const stale = state.tables.activities.filter((r) => r.user_id === u.id && (!r.derived || r.derived.v < DERIVED_VERSION))
+        .sort((a, b) => String(b.start_time).localeCompare(String(a.start_time)));
+      const updated = [];
+      for (const r of stale.slice(0, 40)) {
+        r.derived = derive(r.streams, r.laps) ?? { v: DERIVED_VERSION };
+        r.updated_at = stamp();
+        updated.push({ id: r.id, derived: r.derived });
+      }
+      return { status: 200, body: { updated, remaining: stale.length - updated.length } };
+    }
     if (name === 'coach') return state.coachStatus ? { status: state.coachStatus, body: { error: 'rate_limited' } } : { status: 503, body: { error: 'not_configured' } };
     if (name === 'delete-account') {
       for (const t of TABLES) state.tables[t] = state.tables[t].filter((r) => r.user_id !== u.id);
@@ -169,7 +260,7 @@ function createMock() {
       else res = { status: 404, body: null };
       state.calls.push(`${method} ${url.pathname} ${res.status}`);
       if (res.raw) return route.fulfill({ status: res.status, headers: { ...cors, 'content-type': res.type }, body: res.raw });
-      return route.fulfill({ status: res.status, headers: { ...cors, 'content-type': 'application/json' }, body: res.body == null ? '' : JSON.stringify(res.body) });
+      return route.fulfill({ status: res.status, headers: { ...cors, 'content-type': 'application/json', ...(res.headers ?? {}) }, body: res.body == null ? '' : JSON.stringify(res.body) });
     });
   }
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { useRunDetail } from '../app/useRunDetail';
 import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
@@ -28,6 +29,8 @@ export default function Today() {
   const [planMsg, setPlanMsg] = useState<string>();
   const [adding, setAdding] = useState(false);
   const [unwell, setUnwell] = useState(false);
+  const latest = data.activities.length ? data.activities.reduce((m, x) => (x.startTime > m.startTime ? x : m)) : undefined;
+  const { run: last } = useRunDetail(latest, data.mode === 'real');
   const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
@@ -55,14 +58,14 @@ export default function Today() {
   const ws = startOfWeek(today);
   const week = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
   const ranOn = (d: string) => data.activities.some((a) => a.startTime.slice(0, 10) === d);
-  const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest') }; });
+  const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest'), missed: !!session && session.type !== 'rest' && d < t && !ranOn(d) }; });
+  const runsHere = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = data.activities.filter((a) => week.includes(a.startTime.slice(0, 10)) && a.startTime.slice(0, 10) <= t).reduce((x, a) => x + a.distanceM, 0);
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
-  const last = [...data.activities].sort((a, b) => b.startTime.localeCompare(a.startTime))[0];
   const lastAn = last ? analysisFor(last) : undefined;
   const daysToRace = aRace ? daysUntil(today, aRace.date) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
@@ -89,7 +92,7 @@ export default function Today() {
     <div className="stack-lg">
       <AppHeader title="Today" eyebrow={`${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}`} right={<><SampleChip />{logButton}<Avatar /></>} />
 
-      {plan && <WeekStrip days={days} selected={selected} onSelect={setSelected} />}
+      {(plan || data.activities.length > 0) && <WeekStrip days={days} selected={selected} onSelect={setSelected} />}
 
       {s ? (
         <section className="hero stack" aria-labelledby="session-title">
@@ -120,7 +123,7 @@ export default function Today() {
             {isToday && <button className="btn btn-ghost" onClick={() => setUnwell(true)}>Not feeling 100%?</button>}
           </div>
         </section>
-      ) : plan ? (
+      ) : runsHere.length ? null : plan ? (
         <Empty title={upcoming.length ? 'Nothing planned' : 'Your plan is complete'} action={!upcoming.length && <button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my next plan</button>}>
           {upcoming.length ? 'Enjoy the day off. A gentle walk is always fine.' : 'Well done for finishing it. Ritmo can build your next plan from what you have done.'}
         </Empty>
@@ -130,6 +133,21 @@ export default function Today() {
         </Empty>
       )}
       {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
+
+      {/* What was actually run on the selected day, planned or not */}
+      {runsHere.length > 0 && (
+        <section className="card stack-sm" aria-labelledby="ran-here">
+          <h2 id="ran-here" className="label">{isToday ? 'Your runs today' : `Your runs on ${longDate(parseYmd(selected))}`}: {dist(runsHere.reduce((x, a) => x + a.distanceM, 0), U)}</h2>
+          <ul className="list">
+            {runsHere.map((a) => (
+              <li key={a.id}><Link to={`/activity/${a.id}`} className="list-item row-between">
+                <span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}{!s || s.type === 'rest' ? ' · unplanned' : ''}</span></span>
+                <span className="stat">{dist(a.distanceM, U)} · {duration(a.movingS)}</span>
+              </Link></li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {missed && (
         <section className="card stack-sm" aria-labelledby="missed">

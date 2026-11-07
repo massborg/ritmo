@@ -1,4 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazyPage } from './lib/chunks';
+import { ChunkBoundary } from './components/ChunkBoundary';
+import { UpdateToast } from './components/UpdateToast';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, LineChart, MessageCircle, Sun, User } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
@@ -9,23 +12,23 @@ import { Sheet } from './components/inputs';
 import { syncStatusBar, tapHaptic } from './native';
 import { ForgotPassword, Login, ResetPassword, SignUp } from './pages/Auth';
 
-const Calendar = lazy(() => import('./pages/Calendar'));
-const Progress = lazy(() => import('./pages/Progress'));
-const Coach = lazy(() => import('./pages/Coach'));
-const Profile = lazy(() => import('./pages/Profile'));
-const DataSources = lazy(() => import('./pages/DataSources'));
-const Privacy = lazy(() => import('./pages/Privacy'));
-const ActivityPage = lazy(() => import('./pages/Activity'));
-const PlannedPage = lazy(() => import('./pages/Planned'));
-const RacePage = lazy(() => import('./pages/Race'));
-const Setup = lazy(() => import('./pages/Setup'));
-const Story = lazy(() => import('./pages/Story'));
-const Review = lazy(() => import('./pages/Review'));
-const Goals = lazy(() => import('./pages/Goals'));
-const HealthConnect = lazy(() => import('./pages/HealthConnect'));
-const NotFound = lazy(() => import('./pages/NotFound'));
-const About = lazy(() => import('./pages/About'));
-const Terms = lazy(() => import('./pages/Terms'));
+const Calendar = lazyPage(() => import('./pages/Calendar'));
+const Progress = lazyPage(() => import('./pages/Progress'));
+const Coach = lazyPage(() => import('./pages/Coach'));
+const Profile = lazyPage(() => import('./pages/Profile'));
+const DataSources = lazyPage(() => import('./pages/DataSources'));
+const Privacy = lazyPage(() => import('./pages/Privacy'));
+const ActivityPage = lazyPage(() => import('./pages/Activity'));
+const PlannedPage = lazyPage(() => import('./pages/Planned'));
+const RacePage = lazyPage(() => import('./pages/Race'));
+const Setup = lazyPage(() => import('./pages/Setup'));
+const Story = lazyPage(() => import('./pages/Story'));
+const Review = lazyPage(() => import('./pages/Review'));
+const Goals = lazyPage(() => import('./pages/Goals'));
+const HealthConnect = lazyPage(() => import('./pages/HealthConnect'));
+const NotFound = lazyPage(() => import('./pages/NotFound'));
+const About = lazyPage(() => import('./pages/About'));
+const Terms = lazyPage(() => import('./pages/Terms'));
 
 const TABS = [
   { to: '/', label: 'Today', icon: Sun },
@@ -195,6 +198,7 @@ function Shell() {
       <main id="main" className={`main page${bare ? ' main-bare' : ''}`} key={pathname}>
         <SyncBanner />
         <Gate>
+          <ChunkBoundary resetKey={pathname}>
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -225,7 +229,9 @@ function Shell() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </ChunkBoundary>
         </Gate>
+        <UpdateToast />
         <LegacyOffer />
         <PlanProblemSheet />
       </main>

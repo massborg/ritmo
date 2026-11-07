@@ -4,17 +4,18 @@ import type { Activity, CoachMessage, LogEntry, Plan, PlanAdjust, PlannedSession
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, emptyData, friendlyError,
-  loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushToCloud, saveUserCache,
+  actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushToCloud, saveUserCache,
 } from '../data/store';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge } from '../data/integration';
-import { parseFiles } from '../data/parsers';
+import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
 import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
+import { DERIVED_VERSION } from '../training/derive';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
@@ -27,7 +28,7 @@ export interface ImportState {
   done: number;
   total: number;
   label: string;
-  result?: { added: number; replaced: number; duplicates: number; skipped: { file: string; reason: string }[] };
+  result?: { found: number; added: number; replaced: number; duplicates: number; skipped: ParsedFile['skipped'] };
   error?: string;
 }
 
@@ -129,9 +130,14 @@ const sampleBundle = (keep?: Partial<Profile>): AppData => {
   return { ...s, profile: { ...SAMPLE_PROFILE, ...pickPrefs(keep) }, mode: 'sample', coach: [], sources: [{ kind: 'sample', connected: true, lastSyncAt: new Date().toISOString(), activityCount: s.activities.length }] };
 };
 /** Combine account data with changes that only reached this device (e.g. the app closed before saving). */
-function mergeDeviceChanges(cloud: AppData, device: AppData): AppData {
+function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
   const out = { ...cloud };
-  out.activities = merge(cloud.activities, device.activities.filter((a) => !cloud.activities.some((b) => b.id === a.id))).activities;
+  // Runs only on this device (not yet saved) are kept. Runs the account held before but no longer does were
+  // deleted elsewhere, so they are not brought back.
+  const inCloud = new Set(cloud.activities.map((a) => a.id));
+  const knownInCloud = new Set(device.cloudIds ?? []);
+  const deviceOnly = device.activities.filter((a) => !inCloud.has(a.id) && !knownInCloud.has(a.id));
+  if (deviceOnly.length) out.activities = merge(cloud.activities, deviceOnly).activities;
   const fb = new Map(cloud.feedback.map((f) => [f.activityId, f]));
   for (const f of device.feedback) { const c = fb.get(f.activityId); if (!c || f.loggedAt > c.loggedAt) fb.set(f.activityId, f); }
   out.feedback = [...fb.values()];
@@ -195,7 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (stale()) return;
       if (cached) { setData(cached); setReady(true); }
       try {
-        const cloud = await pullFromCloud();
+        const cloud = await pullFromCloud(cached);
         if (stale()) return;
         let next: AppData;
         if (cloud.found && cloud.data) {
@@ -234,8 +240,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ---- Save: device cache immediately, cloud shortly after (only what changed) ----
   useEffect(() => {
     if (!userId || !ready) return;
-    void saveUserCache(userId, data);
+    const ps = pushState.current;
+    void saveUserCache(userId, data, cloudLoaded.current ? (a) => ps.activities.get(a.id) === actPrint(a) : undefined);
   }, [data, userId, ready]);
+
+  // ---- Fill in missing run summaries (best efforts etc.) on the server, from data already in the account ----
+  const deriving = useRef(false);
+  const derivedTried = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!userId || !ready || !cloudLoaded.current || data.mode !== 'real' || deriving.current || derivedTried.current === userId) return;
+    if (!data.activities.some((a) => !a.streams && (a.derived?.v ?? 0) < DERIVED_VERSION)) return;
+    deriving.current = true;
+    derivedTried.current = userId; // once per session; the next visit continues where this one stopped
+    const uidAtStart = userId;
+    deriveMissing((updates) => {
+      if (currentUid.current !== uidAtStart) return;
+      const byId = new Map(updates.map((u) => [u.id, u.derived]));
+      setData((d) => ({
+        ...d,
+        activities: d.activities.map((a) => {
+          const dv = byId.get(a.id);
+          if (!dv) return a;
+          const next = { ...a, derived: dv };
+          pushState.current.activities.set(a.id, actPrint(next)); // already saved by the server
+          return next;
+        }),
+      }));
+    }).catch((e) => console.warn('Run summaries could not be completed yet', e)).finally(() => { deriving.current = false; });
+  }, [userId, ready, data.mode, data.activities]);
 
   const pushTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -325,7 +357,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const analysisCache = useRef(new Map<string, Analysis>());
   useEffect(() => { analysisCache.current.clear(); }, [derived, data.feedback]);
   const analysisFor = useCallback((a: Activity) => {
-    const hit = analysisCache.current.get(a.id);
+    const key = `${a.id}|${a.streams || a.laps ? 'detail' : 'summary'}`;
+    const hit = analysisCache.current.get(key);
     if (hit) return hit;
     const planned = derived.plan?.sessions.find((s) => s.completedActivityId === a.id);
     const res = analyse({
@@ -334,7 +367,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pastFeedback: data.feedback.filter((f) => f.activityId !== a.id && daysBetween(new Date(f.loggedAt), new Date(a.startTime)) <= 30 && f.loggedAt < a.startTime),
       units: data.profile.units, typeOf: derived.typeOf,
     });
-    analysisCache.current.set(a.id, res);
+    analysisCache.current.set(key, res);
     return res;
   }, [derived, data.activities, data.feedback, data.profile.units]);
 
@@ -386,15 +419,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const parsed = await parseFiles(files, (done, total, label) => setImportState((s) => ({ ...s, done, total, label })));
       if (!parsed.activities.length) {
-        setImportState({ running: false, done: 0, total: 0, label: '', error: parsed.skipped.length ? `No runs were found in ${parsed.skipped.length === 1 ? 'that file' : `those ${parsed.skipped.length} files`}. Check that they are FIT, GPX or TCX running files, or a Garmin export ZIP.` : 'No files were chosen.', result: { added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped } });
+        setImportState({ running: false, done: 0, total: 0, label: '', error: parsed.skipped.length ? `No runs were found in ${parsed.skipped.length === 1 ? 'that file' : `those ${parsed.skipped.length} files`}. Check that they are FIT, GPX or TCX running files, or a Garmin export ZIP.` : 'No files were chosen.', result: { found: 0, added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped } });
         return;
       }
       setData((d) => {
         const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
         const m = merge(base.activities, parsed.activities);
-        setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped } });
+        setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { found: parsed.activities.length, added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped } });
         const sources = base.sources.filter((s) => s.kind !== 'upload' && s.kind !== 'sample');
-        sources.push({ kind: 'upload', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.source === 'upload').length, lastError: parsed.skipped.length ? `${parsed.skipped.length} file${parsed.skipped.length > 1 ? 's' : ''} skipped` : undefined });
+        sources.push({ kind: 'upload', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.source === 'upload').length, lastError: parsed.skipped.some((x) => x.category === 'unreadable') ? `${parsed.skipped.filter((x) => x.category === 'unreadable').length} file(s) could not be read` : undefined });
         return { ...base, mode: 'real', activities: m.activities, sources };
       });
     } catch (e) {

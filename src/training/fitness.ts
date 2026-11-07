@@ -1,6 +1,7 @@
 // Fitness model: VDOT (Daniels/Gilbert), race predictions, training paces and heart-rate zones.
-import type { Activity, Profile, Race, StreamPoint } from '../lib/types';
+import type { Activity, Profile, Race } from '../lib/types';
 import { distanceLabel, duration, shortDate } from '../lib/format';
+import { effortOf } from './derive';
 
 /** Oxygen cost of running at v metres/minute */
 const vo2AtV = (v: number) => -4.6 + 0.182258 * v + 0.000104 * v * v;
@@ -60,21 +61,7 @@ export function trainingPaces(vdot: number): TrainingPaces {
 }
 
 /** Fastest time over `distanceM` inside a stream (sliding window, linear interpolation) */
-export function bestEffort(streams: StreamPoint[], distanceM: number): number | undefined {
-  if (!streams.length || streams[streams.length - 1].d < distanceM) return undefined;
-  let best = Infinity;
-  let j = 0;
-  for (let i = 0; i < streams.length; i++) {
-    const target = streams[i].d + distanceM;
-    while (j < streams.length && streams[j].d < target) j++;
-    if (j >= streams.length) break;
-    const a = streams[j - 1], b = streams[j];
-    const f = b.d === a.d ? 0 : (target - a.d) / (b.d - a.d);
-    const tEnd = a.t + f * (b.t - a.t);
-    best = Math.min(best, tEnd - streams[i].t);
-  }
-  return isFinite(best) ? best : undefined;
-}
+export { bestEffort, cleanStreams } from './derive-core';
 
 export interface HrSetup {
   max: number;
@@ -160,9 +147,9 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
     const when = shortDate(new Date(a.startTime));
     const candidates: { v: number; label: string; allOut: boolean }[] = [];
     if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isTimeTrial ? `your time trial on ${when}` : effortLabel(a, raceDistanceOf(a.distanceM) ?? a.distanceM, a.movingS * ((raceDistanceOf(a.distanceM) ?? a.distanceM) / a.distanceM), when), allOut: true });
-    if (a.streams?.length) {
+    {
       for (const d of EFFORT_DISTANCES) {
-        const e = bestEffort(a.streams, d);
+        const e = effortOf(a, d);
         if (e) candidates.push({ v: vdotFromPerformance(d, e) * (allOut ? 1 : 0.965), label: `a ${d / 1000} km effort on ${when}`, allOut: !!allOut });
       }
     }
@@ -200,7 +187,7 @@ export function recentBest(activities: Activity[], distanceM: number, at = new D
     if (t < from || t > at.getTime()) continue;
     const times: number[] = [];
     if (Math.abs(a.distanceM - distanceM) / distanceM <= 0.04) times.push(a.movingS * (distanceM / a.distanceM));
-    if (a.streams?.length) { const e = bestEffort(a.streams, distanceM); if (e) times.push(e); }
+    { const e = effortOf(a, distanceM); if (e) times.push(e); }
     for (const x of times) if (!best || x < best.timeS) best = { timeS: x, date: a.startTime.slice(0, 10) };
   }
   return best;

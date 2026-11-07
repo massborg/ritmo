@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { zoneTimeFromHistogram } from '../training/derive';
+import { useEffect, useMemo, useState } from 'react';
+import { fetchHrBands } from '../data/store';
 import { Link } from 'react-router-dom';
 import { Award, Flame, Lock, Share2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -8,7 +10,7 @@ import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
 import { addDays, daysBetween, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { easyHardBalance, monthKey, personalBests, runningStory, totalsBy, weekKey } from '../training/insights';
 import { PHASE_LABEL } from '../training/plan';
-import { estimateFitness, predictRace, trainingPaces } from '../training/fitness';
+import { estimateFitness, predictRace, trainingPaces, zoneOf } from '../training/fitness';
 import { Shoes } from '../components/Shoes';
 import { zoneTime } from '../training/analysis';
 
@@ -21,6 +23,15 @@ export default function Progress() {
   const [period, setPeriod] = useState<Period>('week');
   const years = useMemo(() => [...new Set(acts.map((a) => a.startTime.slice(0, 4)))].sort().reverse(), [acts]);
   const [year, setYear] = useState(String(today.getFullYear()));
+  // Heart-rate bands for the zones chart (last 4 weeks) are not part of the run summaries: fetched here
+  const [bands, setBands] = useState<Map<string, Record<string, number>>>();
+  const since = ymd(addDays(today, -28));
+  useEffect(() => {
+    if (data.mode !== 'real') return;
+    let live = true;
+    fetchHrBands(since).then((b) => { if (live) setBands(b); }).catch(() => { /* the chart shows what it has */ });
+    return () => { live = false; };
+  }, [data.mode, since, acts.length]);
 
   const story = useMemo(() => runningStory(acts, today), [acts, today]);
   const pbs = useMemo(() => personalBests(acts), [acts]);
@@ -69,7 +80,10 @@ export default function Progress() {
 
   // Zones and balance over last 4 weeks
   const last28 = acts.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; });
-  const zt = last28.filter((a) => a.streams).reduce((acc, a) => zoneTime(a.streams!, zones).map((v, i) => v + acc[i]), [0, 0, 0, 0, 0]);
+  const zt = last28.reduce((acc, a) => {
+    const z = a.streams?.length ? zoneTime(a.streams, zones) : (a.derived?.hrh ?? bands?.get(a.id)) ? zoneTimeFromHistogram((a.derived?.hrh ?? bands?.get(a.id))!, (hr) => zoneOf(hr, zones)) : undefined;
+    return z ? z.map((v, i) => v + acc[i]) : acc;
+  }, [0, 0, 0, 0, 0]);
   const balance = easyHardBalance({ activities: acts, typeOf, sessions: (plan?.sessions ?? []).map((x) => ({ ...x, phase: PHASE_LABEL[x.phase].toLowerCase() })), today });
   const easyPct = balance?.easyPct ?? 0;
 

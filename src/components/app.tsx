@@ -50,17 +50,20 @@ export function Avatar() {
 export const ZONE_OF: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, runwalk: 2, tempo: 3, threshold: 4, hills: 4, timetrial: 4, vo2max: 5, speed: 5, race: 4 };
 
 /** Horizontal strip of days with a coloured mark for each session. */
-export function WeekStrip({ days, selected, onSelect }: { days: { date: string; dow: string; dom: number; session?: PlannedSession; done: boolean; today: boolean; unplanned?: boolean }[]; selected: string; onSelect: (d: string) => void }) {
+export function WeekStrip({ days, selected, onSelect }: { days: { date: string; dow: string; dom: number; session?: PlannedSession; done: boolean; today: boolean; unplanned?: boolean; missed?: boolean }[]; selected: string; onSelect: (d: string) => void }) {
   return (
     <div className="weekstrip" role="tablist" aria-label="This week">
       {days.map((d) => {
         const z = d.session ? ZONE_OF[d.session.type] : undefined;
         return (
           <button key={d.date} role="tab" aria-selected={selected === d.date} className={`daychip${d.today ? ' is-today' : ''}`} onClick={() => onSelect(d.date)}
-            aria-label={`${d.dow} ${d.dom}: ${d.unplanned ? 'unplanned run' : d.session ? d.session.title : 'nothing planned'}${d.done && !d.unplanned ? ', done' : ''}`}>
+            aria-label={`${d.dow} ${d.dom}: ${d.unplanned ? 'unplanned run' : d.session ? d.session.title : 'nothing planned'}${d.done && !d.unplanned ? ', done' : d.missed ? ', missed' : ''}`}>
             <span className="daychip-dow">{d.dow.slice(0, 1)}</span>
             <span className="daychip-dom">{d.dom}</span>
-            <span className="daychip-mark" style={{ background: d.unplanned ? 'var(--accent)' : d.done ? 'currentColor' : z ? `var(--zone-${z})` : 'transparent', borderColor: z || d.done ? 'transparent' : 'var(--hairline)' }} />
+            {/* done: solid; planned: zone colour; missed: hollow warning ring; unplanned run: accent */}
+            <span className="daychip-mark" style={d.missed
+              ? { background: 'transparent', border: '2px solid var(--warning)' }
+              : { background: d.unplanned ? 'var(--accent)' : d.done ? 'currentColor' : z ? `var(--zone-${z})` : 'transparent', borderColor: z || d.done ? 'transparent' : 'var(--hairline)' }} />
           </button>
         );
       })}

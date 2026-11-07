@@ -89,6 +89,7 @@ async function doSetup(page, o = {}) {
   if (runsFile) {
     await page.locator('input[type=file][accept=".fit,.gpx,.tcx,.zip,.json"]').setInputFiles(runsFile);
     await see(page, /Imported \d+ new runs/, 60000);
+    if (o.expectReport) for (const t of o.expectReport) await see(page, t);
     await page.getByRole('button', { name: /Continue with \d+ runs/ }).click();
   } else await page.getByRole('button', { name: 'Skip for now' }).click();
   await see(page, 'Your first weeks');
@@ -421,7 +422,8 @@ async function run(label, deviceOpts) {
     fs.writeFileSync(file, buffer);
     globalThis.__inC = true;
     await signUpAndConfirm(page, mock, C);
-    await doSetup(page, { level: 'I run regularly', goal: 'Get faster', name: 'Cara', runsFile: file, photo: PHOTO });
+    await doSetup(page, { level: 'I run regularly', goal: 'Get faster', name: 'Cara', runsFile: file, photo: PHOTO,
+      expectReport: [/1 wellness and monitoring/, /1 cycling/, /1 swimming/, /Could not be read/, 'Download import log'] });
     await see(page, 'Paces measured from your runs');
     await startPlan(page);
     assert(await page.locator('.avatar-photo img').count() === 1, 'photo not in the top bar');

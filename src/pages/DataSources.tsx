@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileUp, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { SKIP_LABEL, type SkipCategory } from '../data/parsers';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { SOURCES } from '../data/integration';
@@ -45,12 +46,7 @@ export function UploadPanel({ onDone }: { onDone?: () => void }) {
       )}
       {importState.result && !importState.running && (
         <div className="stack-sm" aria-live="polite">
-          <StatusLine kind="success">Imported {importState.result.added} new runs{importState.result.replaced ? `, upgraded ${importState.result.replaced} with more detail` : ''}{importState.result.duplicates ? `, skipped ${importState.result.duplicates} duplicates` : ''}.</StatusLine>
-          {importState.result.skipped.length > 0 && (
-            <details><summary className="label" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>{importState.result.skipped.length} files not imported</summary>
-              <ul className="bullets caption">{importState.result.skipped.slice(0, 50).map((s) => <li key={s.file}>{s.file.split('/').pop()}: {s.reason}</li>)}</ul>
-            </details>
-          )}
+          <ImportReport result={importState.result} />
         </div>
       )}
       {importState.error && <StatusLine kind="danger">Import failed: {importState.error}. Try again, or upload fewer files at once.</StatusLine>}
@@ -139,6 +135,44 @@ export default function DataSources() {
           <Link to="/profile/privacy" className="btn btn-ghost">Privacy and deletion</Link>
         </div>
       </section>
+    </div>
+  );
+}
+
+type ImportResult = NonNullable<ReturnType<typeof useApp>['importState']['result']>;
+
+/** What happened to every file: runs found, saved, merged and failed, and why the rest were skipped. */
+function ImportReport({ result: r }: { result: ImportResult }) {
+  const fmt = (n: number) => n.toLocaleString('en-GB');
+  const byCat = new Map<SkipCategory, number>();
+  for (const x of r.skipped) byCat.set(x.category, (byCat.get(x.category) ?? 0) + 1);
+  const order: SkipCategory[] = ['wellness', 'cycling', 'swimming', 'walking', 'gym', 'other-sport', 'unsupported', 'unreadable'];
+  const parts = order.filter((c) => byCat.get(c)).map((c) => `${fmt(byCat.get(c)!)} ${SKIP_LABEL[c]}`);
+  const unreadable = byCat.get('unreadable') ?? 0;
+  const download = () => {
+    const lines = [
+      `Ritmo import log, ${new Date().toISOString()}`,
+      `Runs found: ${r.found}`, `New runs saved: ${r.added}`, `Runs upgraded with more detail: ${r.replaced}`, `Duplicates merged: ${r.duplicates}`,
+      `Files skipped: ${r.skipped.length}`, ...order.filter((c) => byCat.get(c)).map((c) => `  ${SKIP_LABEL[c]}: ${byCat.get(c)}`), '',
+      'Skipped files:', ...r.skipped.map((x) => `${x.category}\t${x.file}\t${x.reason}`),
+    ];
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = `ritmo-import-log-${new Date().toISOString().slice(0, 10)}.txt`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return (
+    <div className="card stack-sm">
+      <StatusLine kind={unreadable ? 'warning' : 'success'}>Imported {fmt(r.added)} new run{r.added === 1 ? '' : 's'}{r.replaced ? `, upgraded ${fmt(r.replaced)} with more detail` : ''}.</StatusLine>
+      <dl className="report-grid">
+        <div><dt className="caption">Runs found</dt><dd className="stat">{fmt(r.found)}</dd></div>
+        <div><dt className="caption">Saved as new</dt><dd className="stat">{fmt(r.added)}</dd></div>
+        <div><dt className="caption">Duplicates merged</dt><dd className="stat">{fmt(r.duplicates + r.replaced)}</dd></div>
+        <div><dt className="caption">Could not be read</dt><dd className="stat">{fmt(unreadable)}</dd></div>
+      </dl>
+      {r.skipped.length > 0 && <p className="caption">Skipped {fmt(r.skipped.length)} files that are not runs: {parts.join(', ')}. A Garmin export holds a lot of other data, so this is expected. Treadmill, track, trail, indoor and virtual runs are all imported.</p>}
+      {unreadable > 0 && <p className="caption">{fmt(unreadable)} file{unreadable === 1 ? '' : 's'} could not be read. The download below lists them; if one is a run you need, try exporting it again from your watch app.</p>}
+      <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={download}>Download import log</button>
     </div>
   );
 }
