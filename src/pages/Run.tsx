@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Flag, Lock, Pause, Play, Square, Unlock } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
+import { fitView, mapsOn, setMapsOn, TILE } from '../lib/maptiles';
 import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
 import { Empty, Segmented, StatusLine } from '../components/ui';
@@ -255,18 +256,36 @@ export default function RunPage() {
 }
 
 /** The route so far as a line (no map tiles yet). */
+/** The route so far over OpenStreetMap tiles (unless maps are off on this device), centred, zoomed no closer than
+ *  street level so a few metres of GPS wobble stay small, with the start and "you are here" marked. */
 function RouteLine({ track }: { track: TrackState }) {
-  const pts = track.points.filter((p) => p.moving);
-  if (pts.length < 2) return null;
-  const lats = pts.map((p) => p.lat), lons = pts.map((p) => p.lon);
-  const [la0, la1, lo0, lo1] = [Math.min(...lats), Math.max(...lats), Math.min(...lons), Math.max(...lons)];
-  const k = Math.cos(((la0 + la1) / 2) * Math.PI / 180);
-  const w = Math.max((lo1 - lo0) * k, la1 - la0, 1e-5);
-  const xy = (p: { lat: number; lon: number }) => `${8 + (((p.lon - lo0) * k) / w) * 184},${8 + ((la1 - p.lat) / w) * 184}`;
+  const [showMap, setShowMap] = useState(mapsOn);
+  const moving = track.points.filter((p) => p.moving);
+  const pts = moving.length ? moving : track.points.slice(-1);
+  const W = 360, H = 360;
+  const view = fitView(pts, W, H, 36, 16);
+  if (!view) return null;
+  const xy = pts.map((p) => view.toView(p.lat, p.lon));
+  const d = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  const a = xy[0], b = view.toView(track.points[track.points.length - 1].lat, track.points[track.points.length - 1].lon);
+  const toggle = () => { setMapsOn(!showMap); setShowMap(!showMap); };
   return (
-    <svg viewBox="0 0 200 200" className="run-route" role="img" aria-label="Your route so far">
-      <polyline points={pts.map(xy).join(' ')} fill="none" stroke="var(--brand)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={xy(pts[pts.length - 1]).split(',')[0]} cy={xy(pts[pts.length - 1]).split(',')[1]} r="5" fill="var(--ink)" />
-    </svg>
+    <div className="stack-sm run-map-wrap">
+      <div className="run-route route-map" style={{ position: 'relative', overflow: 'hidden' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={showMap ? 'Your route so far, on a map' : 'Your route so far'}>
+          {showMap && view.tiles.map((t) => <image key={`${t.z}/${t.x}/${t.y}`} href={t.url} x={t.left} y={t.top} width={TILE} height={TILE} preserveAspectRatio="none" className="route-tile" />)}
+          {xy.length > 1 && <>
+            <path d={d} fill="none" stroke="#fff" strokeOpacity={showMap ? 0.9 : 0} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={a.x} cy={a.y} r="7" fill="#fff" stroke="var(--brand)" strokeWidth="4"><title>Start</title></circle>
+          </>}
+          <circle cx={b.x} cy={b.y} r="13" fill="var(--brand)" opacity="0.25" />
+          <circle cx={b.x} cy={b.y} r="8" fill="var(--brand)" stroke="#fff" strokeWidth="3"><title>You are here</title></circle>
+        </svg>
+        {showMap && <a className="route-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
+          style={{ position: 'absolute', right: 0, bottom: 0, padding: '2px 6px', fontSize: 11, lineHeight: 1.4, background: 'rgba(255,255,255,.85)', color: '#333', borderTopLeftRadius: 6, textDecoration: 'none' }}>© OpenStreetMap contributors</a>}
+      </div>
+      <button type="button" className="link-btn" style={{ alignSelf: 'flex-start' }} onClick={toggle} aria-pressed={showMap}>{showMap ? 'Hide map' : 'Show map'}</button>
+    </div>
   );
 }

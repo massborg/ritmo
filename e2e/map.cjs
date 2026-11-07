@@ -44,8 +44,11 @@ const STUB = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
 
   const full = async () => { const btn = page.locator('summary', { hasText: 'Show full analysis' }); await tap(btn); };
-  await page.goto(`${APP}/activity/${withGps.id}`); await full();
+  await page.goto(`${APP}/activity/${withGps.id}`);
   const map = page.getByRole('img', { name: 'Route on a map' });
+  // The map shows without opening the full analysis
+  check(await map.waitFor({ timeout: 15000 }).then(() => true, () => false), 'route map visible straight away, without opening the full analysis');
+  check(!(await page.locator('details.full-analysis').evaluate((d) => d.open)), 'full analysis still closed');
   await map.waitFor({ timeout: 15000 }).catch(async (e) => { await page.screenshot({ path: path.join(OUT, 'debug.png'), fullPage: true }); console.log('URL', page.url(), 'routes:', await page.locator('h2').allTextContents()); throw e; });
   await map.scrollIntoViewIfNeeded(); await page.waitForTimeout(1200);
   const tiles = await page.locator('.route-map image.route-tile').count();
@@ -62,13 +65,13 @@ const STUB = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
   check(await page.locator('.route-map image').count() === 0 && await page.getByRole('img', { name: 'Route shape' }).isVisible(), 'Hide map leaves only the route line');
   check(!(await credit.isVisible().catch(() => false)), 'no credit when the map is hidden');
   const before = tileHits.length;
-  await page.reload(); await full(); await page.getByRole('img', { name: 'Route shape' }).waitFor({ timeout: 15000 }); await page.waitForTimeout(800);
+  await page.reload(); await page.getByRole('img', { name: 'Route shape' }).waitFor({ timeout: 15000 }); await page.waitForTimeout(800);
   check(tileHits.length === before, 'choice remembered after reload: no tiles fetched');
   await tap(page.getByRole('button', { name: 'Show map' }));
   await page.waitForTimeout(500);
   check(await page.locator('.route-map image.route-tile').count() >= 4, 'Show map brings the tiles back');
 
-  await page.goto(`${APP}/activity/${noGps.id}`); await full(); await page.waitForTimeout(1000);
+  await page.goto(`${APP}/activity/${noGps.id}`); await page.locator('h2#verdict').waitFor({ timeout: 15000 }); await full(); await page.waitForTimeout(1000);
   check(await page.locator('.route-map').count() === 0, 'no map on a run without GPS');
   check(errors.length === 0, `no errors ${errors.slice(0, 2).join(' | ')}`);
   console.log(`\n${passed} passed, ${failed} failed`);
