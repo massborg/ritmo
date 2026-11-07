@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { garminAttribution } from '../data/garmin';
 import { Link, useParams } from 'react-router-dom';
 import { Award, Check, MessageCircle, Share2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -128,7 +129,7 @@ export default function ActivityPage() {
       <AppHeader title="Run" back large={false} />
       {loading && <p className="caption" role="status">Loading splits, charts and route…</p>}
       <div className="stack-sm">
-        <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source}</p>
+        <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {garminAttribution(a) ?? (a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source)}</p>
         <h1 className="display-lg">{a.name}</h1>
         <div className="row wrap"><span className="tag">{TYPE_LABEL[an.type]}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span></div>
         {data.mode === 'real' && (

@@ -14,7 +14,7 @@ export interface SourceAdapter {
 
 export const SOURCES: SourceAdapter[] = [
   { kind: 'upload', label: 'File upload', availability: 'now', description: 'FIT, GPX and TCX files, or your full Garmin account export. The best way to bring in past years.' },
-  { kind: 'garmin', label: 'Garmin Connect', availability: 'stage-2', description: 'Automatic sync of each new run with pace, heart rate, cadence, laps and route. Waiting for Garmin developer approval.' },
+  { kind: 'garmin', label: 'Garmin Connect', availability: 'stage-2', description: 'Automatic sync of each new run with pace, heart rate, cadence, laps and route.' },
   { kind: 'apple_health', label: 'Apple Health', availability: 'stage-3', description: 'Available in the iPhone app. Some runs may arrive with less detail.' },
   { kind: 'health_connect', label: 'Health Connect', availability: 'stage-3', description: 'Available in the Android app. Some runs may arrive with less detail.' },
   { kind: 'strava', label: 'Strava', availability: 'later', description: 'Planned.' },
@@ -79,10 +79,10 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       if (inc.detailScore > cur.detailScore) {
         // What the runner told us stays: the planned session link, reps they entered, race marks
         list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
-          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name };
+          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device };
         replaced++;
       } else {
-        list[match] = { ...cur, sourceIds };
+        list[match] = { ...cur, sourceIds, device: cur.device ?? inc.device };
         duplicates++;
       }
     }
