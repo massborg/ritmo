@@ -27,3 +27,13 @@ describe('weather', () => {
     expect(n(weatherNote(w({ t: 30, fl: 31, ws: 30 }), 'mi'))).toMatch(/^Hot \(feels like 88°F\).*Windy \(19 mph\)/);
   });
 });
+
+describe('weather window', () => {
+  it('only runs whose middle is in the last 3 hours', async () => {
+    const { inWeatherWindow } = await import('../data/weather');
+    const now = Date.parse('2026-11-07T12:00:00Z');
+    expect(inWeatherWindow({ startTime: '2026-11-07T10:00:00Z', durationS: 3600 }, now)).toBe(true);  // middle 1.5 h ago
+    expect(inWeatherWindow({ startTime: '2026-11-07T08:30:00Z', durationS: 1800 }, now)).toBe(false); // middle 3.25 h ago
+    expect(inWeatherWindow({ startTime: '2026-11-01T10:00:00Z', durationS: 3600 }, now)).toBe(false);
+  });
+});
