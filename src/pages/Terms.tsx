@@ -1,17 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
-import { CONTACT_EMAIL } from '../lib/contact';
+import { COMPANY_ADDRESS, COMPANY_NAME, COMPANY_REG_NO, CONTACT_EMAIL } from '../lib/contact';
 
 /** Draft terms of service. Have them reviewed by a lawyer before public launch. */
 export default function Terms() {
   const { session } = useApp();
   return (
     <div className="stack-lg">
-      <AppHeader title="Terms of service" eyebrow="Last updated 6 November 2026" back={!!session} />
+      <AppHeader title="Terms of service" eyebrow="Last updated 7 November 2026" back={!!session} />
       <section className="card stack">
         <h2 className="title">Using Ritmo</h2>
-        <p>Ritmo Running ("Ritmo") is a training app that analyses your running data and suggests training. By creating an account you agree to these terms and to our <Link to="/privacy">privacy policy</Link>. You must be at least 18 years old to use Ritmo. You confirm this when you create an account, and Ritmo asks for your date of birth during setup.</p>
+        <p>Ritmo Running ("Ritmo") is provided by {COMPANY_NAME} (registration number {COMPANY_REG_NO}), {COMPANY_ADDRESS} ("we", "us"). It is a training app that analyses your running data and suggests training. By creating an account you agree to these terms and to our <Link to="/privacy">privacy policy</Link>. You must be at least 18 years old to use Ritmo. You confirm this when you create an account, and Ritmo asks for your date of birth during setup.</p>
         <h2 className="title">Coaching, not medical advice</h2>
         <p>Ritmo gives general coaching guidance based on your data. It is not medical advice and does not replace a doctor, physio or qualified coach. Check with a doctor before starting a training programme if you have a medical condition, and stop exercising and seek medical help if you have chest pain, dizziness, fainting or unusual breathlessness. You train at your own risk. If the health check in setup suggests checking with a doctor, please do so before you start.</p>
         <h2 className="title">Your account and data</h2>
@@ -26,7 +26,8 @@ export default function Terms() {
         <p>Do not misuse Ritmo, try to access other people's data, upload files you do not have the right to share, or interfere with the service.</p>
         <h2 className="title">Changes and availability</h2>
         <p>Ritmo is in active development. Features may change, and we may update these terms; we will tell you about significant changes in the app. We aim to keep Ritmo available but cannot guarantee uninterrupted service. To the extent the law allows, Ritmo is provided "as is" and our liability is limited to the amount you have paid us in the previous 12 months.</p>
-        {CONTACT_EMAIL && <><h2 className="title">Contact</h2><p>Questions about these terms: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p></>}
+        <h2 className="title">Contact</h2>
+        <p>{COMPANY_NAME}, {COMPANY_ADDRESS}. Questions about these terms: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
       </section>
       <p className="caption"><Link to="/about">About Ritmo</Link> · <Link to="/privacy">Privacy</Link></p>
     </div>

@@ -1,6 +1,6 @@
 # Garmin Connect Developer Program: application pack for Ritmo Running
 
-Prepared 5 November 2026. Fill in the items marked **[YOU]**, check the live form, then submit.
+Prepared 5 November 2026, updated 7 November 2026 (applicant, contact and app address). Fill in the items marked **[YOU]**, check the live form, then submit.
 
 ## 1. Where things stand
 
@@ -19,16 +19,16 @@ Prepared 5 November 2026. Fill in the items marked **[YOU]**, check the live for
 
 | Item | Status | Notes |
 |---|---|---|
-| Legal entity name | **[YOU]** | Garmin reviews companies, not individuals. Use the company that will own Ritmo, for example TriCore Consult Ltd if that is the one. |
-| Company registration number and country | **[YOU]** | Malta Business Registry number. |
-| Registered address | **[YOU]** | |
-| VAT number | **[YOU]** | If registered. |
+| Legal entity name | Ready | TriCore Consult Ltd. |
+| Company registration number and country | Ready | HE 467194, Cyprus. |
+| Registered address | Ready | Genevis 2, Geneva Court, 3rd floor, Flat/Office 301, Agia Fyla, 3116 Limassol, Cyprus. |
+| VAT number | Ready | CY60108115O (last character is the letter O). |
 | Contact name and role | **[YOU]** | The person Garmin will email. |
-| Business email address | **[YOU]** | Use a company address if possible. Personal webmail is more likely to be questioned. Also set it in `src/lib/contact.ts` so it shows on the public pages. |
-| Product website | Ready | https://ritmo-running.netlify.app/about (public, no login) |
-| Privacy policy URL | Ready | https://ritmo-running.netlify.app/privacy (public). Lists data use, processors, deletion and Garmin-specific commitments. |
-| Terms of service URL | Ready, draft | https://ritmo-running.netlify.app/terms. **Have a lawyer review before launch.** |
-| OAuth redirect URL | Ready to register | `https://ritmo-running.netlify.app/garmin/callback` |
+| Business email address | Ready | info@tricoreconsult.eu (set in `src/lib/contact.ts`, shown on About, Privacy and Terms). |
+| Product website | Ready | https://app.ritmorunning.run/about (public, no login) |
+| Privacy policy URL | Ready | https://app.ritmorunning.run/privacy (public). Lists data use, processors, deletion and Garmin-specific commitments. |
+| Terms of service URL | Ready, draft | https://app.ritmorunning.run/terms. **Have a lawyer review before launch.** |
+| OAuth redirect URL | Ready to register | `https://app.ritmorunning.run/garmin/callback` |
 | Data delivery (push) endpoint | Built after approval | `https://gujuzacfqxbwfpprkgrx.supabase.co/functions/v1/garmin-webhook` |
 | Screenshots | Ready | Use the Today, session feedback, Calendar and Progress screenshots, with sample data clearly labelled. |
 | Demo account for reviewers | Optional | Create a test account with sample data if Garmin asks to try the app. |
@@ -101,7 +101,7 @@ Activities from Garmin devices will show the Garmin device model as required by 
 >
 > Hello Garmin Connect Partner Services,
 >
-> We would like to apply for Starter access to the Garmin Connect Developer Program for Ritmo Running, a running coach app for web, iPhone and Android, developed by **[company name]** in Malta (registration **[number]**).
+> We would like to apply for Starter access to the Garmin Connect Developer Program for Ritmo Running, a running coach app for web, iPhone and Android, developed by TriCore Consult Ltd (Cyprus, registration HE 467194).
 >
 > Ritmo analyses each run and adapts the runner's training plan with clear explanations. With the runner's permission, we would use the Activity API (summaries, details and FIT files) to analyse each new run automatically. We may also later request the Training API, to send planned sessions to the runner's watch.
 >
@@ -109,16 +109,16 @@ Activities from Garmin devices will show the Garmin device model as required by 
 >
 > Data is stored in the EU (Supabase, Frankfurt) with per-user access controls, and runners can export or delete everything at any time.
 >
-> - Website: https://ritmo-running.netlify.app/about
-> - Privacy policy: https://ritmo-running.netlify.app/privacy
-> - Terms: https://ritmo-running.netlify.app/terms
+> - Website: https://app.ritmorunning.run/about
+> - Privacy policy: https://app.ritmorunning.run/privacy
+> - Terms: https://app.ritmorunning.run/terms
 > - Expected users: **[estimate]** in the first 12 months
 >
 > We would be grateful for access, and for confirmation of the current Starter terms, user limits and fees, and any AI-related requirements.
 >
 > Kind regards,
 > **[Name]**, **[Role]**
-> **[Company]** · **[Email]** · **[Phone]**
+> TriCore Consult Ltd · info@tricoreconsult.eu · **[Phone]**
 
 ## Sources
 
