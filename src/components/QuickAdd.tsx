@@ -1,23 +1,26 @@
 // The "+" menu: log a run, add a race, cross-training or a note, or tell Ritmo you are not feeling 100%.
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bike, Flag, Footprints, HeartPulse, StickyNote } from 'lucide-react';
+import { Bandage, Bike, Flag, Footprints, HeartPulse, StickyNote } from 'lucide-react';
+import { BodyCheckinSheet } from './BodyCheckin';
 import { useApp } from '../app/AppContext';
 import { Chips, DateField, Sheet, Stepper } from './inputs';
 import { StatusLine } from './ui';
 import { LogRunSheet } from './LogRun';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
-type View = 'menu' | 'run' | 'cross' | 'note' | 'unwell';
+type View = 'menu' | 'run' | 'cross' | 'note' | 'unwell' | 'hurts';
 
 export function QuickAdd({ open, onClose, start = 'menu' }: { open: boolean; onClose: () => void; start?: View }) {
   const [view, setView] = useState<View>(start);
+  const { hasFlag } = useApp();
   const nav = useNavigate();
   const close = () => { setView(start); onClose(); };
   if (!open) return null;
   if (view === 'run') return <LogRunSheet open onClose={close} />;
   if (view === 'cross' || view === 'note') return <LogOther kind={view} onClose={close} />;
   if (view === 'unwell') return <NotFeeling onClose={close} />;
+  if (view === 'hurts') return <BodyCheckinSheet onClose={close} />;
   const Item = ({ icon, label, sub, onClick }: { icon: React.ReactNode; label: string; sub: string; onClick: () => void }) => (
     <button className="choice" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} onClick={onClick}>
       <span className="row-icon">{icon}</span><span className="stack-sm" style={{ gap: 0 }}><span className="label">{label}</span><span className="caption">{sub}</span></span>
@@ -30,6 +33,7 @@ export function QuickAdd({ open, onClose, start = 'menu' }: { open: boolean; onC
         <Item icon={<Bike size={20} strokeWidth={2} aria-hidden="true" />} label="Cross-training" sub="Bike, swim, gym, elliptical" onClick={() => setView('cross')} />
         <Item icon={<StickyNote size={20} strokeWidth={2} aria-hidden="true" />} label="Note" sub="Anything worth remembering" onClick={() => setView('note')} />
         <Item icon={<HeartPulse size={20} strokeWidth={2} aria-hidden="true" />} label="Not feeling 100%" sub="Ill, tired, sore or travelling" onClick={() => setView('unwell')} />
+        {hasFlag('body') && <Item icon={<Bandage size={20} strokeWidth={2} aria-hidden="true" />} label="Something hurts" sub="A niggle, pain or injury" onClick={() => setView('hurts')} />}
         <Item icon={<Flag size={20} strokeWidth={2} aria-hidden="true" />} label="Add a race" sub="Your goal race, a tune-up or a fun run" onClick={() => { close(); nav('/race/new'); }} />
       </div>
     </Sheet>

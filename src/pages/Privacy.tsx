@@ -21,12 +21,14 @@ export default function Privacy() {
         <ul className="bullets">
           <li><strong>Your email and password</strong>: to create your account and keep your data private to you. Everyone needs an account to use Ritmo. Ritmo is for adults aged 18 and over.</li>
           <li><strong>Your name and date of birth</strong>: to talk to you and to apply the age rule. Your date of birth is never shown to anyone.</li>
-          <li><strong>Your profile picture</strong> (optional): shown only to you in the app. It is cropped and re-saved on your device before upload, which removes location and other hidden details, and is stored privately. It is never sent to the AI coach or used for anything else.</li>
+          <li><strong>Your profile picture</strong> (optional): shown only to you in the app, also if you use the Hub (other runners see your initials). It is cropped and re-saved on your device before upload, which removes location and other hidden details, and is stored privately. It is never sent to the AI coach or used for anything else.</li>
           <li><strong>Health check</strong>: Ritmo keeps only the outcome (whether you were advised to check with a doctor, and when you confirmed), not your individual answers.</li>
           <li><strong>Your runs</strong> (distance, time, pace, heart rate, cadence, elevation, laps, route): to analyse sessions, estimate fitness and plan training.</li>
+          <li><strong>Body check-ins and AI injury chat</strong> (pain, where and when it hurts, warning signs, return-to-run steps): to adjust your plan and give general guidance. This is health data covered by your health-data permission. It is never shown on the Hub or in share images. The Body AI chat is optional and can be switched off separately from the Coach AI; if it is on, your question and a summary of your training load and logged pain are sent to the AI model for that answer only.</li>
           <li><strong>Health information</strong> (heart rate, injuries, pain you log and how runs felt): to adjust your training and keep you safe. Ritmo asks for your explicit permission for this at the start of setup, and records when you gave it.</li>
           <li><strong>Goals, races and the days you can train</strong>: to build and adapt your plan.</li>
           <li><strong>Coach chats</strong>: so the coach can follow the conversation.</li>
+          <li><strong>Screenshots of runs</strong> (optional): stored privately so you can see them with the run. If you ask Ritmo to read the laps, they are sent to the AI model for that only.</li>
         </ul>
         <p>Your data is stored in Ritmo's database in the EU and protected so that only your account can read or change it. It is also kept on your device for speed, and removed from the device when you log out. Files you upload are read on your device.</p>
         <p>The AI coach is optional. Only if you agree, your question and a summary of the relevant training numbers are sent to an AI model to write the answer. Your email, profile picture, date of birth and health check are never sent. To keep costs fair, each person can get up to 30 AI answers an hour and 100 a day; after that the built-in coach answers. Your data is never sold and never used to train AI models. Garmin data is never used to train AI models.</p>
@@ -36,7 +38,9 @@ export default function Privacy() {
           <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
           <li><strong>Anthropic</strong> (the AI model that writes coach answers; receives only the summary needed for your question, at your request, and does not use it for training).</li>
         </ul>
-        <p>Data from connected services such as Garmin Connect is used only to give you your own analysis and coaching. It is never sold, shared with other users or used to train AI models. Disconnecting a service stops new data arriving; deleting your account removes everything.</p>
+        <h3 className="label">Sharing runs on the Hub (optional, off unless you turn it on)</h3>
+        <p>The Hub lets you share runs with other runners. It stays off until you agree to it separately, and Ritmo records when you did. Nothing is ever posted automatically: you choose each run, who can see it (everyone, your followers, or only you), and whether to show the route and heart rate. Routes on the Hub leave out the first and last part, so your start and finish (often your home) are not shown. Other runners see the name you choose for the Hub, never your email, date of birth, health check or how runs felt. Pain, injuries and Body check-ins are never shown on the Hub. You can delete a post at any time, and turning sharing off hides your posts.</p>
+        <p>Data from connected services such as Garmin Connect is used only to give you your own analysis and coaching, and on the Hub only for runs you choose to post. It is never sold or used to train AI models. Disconnecting a service stops new data arriving; deleting your account removes everything.</p>
         <p className="caption">Ritmo gives coaching guidance, not medical advice. See a doctor or physio about ongoing pain, and get medical help straight away for chest pain, dizziness or fainting.</p>
       </section>
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Send, Sparkles } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { Segmented } from '../components/ui';
 import { FALLBACK_TEXT } from '../coach/coach';
 
 /** Answers written before Ritmo loaded every run (review #2 fix) may quote wrong totals */
@@ -13,13 +14,16 @@ import { Sheet } from '../components/inputs';
 
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal, hasFlag, updateBody } = useApp();
   const ai = data.profile.consents?.aiCoach;
-  // Chats with the sample runner stay with the sample runner
-  const chat = data.coach.filter((m) => (m.mode ?? 'real') === (data.mode === 'sample' ? 'sample' : 'real'));
-  const [pending, setPending] = useState<string>();
-  const SUGGESTIONS = suggestions(todaySession, data.activities.length > 0);
   const [params, setParams] = useSearchParams();
+  // Body mode (flagged): injury and recovery chat with its own safety rules, kept apart from the coach chat
+  const [topic, setTopic] = useState<'coach' | 'body'>(params.get('mode') === 'body' && hasFlag('body') ? 'body' : 'coach');
+  const body = topic === 'body';
+  // Chats with the sample runner stay with the sample runner
+  const chat = data.coach.filter((m) => (m.mode ?? 'real') === (data.mode === 'sample' ? 'sample' : 'real') && (body ? m.topic === 'body' : m.topic !== 'body'));
+  const [pending, setPending] = useState<string>();
+  const SUGGESTIONS = body ? ['Can I run with sore calves after intervals?', 'My knee hurts on downhills, what should I change?', 'How do I come back after 2 weeks off?'] : suggestions(todaySession, data.activities.length > 0);
   const [text, setText] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const asked = useRef(false);
@@ -36,17 +40,24 @@ export default function Coach() {
     if (!q.trim() || coachBusy) return;
     setText('');
     if (!ai && data.mode !== 'sample') { setPending(q.trim()); return; }
-    sendCoach(q.trim());
+    sendCoach(q.trim(), undefined, body ? 'body' : undefined);
   };
   const decide = (granted: boolean) => {
     updateProfile({ consents: { ...data.profile.consents, aiCoach: { granted, at: new Date().toISOString() } } });
     const q = pending; setPending(undefined);
-    if (q) sendCoach(q, granted);
+    if (q) sendCoach(q, granted, body ? 'body' : undefined);
   };
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Coach" eyebrow="Answers from your own runs and plan. Coaching guidance, not medical advice." right={chat.length > 0 ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
+      <AppHeader title={body ? 'Body' : 'Coach'} eyebrow={body ? 'Injury and recovery support from your training. General guidance, not medical advice.' : 'Answers from your own runs and plan. Coaching guidance, not medical advice.'} right={chat.length > 0 && !body ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
+      {hasFlag('body') && <Segmented<'coach' | 'body'> label="Chat" value={topic} onChange={setTopic} options={[{ value: 'coach', label: 'Coach' }, { value: 'body', label: 'Body' }]} />}
+      {body && (
+        <div className="card stack-sm">
+          <p className="caption">Ritmo gives general guidance, not medical advice, and never diagnoses. Warning signs (pain at night, a pop, swelling, numbness, a bony spot) always get "stop and get checked" first.</p>
+          <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={data.profile.body?.aiChat !== false} onChange={(e) => updateBody({ aiChat: e.target.checked })} /> Use AI for Body answers (separate from the Coach AI setting)</label>
+        </div>
+      )}
 
       <div className="chat" aria-live="polite">
         {chat.length === 0 && (

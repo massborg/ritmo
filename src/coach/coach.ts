@@ -278,6 +278,30 @@ export async function ask(q: string, c: CoachContext, history: { role: string; t
 
 export { pace };
 
+/** Body mode: injury and recovery questions. Red flags (rules) are checked by the caller before this runs.
+ *  The built-in answer gives general load guidance from the runner's data; the AI, when on, may only reword
+ *  and extend it under a separate safety prompt. Always ends with when to see a professional. */
+export async function askBody(q: string, facts: string[], history: { role: string; text: string }[], useAi: boolean): Promise<{ text: string; facts: string[]; source: 'ai' | 'local'; fallback?: AiFallback }> {
+  const lower = q.toLowerCase();
+  const tip = /sore|doms|stiff/.test(lower) && /interval|session|race|long/.test(lower)
+    ? 'Muscle soreness a day or two after a hard session is normal. An easy, short run or a rest day is fine if the soreness eases as you warm up and stays below 3/10; skip it if you start to limp or it gets worse while running.'
+    : /downhill|knee/.test(lower) ? 'Knees often complain on long downhills. For now choose flat routes, shorten your stride on any descent, keep the long run shorter, and add the knee exercises in Body (step-downs, wall sits) if they do not hurt.'
+    : /come back|coming back|time off|weeks off|return/.test(lower) ? 'After time off, start with run/walk and build over a couple of weeks: Ritmo\'s return-to-run steps each unlock only when pain stays at 2/10 or lower during the run and the next morning.'
+    : 'Pain that eases as you warm up and stays at 3/10 or below usually allows easy running; pain that grows while you run, changes how you run, or lasts into the next day means rest or cross-training instead. Log a check-in so Ritmo adjusts your plan.';
+  const pro = 'See a physio or doctor if it is not clearly better within a week, keeps coming back, or changes how you run, and straight away for swelling, numbness, pain at night or one bony spot that hurts to press.';
+  const local = `${tip} ${pro}`;
+  if (!supabase || !useAi) return { text: local, facts, source: 'local' };
+  try {
+    const { data, error } = await supabase.functions.invoke('coach', { body: { mode: 'body', question: q, facts, draft: local, history: history.slice(-6), today: new Date().toISOString().slice(0, 10) } });
+    if (error || !data?.text) {
+      let code: string | undefined;
+      try { code = ((await (error as { context?: Response } | null)?.context?.clone().json()) as { error?: string } | undefined)?.error; } catch { /* */ }
+      return { text: local, facts, source: 'local', fallback: code === 'not_configured' ? 'not_configured' : code === 'rate_limited' ? 'limit' : 'error' };
+    }
+    return { text: data.text as string, facts, source: 'ai' };
+  } catch { return { text: local, facts, source: 'local', fallback: 'error' }; }
+}
+
 /** Suggested questions that match today's session and what data exists. */
 export function suggestions(s: PlannedSession | undefined, hasRuns: boolean): string[] {
   const why = !s ? 'What should I do today?'

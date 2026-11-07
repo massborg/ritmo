@@ -8,7 +8,8 @@ export type SourceKind =
   | 'apple_health'
   | 'health_connect'
   | 'strava'
-  | 'coros';
+  | 'coros'
+  | 'ritmo_gps'; // recorded with the Run tab
 
 export type SessionType =
   | 'easy'
@@ -148,6 +149,8 @@ export interface Profile {
   adjust?: PlanAdjust;
   log?: LogEntry[];
   shoes?: Shoe[];
+  /** Body check-ins (pain and niggles) and return-to-run progress; never shown on the Hub */
+  body?: import('../training/body').BodyState;
 }
 
 export interface TrainingSettings {
@@ -187,6 +190,8 @@ export interface Consents {
   healthData?: { granted: boolean; at: string; version: string };
   /** Optional: send summaries of training data to the AI coach service */
   aiCoach?: { granted: boolean; at: string };
+  /** Optional, off by default: share runs the runner chooses with other runners on the Hub */
+  hubSharing?: { granted: boolean; at: string; version: string };
 }
 
 export type BackgroundLevel = 'new' | 'returning' | 'sometimes' | 'regular' | 'racer';
@@ -291,6 +296,8 @@ export interface CoachMessage {
   facts?: string[]; // data the answer is grounded on
   /** Chats with sample data are kept apart from the runner's own */
   mode?: 'sample' | 'real';
+  /** Body mode (injury and recovery chat), kept apart from the coach chat */
+  topic?: 'body';
   /** A plan change the coach offered; applied once the runner confirms */
   proposal?: { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string; applied?: boolean };
   /** Who wrote the answer: the AI coach, or Ritmo's built-in coach */
