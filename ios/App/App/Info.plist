@@ -10,6 +10,10 @@
 	<string>Ritmo reads your running workouts and heart rate to analyse each run, track your training and adapt your plan.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Ritmo does not write to Apple Health. This is required by the health framework.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Ritmo uses the camera only when you choose to take a profile picture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ritmo opens your photos only when you choose a profile picture or a run screenshot.</string>
 	<key>CFBundleDisplayName</key>
         <string>Ritmo</string>
 	<key>CFBundleExecutable</key>
