@@ -253,7 +253,7 @@ function createMock() {
       state.strava = state.strava ?? { connected: new Set(), states: new Map(), backfill: [], calls: [] };
       const b = req.postDataJSON() ?? {};
       state.strava.calls.push(b.action);
-      if (!state.tables.feature_flags.some((f) => f.user_id === u.id && f.flag === 'strava')) return { status: 403, body: { error: 'not_available', message: 'Strava sync is not available on your account yet.' } };
+      // Open to every signed-in runner, as in the real function
       if (b.action === 'start') {
         const st = 'state-' + Math.random().toString(16).slice(2);
         state.strava.states.set(st, u.id);

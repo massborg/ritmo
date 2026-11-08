@@ -33,10 +33,10 @@ async function account(mock, ctx, email, flagged) {
   await ctx.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
   await mock.install(ctx, SUPA);
 
-  // Not flagged: no Run tab
+  // An account without the flag: the Run tab, Quick run and recording are open to everyone
   const other = await account(mock, ctx, 'norun@test.ritmo', false);
   await other.page.goto(`${APP}/`); await other.page.waitForTimeout(1000);
-  check(await other.page.locator('.tabbar a[href="/run"]').count() === 0, 'accounts without the flag see no Run tab');
+  check(await other.page.locator('.tabbar a[href="/run"]').count() === 1, 'every runner has the Run tab (no flag needed)');
   const fitO = other.page.getByRole('button', { name: /Train 6 days a week/ });
   if (await fitO.isVisible().catch(() => false)) { await fitO.click(); await other.page.waitForTimeout(800); }
   check(await other.page.locator('a.quick-run').isVisible(), 'Quick run is shown to every runner, not only flagged accounts');

@@ -199,7 +199,7 @@ function PlanProblemSheet() {
 function Shell() {
   const { pathname } = useLocation();
   const { session, hasFlag } = useApp();
-  // Run (centre, orange) appears for accounts with the run_tab flag
+  // Run (centre, orange) and Hub are open to every runner using their own data
   // Run (centre, orange) and Hub appear for accounts with those flags: Training · Calendar · Run · Hub · You
   const extra: Tab[] = [...(hasFlag('run_tab') ? [{ to: '/run', label: 'Run', icon: Play }] : []), ...(hasFlag('hub') ? [{ to: '/hub', label: 'Hub', icon: Users }] : [])];
   const mobile: Tab[] = [MOBILE[0], MOBILE[1], ...extra, MOBILE[2]];

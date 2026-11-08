@@ -38,9 +38,9 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
 
   // Not flagged yet: no Hub
   await page.goto(`${APP}/`); await page.waitForTimeout(1200);
-  check(await page.locator('.tabbar a[href="/hub"]').count() === 0, 'without the flag there is no Hub tab');
+  check(await page.locator('.tabbar a[href="/hub"]').count() === 1, 'every runner has the Hub tab (no flag needed)');
   await page.goto(`${APP}/hub`); await page.waitForTimeout(500);
-  check(await page.getByText('Not available yet').isVisible(), 'and /hub is not available');
+  check(await page.getByText('Not available yet').count() === 0 && await page.getByText('Available with your own data').count() === 0, 'and /hub opens for every runner');
 
   // Flag on: opt-in first, sharing is off until agreed
   mock.state.tables.feature_flags.push({ user_id: uid, flag: 'hub' });

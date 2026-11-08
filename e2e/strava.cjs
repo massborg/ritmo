@@ -1,4 +1,4 @@
-// Strava sync (flagged): accounts without the flag see "Coming soon"; a flagged runner connects (round trip through
+// Strava sync (open to every runner): a runner connects (round trip through
 // the callback page), the last 30 days arrive and are merged (rides ignored), each Strava run says "from Strava" with
 // a "View on Strava" link and cannot be posted to the Hub or shared as an image, the AI coach is told nothing derived
 // from Strava runs, a run deleted on Strava is removed, and Disconnect revokes access.
@@ -57,7 +57,7 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
 
   // ---- Without the flag ----
   await page.goto(`${APP}/profile/data`); await stravaRow().waitFor({ timeout: 15000 });
-  check(await stravaRow().getByText('Coming soon').isVisible() && await stravaRow().getByRole('button', { name: 'Connect with Strava' }).count() === 0, 'without the flag: Strava shows "Coming soon", no connect button');
+  check(await stravaRow().getByText('Coming soon').count() === 0 && await stravaRow().getByRole('button', { name: 'Connect with Strava' }).count() === 1, 'every runner can connect Strava (no flag needed)');
 
   // ---- Flagged: connect (round trip through the callback page) ----
   mock.state.tables.feature_flags.push({ user_id: uid, flag: 'strava' }, { user_id: uid, flag: 'hub' }, { user_id: uid, flag: 'share_cards' });

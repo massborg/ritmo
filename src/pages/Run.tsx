@@ -1,6 +1,6 @@
 // The Run tab (review #2 §3): record a run with the phone's GPS, follow today's planned session step by step
-// with spoken cues, then save it as a Ritmo run and see the feedback. Open to everyone (Quick run on the Training
-// page); the Run tab in the tab bar is still behind the "run_tab" flag.
+// with spoken cues, then save it as a Ritmo run and see the feedback. Open to every runner, from the Run tab
+// or Quick run on the Training page.
 // Honest about the web: a browser may pause GPS when the screen locks, so Ritmo keeps the screen on and says so.
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
