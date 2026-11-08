@@ -1,5 +1,5 @@
 // Profile picture: take or choose a photo, crop it to a circle with a live preview, then save.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Camera, ImagePlus, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
@@ -24,8 +24,6 @@ export function AvatarEditor({ open, onClose }: { open: boolean; onClose: () => 
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string>();
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | undefined>(undefined);
-  const pick = useRef<HTMLInputElement>(null);
-  const cam = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!open) { setImg(undefined); setErr(undefined); setPreview(undefined); setCrop({ x: 0, y: 0, scale: 1 }); } }, [open]);
   // live preview of the saved result
@@ -36,6 +34,8 @@ export function AvatarEditor({ open, onClose }: { open: boolean; onClose: () => 
     return () => { clearTimeout(t); if (url) URL.revokeObjectURL(url); };
   }, [img, crop]);
 
+  // Cleared after each pick, so choosing the same photo again still works
+  const onInput = (e: ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; e.target.value = ''; void onFile(f); };
   const onFile = async (f?: File) => {
     setErr(undefined);
     if (!f) return;
@@ -64,14 +64,19 @@ export function AvatarEditor({ open, onClose }: { open: boolean; onClose: () => 
       footer={img
         ? <div className="row"><button className="btn btn-ghost" onClick={() => setImg(undefined)}>Choose another</button><button className="btn btn-primary" style={{ flex: 1 }} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save picture'}</button></div>
         : null}>
-      <input ref={pick} type="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-      <input ref={cam} type="file" accept="image/*" capture="user" hidden onChange={(e) => onFile(e.target.files?.[0])} />
       {!img ? (
         <div className="stack">
           <p className="muted">Optional. Your picture is private to you for now, and is never sent to the AI coach or analytics tools. Location and other details stored in the photo are removed before upload.</p>
           <div className="row wrap">
-            <button className="btn btn-primary" onClick={() => cam.current?.click()} disabled={busy}><Camera size={18} strokeWidth={2} aria-hidden="true" />Take a photo</button>
-            <button className="btn" onClick={() => pick.current?.click()} disabled={busy}><ImagePlus size={18} strokeWidth={2} aria-hidden="true" />Choose a photo</button>
+            {/* The browser's own file controls, styled as buttons: Safari on iPhone can ignore a hidden picker opened from code */}
+            <label className={`btn btn-primary file-btn${busy ? ' is-disabled' : ''}`}>
+              <input type="file" accept="image/*" capture="user" className="sr-only" disabled={busy} onChange={onInput} />
+              <Camera size={18} strokeWidth={2} aria-hidden="true" />Take a photo
+            </label>
+            <label className={`btn file-btn${busy ? ' is-disabled' : ''}`}>
+              <input type="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" className="sr-only" disabled={busy} onChange={onInput} />
+              <ImagePlus size={18} strokeWidth={2} aria-hidden="true" />Choose a photo
+            </label>
           </div>
           <p className="caption">JPG, PNG or HEIC, up to 10 MB.</p>
           {data.profile.avatar && (
