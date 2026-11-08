@@ -647,3 +647,16 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .run-laps li:first-child { border-top: 0; }
 .run-laps li.current { font-weight: 700; }
 
+
+/* ---------- Voice picker (Run settings) ---------- */
+.voice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.voice-row { display: flex; align-items: center; gap: 4px; border: 1px solid var(--hairline); border-radius: var(--r-card); background: var(--surface-raised); }
+.voice-row.on { border-color: var(--quick-run); box-shadow: 0 0 0 1px var(--quick-run) inset; }
+.voice-pick { flex: 1; display: flex; align-items: center; gap: var(--s3); min-height: 56px; padding: 8px var(--s3); background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--r-card); }
+.voice-check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; flex: none; }
+.voice-row.on .voice-check { background: var(--quick-run); border-color: var(--quick-run); color: var(--on-quick-run); }
+.voice-name { font-weight: 600; }
+.voice-play { margin-right: 6px; color: var(--quick-run); }
+.voice-play .pulse { animation: voice-pulse .8s ease-in-out infinite alternate; }
+@keyframes voice-pulse { from { opacity: 1; } to { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .voice-play .pulse { animation: none; } }

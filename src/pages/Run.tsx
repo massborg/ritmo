@@ -14,20 +14,19 @@ import { Segmented, StatusLine } from '../components/ui';
 import { dist, duration, pace as fmtPace, paceRange, ymd } from '../lib/format';
 import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
+import { speak, type SpeakOptions } from '../run/voice';
+import { VoicePicker } from '../components/VoicePicker';
 import type { Lap } from '../lib/types';
 
 type Phase = 'ready' | 'countdown' | 'running' | 'summary';
-interface Settings { cues: 'km' | 'steps' | 'off'; countdown: 3 | 5 | 10; autoPause: boolean; screenOn: boolean }
-const DEFAULTS: Settings = { cues: 'steps', countdown: 5, autoPause: true, screenOn: true };
+interface Settings { cues: 'km' | 'steps' | 'off'; countdown: 3 | 5 | 10; autoPause: boolean; screenOn: boolean; voiceURI?: string; rate: number }
+const DEFAULTS: Settings = { cues: 'steps', countdown: 5, autoPause: true, screenOn: true, rate: 1 };
 interface Saved { track: TrackState; sessionId?: string; stepIdx: number; stepStart: { s: number; m: number }; savedAt: number }
 
 const spoken = (sec: number) => { const m = Math.floor(sec / 60), x = Math.round(sec % 60); return `${m ? `${m} minute${m > 1 ? 's' : ''} ` : ''}${x} second${x === 1 ? '' : 's'}`; };
-const say = (text: string, on: boolean) => {
-  if (!on || !('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-GB'; u.rate = 1.05;
-  window.speechSynthesis.speak(u);
-};
+// The voice and speed chosen in Settings (kept here so every cue uses them)
+let voiceOpts: SpeakOptions = {};
+const say = (text: string, on: boolean) => { if (on) speak(text, voiceOpts); };
 
 export default function RunPage() {
   const { plan, today, data, saveRecordedRun, session } = useApp();
@@ -59,7 +58,7 @@ export default function RunPage() {
   const steps: WorkStep[] = sessionPlan ? stepsFor(sessionPlan) : [];
   const cues = settings.cues !== 'off';
 
-  useEffect(() => { try { localStorage.setItem('ritmo:run:settings', JSON.stringify(settings)); } catch { /* ignore */ } }, [settings]);
+  useEffect(() => { try { localStorage.setItem('ritmo:run:settings', JSON.stringify(settings)); } catch { /* ignore */ } voiceOpts = { voiceURI: settings.voiceURI, rate: settings.rate }; }, [settings]);
   // An unfinished run saved on this device (the app closed or crashed mid-run)
   useEffect(() => { get(key).then((v) => { if (v) setUnfinished(v as Saved); }).catch(() => {}); }, [key]);
 
@@ -272,6 +271,7 @@ export default function RunPage() {
         <div className="stack" style={{ marginTop: 'var(--s3)' }}>
           <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: 'Every step and km' }, { value: 'km', label: 'Every km' }, { value: 'off', label: 'Off' }]} />
           <Chips<Settings['countdown']> label="Countdown" value={settings.countdown} onChange={(c) => setSettings((x) => ({ ...x, countdown: c }))} options={[3, 5, 10].map((v) => ({ value: v as Settings['countdown'], label: `${v} s` }))} />
+          <VoicePicker voiceURI={settings.voiceURI} rate={settings.rate} onChange={(v) => setSettings((x) => ({ ...x, ...v }))} />
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.autoPause} onChange={(e) => setSettings((x) => ({ ...x, autoPause: e.target.checked }))} /> Pause automatically when I stop</label>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.screenOn} onChange={(e) => setSettings((x) => ({ ...x, screenOn: e.target.checked }))} /> Keep the screen on</label>
         </div>
