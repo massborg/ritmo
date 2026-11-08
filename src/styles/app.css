@@ -638,3 +638,12 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .quick-run-text span { font-size: 18px; font-weight: 700; }
 .quick-run-text small { font-size: 14px; font-weight: 500; opacity: 0.9; }
 
+/* ---------- Run: lap confirmation and lap list ---------- */
+.run-lap-flash { background: var(--quick-run); color: var(--on-quick-run); border-radius: var(--r-card); padding: var(--s3) var(--s4); font-weight: 700; font-size: 18px; text-align: center; animation: lap-pop .25s ease-out; }
+@keyframes lap-pop { from { transform: scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .run-lap-flash { animation: none; } }
+.run-laps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.run-laps li { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s4); padding: 6px 0; border-top: 1px solid var(--hairline); font-variant-numeric: tabular-nums; }
+.run-laps li:first-child { border-top: 0; }
+.run-laps li.current { font-weight: 700; }
+

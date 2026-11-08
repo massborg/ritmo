@@ -12,7 +12,8 @@ import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
 import { Segmented, StatusLine } from '../components/ui';
 import { dist, duration, pace as fmtPace, paceRange, ymd } from '../lib/format';
-import { addFix, addLap, avgPace, currentPace, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
+import { tapHaptic } from '../native';
 import type { Lap } from '../lib/types';
 
 type Phase = 'ready' | 'countdown' | 'running' | 'summary';
@@ -20,6 +21,7 @@ interface Settings { cues: 'km' | 'steps' | 'off'; countdown: 3 | 5 | 10; autoPa
 const DEFAULTS: Settings = { cues: 'steps', countdown: 5, autoPause: true, screenOn: true };
 interface Saved { track: TrackState; sessionId?: string; stepIdx: number; stepStart: { s: number; m: number }; savedAt: number }
 
+const spoken = (sec: number) => { const m = Math.floor(sec / 60), x = Math.round(sec % 60); return `${m ? `${m} minute${m > 1 ? 's' : ''} ` : ''}${x} second${x === 1 ? '' : 's'}`; };
 const say = (text: string, on: boolean) => {
   if (!on || !('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
@@ -144,14 +146,25 @@ export default function RunPage() {
   });
   const cancelQuick = () => { setAutoStart(false); setParams({}, { replace: true }); };
   const togglePause = () => { const t = trackRef.current; if (!t) return; const n = setPaused(t, !t.paused); trackRef.current = n; setTrack(n); say(n.paused ? 'Paused.' : 'Resumed.', cues); };
+  // Lap: a clear sign it worked (buzz, a banner with the split, spoken split) and a list of laps on screen
+  const [lapFlash, setLapFlash] = useState<{ n: number; s: number; m: number }>();
+  const lapFlashTimer = useRef<number | undefined>(undefined);
   const lap = () => {
     const t = trackRef.current; if (!t) return;
-    const n = addLap(t); trackRef.current = n; setTrack(n);
+    const now = Date.now();
+    const done = lapSplits(t, now).slice(-1)[0];
+    const n = addLap(t, now); trackRef.current = n; setTrack(n);
+    try { navigator.vibrate?.(80); } catch { /* not supported */ }
+    void tapHaptic();
+    setLapFlash(done); window.clearTimeout(lapFlashTimer.current); lapFlashTimer.current = window.setTimeout(() => setLapFlash(undefined), 4000);
     if (steps.length && stepIdxRef.current < steps.length - 1) { const ni = stepIdxRef.current + 1; stepIdxRef.current = ni; setStepIdx(ni); stepStart.current = { s: n.movingS, m: n.distanceM }; say(steps[ni].label, cues); }
+    else say(`Lap ${done.n}. ${dist(done.m, U, 2).replace(/ (km|mi)$/, (x) => (x.trim() === 'km' ? ' kilometres' : ' miles'))} in ${spoken(done.s)}.`, cues);
   };
-  const finish = () => { setPhase('summary'); say('Run finished.', cues); };
+  // Finishing stops the clock where it is; "Keep going" carries on from there
+  const finish = () => { const t = trackRef.current; if (t) { const n = setPaused(t, true); trackRef.current = n; setTrack(n); } setPhase('summary'); say('Run finished.', cues); };
+  const keepGoing = () => { const t = trackRef.current; if (t) { const n = setPaused(t, false); trackRef.current = n; setTrack(n); } setPhase('running'); };
   const lapsOf = (t: TrackState): Lap[] => {
-    const marks = [...t.laps, { atS: t.movingS, atM: t.distanceM }];
+    const marks = [...t.laps, { atS: Math.max(t.movingS, t.laps[t.laps.length - 1]?.atS ?? 0), atM: t.distanceM }];
     let ps = 0, pm = 0;
     return t.laps.length ? marks.map((m, i) => { const l = { index: i + 1, startS: ps, durationS: m.atS - ps, distanceM: m.atM - pm }; ps = m.atS; pm = m.atM; return l; }) : [];
   };
@@ -180,11 +193,12 @@ export default function RunPage() {
   if (phase === 'running' && t) return (
     <div className="run-live" aria-live="off">
       <div className="run-stats">
-        <div className="run-big"><span className="caption">Time</span><span className="stat-xl">{duration(Math.round(t.movingS))}</span></div>
+        <div className="run-big"><span className="caption">Time</span><span className="stat-xl" data-testid="run-clock">{duration(Math.floor(clockS(t, Date.now())))}</span></div>
         <div className="run-big"><span className="caption">Distance</span><span className="stat-xl">{dist(t.distanceM, U, 2).split(' ')[0]}<small> {U}</small></span></div>
         <div><span className="caption">Pace now</span><span className="stat">{cp ? fmtPace(cp, U) : '–'}</span></div>
         <div><span className="caption">Average</span><span className="stat">{ap ? fmtPace(ap, U) : '–'}</span></div>
       </div>
+      {lapFlash && <div className="run-lap-flash" role="status">Lap {lapFlash.n}: {dist(lapFlash.m, U, 2)} in {duration(Math.round(lapFlash.s))}</div>}
       {(t.paused || t.autoPaused) && <StatusLine kind="info">{t.paused ? 'Paused' : 'Paused automatically: you stopped'}</StatusLine>}
       {st && (
         <section className={`card stack-sm run-step${gauge ? ` gauge-${gauge}` : ''}`} aria-label="Current step">
@@ -196,11 +210,19 @@ export default function RunPage() {
       )}
       <RouteLine track={t} />
       <div className="run-controls">
-        <button className="btn btn-block" onClick={lap} disabled={locked}><Flag size={20} strokeWidth={2} aria-hidden="true" />Lap</button>
+        <button className="btn btn-block" onClick={lap} disabled={locked}><Flag size={20} strokeWidth={2} aria-hidden="true" />Lap {t.laps.length + 1}</button>
         <button className="btn btn-primary btn-block run-pause" onClick={togglePause} disabled={locked}>{t.paused ? <><Play size={22} strokeWidth={2} aria-hidden="true" />Resume</> : <><Pause size={22} strokeWidth={2} aria-hidden="true" />Pause</>}</button>
         <button className={`btn btn-block${holding ? ' holding' : ''}`} disabled={locked} onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} aria-label="Hold to finish the run"><Square size={20} strokeWidth={2} aria-hidden="true" />Hold to finish</button>
         <button className="btn btn-ghost btn-block" onClick={() => setLocked((l) => !l)} aria-pressed={locked}>{locked ? <><Unlock size={20} strokeWidth={2} aria-hidden="true" />Unlock</> : <><Lock size={20} strokeWidth={2} aria-hidden="true" />Lock</>}</button>
       </div>
+      {t.laps.length > 0 && (
+        <section className="card stack-sm" aria-label="Laps">
+          <span className="label">Laps</span>
+          <ol className="run-laps">{lapSplits(t, Date.now()).slice().reverse().map((x, i) => (
+            <li key={x.n} className={i === 0 ? 'current' : undefined}><span>{i === 0 ? `Lap ${x.n} (now)` : `Lap ${x.n}`}</span><span>{dist(x.m, U, 2)}</span><span>{duration(Math.round(x.s))}</span></li>
+          ))}</ol>
+        </section>
+      )}
       <p className="caption">Keep Ritmo open with the screen on: phones can pause GPS when the screen locks or another app is in front.</p>
     </div>
   );
@@ -216,7 +238,7 @@ export default function RunPage() {
       <RouteLine track={t} />
       <div className="row wrap">
         <button className="btn btn-primary" onClick={() => save(t, sessionPlan?.id)}>Save and see feedback</button>
-        <button className="btn" onClick={() => setPhase('running')}>Keep going</button>
+        <button className="btn" onClick={keepGoing}>Keep going</button>
         <button className="btn btn-ghost" onClick={discard}>Discard</button>
       </div>
     </div>
