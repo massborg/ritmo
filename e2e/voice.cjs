@@ -70,6 +70,17 @@ const stub = () => {
   await page.reload(); await page.locator('summary', { hasText: 'Settings' }).click();
   check(await page.getByRole('list', { name: 'Voices' }).locator('.voice-row.on .voice-name').innerText() === 'Samantha', 'after reopening, Samantha is still chosen');
 
+  // Profile has the same choice, easy to find before a Quick run
+  await page.goto(`${APP}/profile`);
+  const card = page.locator('section', { has: page.getByRole('heading', { name: 'Voice for run cues' }) });
+  check(await card.waitFor({ timeout: 8000 }).then(() => true, () => false), 'Profile has a "Voice for run cues" card');
+  await card.locator('.voice-row.on').waitFor();
+  check(await card.locator('.voice-row.on .voice-name').innerText() === 'Samantha', 'it shows the voice chosen in Run settings');
+  await card.locator('.voice-pick', { has: page.locator('.voice-name', { hasText: /^Serena$/ }) }).click();
+  check((await page.evaluate(() => JSON.parse(localStorage.getItem('ritmo:run:settings')))).voiceURI === 'com.apple.voice.premium.en-GB.Serena', 'choosing a voice in Profile changes the voice used on runs');
+  await card.locator('.voice-pick', { has: page.locator('.voice-name', { hasText: /^Samantha$/ }) }).click();
+  await page.goto(`${APP}/run`);
+
   // The run's spoken countdown uses the chosen voice and speed
   await page.evaluate(() => { window.__spoken.length = 0; });
   await page.getByRole('radio', { name: 'Free run' }).or(page.getByRole('button', { name: 'Free run' })).first().click().catch(() => {});

@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Flag, Lock, Pause, Play, Square, Unlock } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
-import { fitView, mapsOn, setMapsOn, TILE } from '../lib/maptiles';
+import { fitView, mapsOn, prefetchTiles, setMapsOn, TILE } from '../lib/maptiles';
 import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
 import { Segmented, StatusLine } from '../components/ui';
@@ -67,6 +67,8 @@ export default function RunPage() {
     if (!('geolocation' in navigator)) { setGpsErr('This device has no GPS that Ritmo can use.'); return; }
     const id = navigator.geolocation.watchPosition((p) => {
       setAcc(p.coords.accuracy); setGpsErr(undefined);
+      // While waiting to start, load the map around here so it is ready the moment the run begins
+      if (p.coords.accuracy <= 100) prefetchTiles(p.coords.latitude, p.coords.longitude);
       const t = trackRef.current;
       if (!t) return;
       const next = addFix(t, { t: p.timestamp, lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, alt: p.coords.altitude, speed: p.coords.speed }, settings.autoPause);
