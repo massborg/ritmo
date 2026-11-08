@@ -2,7 +2,7 @@
 // with spoken cues, then save it as a Ritmo run and see the feedback. Behind the "run_tab" flag.
 // Honest about the web: a browser may pause GPS when the screen locks, so Ritmo keeps the screen on and says so.
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Flag, Lock, Pause, Play, Square, Unlock } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
@@ -32,7 +32,11 @@ export default function RunPage() {
   const U = data.profile.units;
   const key = `ritmo:run:active:${session?.user.id ?? 'anon'}`;
   const todays = plan?.sessions.find((s) => s.date === ymd(today) && s.type !== 'rest' && s.status !== 'done');
-  const [what, setWhat] = useState<'planned' | 'free'>(todays ? 'planned' : 'free');
+  // "Quick run" on the Training page: a free run that starts by itself once GPS is ready
+  const [params, setParams] = useSearchParams();
+  const quick = params.get('quick') === '1';
+  const [autoStart, setAutoStart] = useState(quick);
+  const [what, setWhat] = useState<'planned' | 'free'>(todays && !quick ? 'planned' : 'free');
   const [settings, setSettings] = useState<Settings>(() => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ritmo:run:settings') ?? '{}') }; } catch { return DEFAULTS; } });
   const [phase, setPhase] = useState<Phase>('ready');
   const [acc, setAcc] = useState<number>();
@@ -132,6 +136,12 @@ export default function RunPage() {
       } else { setCount(n); say(String(n), cues); }
     }, 1000);
   };
+  const ready0 = acc != null && acc <= 20;
+  useEffect(() => {
+    if (!autoStart || phase !== 'ready' || unfinished || !ready0) return;
+    setAutoStart(false); setParams({}, { replace: true }); begin();
+  });
+  const cancelQuick = () => { setAutoStart(false); setParams({}, { replace: true }); };
   const togglePause = () => { const t = trackRef.current; if (!t) return; const n = setPaused(t, !t.paused); trackRef.current = n; setTrack(n); say(n.paused ? 'Paused.' : 'Resumed.', cues); };
   const lap = () => {
     const t = trackRef.current; if (!t) return;
@@ -246,6 +256,12 @@ export default function RunPage() {
       </details>
       {phase === 'countdown'
         ? <div className="run-countdown" role="status" aria-live="assertive">{count}</div>
+        : autoStart && !unfinished
+        ? <div className="stack-sm" role="status">
+            <StatusLine kind="info">Quick run: starts by itself as soon as GPS is ready.</StatusLine>
+            <button className="btn btn-primary btn-block run-start" onClick={() => { cancelQuick(); begin(); }}><Play size={24} strokeWidth={2} aria-hidden="true" />Start now</button>
+            <button className="btn btn-ghost" onClick={cancelQuick}>Cancel</button>
+          </div>
         : <div className="stack-sm">
             <button className="btn btn-primary btn-block run-start" onClick={begin} disabled={!ready}><Play size={24} strokeWidth={2} aria-hidden="true" />Start</button>
             {!ready && <button className="btn btn-ghost" onClick={begin}>Start anyway</button>}

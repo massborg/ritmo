@@ -630,3 +630,10 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 /* Install prompt */
 .install-card { display: flex; gap: var(--s3); align-items: flex-start; }
 .install-icon { border-radius: 12px; flex: none; }
+
+/* ---------- Quick run (Training page) ---------- */
+.quick-run { min-height: 64px; justify-content: flex-start; gap: var(--s3); padding: 0 var(--s5); border-radius: var(--r-card); text-align: left; text-decoration: none; }
+.quick-run-text { display: flex; flex-direction: column; line-height: 1.2; }
+.quick-run-text span { font-size: 18px; font-weight: 700; }
+.quick-run-text small { font-size: 14px; font-weight: 500; opacity: 0.9; }
+

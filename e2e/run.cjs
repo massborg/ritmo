@@ -37,6 +37,7 @@ async function account(mock, ctx, email, flagged) {
   const other = await account(mock, ctx, 'norun@test.ritmo', false);
   await other.page.goto(`${APP}/`); await other.page.waitForTimeout(1000);
   check(await other.page.locator('.tabbar a[href="/run"]').count() === 0, 'accounts without the flag see no Run tab');
+  check(await other.page.locator('a.quick-run').count() === 0, 'accounts without the flag see no Quick run button');
   await other.page.goto(`${APP}/run`); await other.page.waitForTimeout(500);
   check(await other.page.getByText('Not available yet').isVisible(), 'and /run says it is not available');
   await other.page.close();
@@ -97,6 +98,29 @@ async function account(mock, ctx, email, flagged) {
   check(!!row && err <= 0.02, `saved distance ${row?.distance_m} m vs ${counted} m run while recording (${(err * 100).toFixed(1)}% off)`);
   check(!!row?.streams?.length && row.streams.every((p) => p.lat != null), 'the route is saved with the run');
   check(errors.length === 0, `no errors ${errors.slice(0, 2).join(' | ')}`);
+  // Quick run on the Training page: orange, opens Run as a free run that starts by itself once GPS is ready
+  const ctx3 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
+  await ctx3.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
+  await mock.install(ctx3, SUPA);
+  const q = await account(mock, ctx3, 'quick@test.ritmo', true);
+  await q.page.goto(`${APP}/`); await q.page.waitForTimeout(1200);
+  const fit = q.page.getByRole('button', { name: /Train 6 days a week/ });
+  if (await fit.isVisible().catch(() => false)) { await fit.click(); await q.page.waitForTimeout(800); }
+  const btn = q.page.locator('a.quick-run');
+  check(await btn.isVisible() && /Quick run/.test(await btn.innerText()), 'Training page shows a Quick run button');
+  const colours = await btn.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, brand: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() }));
+  const rgb = (c) => { const m = c.match(/\d+/g); return m ? m.slice(0, 3).map(Number) : []; };
+  const [r, g, bl] = rgb(colours.bg);
+  check(r > 200 && g > 50 && g < 140 && bl < 60, `Quick run is orange (${colours.bg}, brand ${colours.brand})`);
+  const top = await btn.boundingBox();
+  check(top && top.y < (await q.page.viewportSize()).height * 0.6, 'Quick run is near the top of the page, without scrolling');
+  await btn.click();
+  await q.page.waitForURL(/\/run/);
+  await q.page.locator('.run-live').waitFor({ timeout: 12000 });
+  check(true, 'tapping it starts recording by itself once GPS is ready (no extra Start tap)');
+  check(await q.page.locator('.run-step').count() === 0, "it is a free run, not today's planned session");
+  check(!/quick=1/.test(q.page.url()), 'the address is tidied, so reopening Run does not start another run');
+
   console.log(`\n${passed} passed, ${failed} failed`);
   await b.close();
   process.exit(failed ? 1 : 0);
