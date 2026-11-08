@@ -37,9 +37,11 @@ async function account(mock, ctx, email, flagged) {
   const other = await account(mock, ctx, 'norun@test.ritmo', false);
   await other.page.goto(`${APP}/`); await other.page.waitForTimeout(1000);
   check(await other.page.locator('.tabbar a[href="/run"]').count() === 0, 'accounts without the flag see no Run tab');
-  check(await other.page.locator('a.quick-run').count() === 0, 'accounts without the flag see no Quick run button');
+  const fitO = other.page.getByRole('button', { name: /Train 6 days a week/ });
+  if (await fitO.isVisible().catch(() => false)) { await fitO.click(); await other.page.waitForTimeout(800); }
+  check(await other.page.locator('a.quick-run').isVisible(), 'Quick run is shown to every runner, not only flagged accounts');
   await other.page.goto(`${APP}/run`); await other.page.waitForTimeout(500);
-  check(await other.page.getByText('Not available yet').isVisible(), 'and /run says it is not available');
+  check(await other.page.getByText(/GPS ready|Searching for GPS|waiting for a better signal/).first().isVisible() && await other.page.getByText('Not available yet').count() === 0, 'and every runner can record (the Run page works without the flag)');
   await other.page.close();
   await ctx.clearCookies();
 
@@ -102,7 +104,7 @@ async function account(mock, ctx, email, flagged) {
   const ctx3 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
   await ctx3.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
   await mock.install(ctx3, SUPA);
-  const q = await account(mock, ctx3, 'quick@test.ritmo', true);
+  const q = await account(mock, ctx3, 'quick@test.ritmo', false); // no flag: Quick run is for everyone
   await q.page.goto(`${APP}/`); await q.page.waitForTimeout(1200);
   const fit = q.page.getByRole('button', { name: /Train 6 days a week/ });
   if (await fit.isVisible().catch(() => false)) { await fit.click(); await q.page.waitForTimeout(800); }
@@ -112,6 +114,13 @@ async function account(mock, ctx, email, flagged) {
   const rgb = (c) => { const m = c.match(/\d+/g); return m ? m.slice(0, 3).map(Number) : []; };
   const [r, g, bl] = rgb(colours.bg);
   check(r > 200 && g > 50 && g < 140 && bl < 60, `Quick run is orange (${colours.bg}, brand ${colours.brand})`);
+  // Orange in every theme, including dark and high contrast (whose brand colour is a dark red-brown)
+  for (const theme of ['dark', 'sole']) {
+    const c = await btn.evaluate((el, t) => { document.documentElement.dataset.theme = t; return getComputedStyle(el).backgroundColor; }, theme);
+    const [r2, g2, b2] = rgb(c);
+    check(r2 > 200 && g2 > 60 && g2 < 140 && b2 < 70, `Quick run stays orange in the ${theme === 'sole' ? 'high-contrast' : 'dark'} theme (${c})`);
+  }
+  await btn.evaluate(() => { delete document.documentElement.dataset.theme; });
   const top = await btn.boundingBox();
   check(top && top.y < (await q.page.viewportSize()).height * 0.6, 'Quick run is near the top of the page, without scrolling');
   await btn.click();
