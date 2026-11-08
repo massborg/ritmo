@@ -129,6 +129,17 @@ async function account(mock, ctx, email, flagged) {
   check(true, 'tapping it starts recording by itself once GPS is ready (no extra Start tap)');
   check(await q.page.locator('.run-step').count() === 0, "it is a free run, not today's planned session");
   check(!/quick=1/.test(q.page.url()), 'the address is tidied, so reopening Run does not start another run');
+  // The clock ticks every second, even with no new GPS fix (standing still, auto-pause off in these tests)
+  const secs = async () => { const t = await q.page.getByTestId('run-clock').innerText(); return t.split(':').reduce((a, x) => a * 60 + Number(x), 0); };
+  const c1 = await secs(); await q.page.waitForTimeout(3200); const c2 = await secs();
+  check(c2 - c1 >= 2 && c2 - c1 <= 4, `the clock ticks every second without new GPS points (${c1}s, then ${c2}s)`);
+  // Lap: a visible confirmation, a lap list, and the button counts up
+  const lapBtn = q.page.getByRole('button', { name: /^Lap 1$/ });
+  check(await lapBtn.isVisible(), 'the Lap button shows which lap it will mark ("Lap 1")');
+  await lapBtn.click();
+  check(await q.page.locator('.run-lap-flash').filter({ hasText: /^Lap 1: .+ in \d+:\d\d$/ }).isVisible(), 'pressing Lap shows "Lap 1: distance in time" straight away');
+  check(await q.page.getByRole('button', { name: /^Lap 2$/ }).isVisible(), 'and the button moves on to "Lap 2"');
+  check(await q.page.getByRole('region', { name: 'Laps' }).or(q.page.locator('section[aria-label="Laps"]')).first().getByText('Lap 2 (now)').isVisible(), 'a Laps list shows the finished lap and the one in progress');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await b.close();

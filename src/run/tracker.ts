@@ -1,6 +1,7 @@
 // Recording a run with the phone's GPS (review #2 §3). Pure functions, so the maths is tested without a phone.
 // Fixes worse than 25 m are dropped, and so are jumps faster than anyone runs. Distance comes from the filtered
-// track; pace is smoothed over the last 30 seconds; the run pauses itself when you stop for 3 seconds.
+// track; pace is smoothed over the last 30 seconds; once you have got going, the run pauses itself when you stop
+// for 3 seconds.
 import type { PlannedSession, StreamPoint } from '../lib/types';
 
 export interface Fix { t: number; lat: number; lon: number; acc: number; alt?: number | null; speed?: number | null }
@@ -16,6 +17,8 @@ export interface TrackState {
   autoPaused: boolean;
   stillSince?: number; // ms
   laps: { atS: number; atM: number }[];
+  /** When the runner last pressed Resume (ms), so time until the next GPS fix still counts */
+  resumedAt?: number;
   last?: Fix;
   /** Recent good fixes, for a speed that GPS jitter cannot fake while standing still */
   recent?: Fix[];
@@ -44,6 +47,8 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
   if (f.acc > MAX_ACCURACY_M) return next; // too inaccurate to use
   const prev = s.last;
   if (!prev) {
+    // Time from the start (or Resume) to this first fix counts as running time
+    if (!s.paused) next.movingS = s.movingS + Math.max(0, (f.t - (s.resumedAt ?? s.startedAt)) / 1000);
     next.last = f;
     next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: !s.paused }];
     return next;
@@ -59,7 +64,8 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
   const speed = span >= 4 ? haversine(recent[0], f) / span : f.speed != null && f.speed >= 0 ? f.speed : dd / dt;
   // Auto-pause: under 0.5 m/s for 3 seconds
   let autoPaused = s.autoPaused, stillSince = s.stillSince;
-  if (autoPause) {
+  // Only once the runner has got going (20 m), so waiting at the start or testing indoors does not stop the clock
+  if (autoPause && s.distanceM >= 20) {
     if (speed < STOP_SPEED) { stillSince = stillSince ?? f.t; if (f.t - stillSince >= STOP_FOR_MS) autoPaused = true; }
     else { stillSince = undefined; autoPaused = false; }
   }
@@ -70,8 +76,29 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
   return next;
 }
 
-export const setPaused = (s: TrackState, paused: boolean): TrackState => ({ ...s, paused, stillSince: undefined, autoPaused: false, last: paused ? s.last : undefined });
-export const addLap = (s: TrackState): TrackState => ({ ...s, laps: [...s.laps, { atS: s.movingS, atM: s.distanceM }] });
+export const setPaused = (s: TrackState, paused: boolean, now = Date.now()): TrackState => paused
+  ? { ...s, movingS: clockS(s, now), paused: true, stillSince: undefined, autoPaused: false, last: s.last }
+  : { ...s, paused: false, stillSince: undefined, autoPaused: false, last: undefined, resumedAt: now };
+
+/**
+ * The run clock in seconds: running time that ticks every second like a stopwatch, not only when a GPS fix
+ * arrives. It stops while paused (by the runner or automatically) and carries on through a GPS gap.
+ */
+export function clockS(s: TrackState, now: number): number {
+  if (s.paused || s.autoPaused) return s.movingS;
+  const since = s.last ? s.last.t : (s.resumedAt ?? s.startedAt);
+  return s.movingS + Math.max(0, (now - since) / 1000);
+}
+
+/** Mark a lap at this moment (clock time and distance). */
+export const addLap = (s: TrackState, now = Date.now()): TrackState => ({ ...s, laps: [...s.laps, { atS: clockS(s, now), atM: s.distanceM }] });
+
+/** Each lap's time and distance so far, the current one last. */
+export function lapSplits(s: TrackState, now: number): { n: number; s: number; m: number }[] {
+  const marks = [...s.laps, { atS: clockS(s, now), atM: s.distanceM }];
+  let ps = 0, pm = 0;
+  return marks.map((x, i) => { const r = { n: i + 1, s: Math.max(0, x.atS - ps), m: Math.max(0, x.atM - pm) }; ps = x.atS; pm = x.atM; return r; });
+}
 
 /** Pace over the last 30 seconds of moving (s/km), or undefined when there is not enough movement. */
 export function currentPace(s: TrackState, windowS = 30): number | undefined {

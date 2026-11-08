@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFix, avgPace, currentPace, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
 import type { PlannedSession } from '../lib/types';
 
 /** A simulated run north from Valletta: one fix a second at 5:00/km, with GPS noise, bad fixes and a stop. */
@@ -39,7 +39,7 @@ describe('GPS run recording', () => {
   it('pause and resume: distance run while paused does not count', () => {
     const { fixes, t0 } = simulate(2);
     let s = startTrack(t0);
-    fixes.forEach((f, i) => { if (i === 100) s = setPaused(s, true); if (i === 200) s = setPaused(s, false); s = addFix(s, f, false); });
+    fixes.forEach((f, i) => { if (i === 100) s = setPaused(s, true, f.t); if (i === 200) s = setPaused(s, false, f.t); s = addFix(s, f, false); });
     expect(s.distanceM).toBeLessThan(2000 * 0.9);
   });
   it('turns a planned interval session into steps to follow', () => {
@@ -53,5 +53,59 @@ describe('GPS run recording', () => {
     expect(st[2].durationS).toBe(120);
     expect(stepLeft(st[1], 900, 3000, 1000, 3600)).toEqual({ leftM: 400, complete: false });
     expect(stepLeft(st[2], 1100, 4000, 1220, 4300).complete).toBe(true);
+  });
+});
+
+describe('run clock and laps', () => {
+  const T0 = 1_800_000_000_000;
+  const fix = (sec: number, m: number): Fix => ({ t: T0 + sec * 1000, lat: 35.9 + m / 111195, lon: 14.5, acc: 5 });
+  it('ticks every second even when no GPS fix arrives', () => {
+    const s = startTrack(T0);
+    expect(clockS(s, T0 + 1000)).toBe(1);
+    expect(clockS(s, T0 + 7500)).toBe(7.5);
+  });
+  it('counts the time before the first fix, and stays continuous when fixes arrive', () => {
+    let s = startTrack(T0);
+    s = addFix(s, fix(4, 0), false);
+    expect(s.movingS).toBe(4);
+    expect(clockS(s, T0 + 6000)).toBe(6);
+    s = addFix(s, fix(9, 25), false);
+    expect(clockS(s, T0 + 9000)).toBe(9);
+    expect(clockS(s, T0 + 12000)).toBe(12);
+  });
+  it('carries on through a GPS gap', () => {
+    let s = addFix(startTrack(T0), fix(1, 0), false);
+    expect(clockS(s, T0 + 61_000)).toBe(61);
+    s = addFix(s, fix(61, 150), false);
+    expect(s.movingS).toBe(61);
+  });
+  it('stops while paused and picks up again after Resume', () => {
+    let s = addFix(startTrack(T0), fix(1, 0), false);
+    s = setPaused(s, true, T0 + 10_000);
+    expect(clockS(s, T0 + 10_000)).toBe(10);
+    expect(clockS(s, T0 + 40_000)).toBe(10);
+    s = setPaused(s, false, T0 + 40_000);
+    expect(clockS(s, T0 + 45_000)).toBe(15);
+    s = addFix(s, fix(47, 10), false);
+    expect(clockS(s, T0 + 50_000)).toBe(20);
+  });
+  it('splits laps by clock time and distance', () => {
+    let s = addFix(startTrack(T0), fix(1, 0), false);
+    s = addFix(s, fix(60, 200), false);
+    s = addLap(s, T0 + 60_000);
+    s = addFix(s, fix(100, 350), false);
+    const laps = lapSplits(s, T0 + 100_000);
+    expect(laps.map((l) => l.n)).toEqual([1, 2]);
+    expect(laps[0].s).toBe(60); expect(Math.round(laps[0].m)).toBe(200);
+    expect(laps[1].s).toBe(40); expect(Math.round(laps[1].m)).toBe(150);
+  });
+  it('does not auto-pause before the runner has got going', () => {
+    let s = startTrack(T0);
+    for (let i = 1; i <= 20; i++) s = addFix(s, fix(i, 0), true); // standing at the start for 20 s
+    expect(s.autoPaused).toBe(false);
+    expect(clockS(s, T0 + 20_000)).toBe(20);
+    for (let i = 21; i <= 40; i++) s = addFix(s, fix(i, (i - 20) * 3), true); // runs 60 m
+    for (let i = 41; i <= 50; i++) s = addFix(s, fix(i, 60), true); // then stops
+    expect(s.autoPaused).toBe(true);
   });
 });
