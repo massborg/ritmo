@@ -53,7 +53,7 @@ export default function HubPage() {
   useEffect(() => { if (uid && hasFlag('hub')) hub.myHubProfile(uid).then((p) => setMe(p ?? null)).catch(() => setMe(null)); }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (me && consent) void load(); }, [me, consent, load]);
 
-  if (!hasFlag('hub')) return <Empty title="Not available yet" action={<Link to="/" className="btn">Back to Training</Link>}>The Hub is being tested and will open to everyone soon.</Empty>;
+  if (!hasFlag('hub')) return <Empty title="Available with your own data" action={<Link to="/" className="btn">Back to Training</Link>}>The Hub opens once you are using Ritmo with your own runs rather than the sample data.</Empty>;
   if (me === undefined) return <p className="muted" role="status">Loading…</p>;
   if (!consent || !me) return <OptIn existing={me ?? undefined} onDone={async (p) => {
     await hub.saveHubProfile(p);

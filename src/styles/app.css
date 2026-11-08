@@ -632,6 +632,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .install-icon { border-radius: 12px; flex: none; }
 
 /* ---------- Quick run (Training page) ---------- */
+.quick-run, .quick-run:hover, .quick-run:active { background: var(--quick-run); border-color: var(--quick-run); color: var(--on-quick-run); }
 .quick-run { min-height: 64px; justify-content: flex-start; gap: var(--s3); padding: 0 var(--s5); border-radius: var(--r-card); text-align: left; text-decoration: none; }
 .quick-run-text { display: flex; flex-direction: column; line-height: 1.2; }
 .quick-run-text span { font-size: 18px; font-weight: 700; }

@@ -188,7 +188,7 @@ export default function Today() {
           })()}
         </div>
       )}
-      {isToday && data.mode === 'real' && hasFlag('run_tab') && (
+      {isToday && data.mode === 'real' && (
         <Link to="/run?quick=1" className="btn btn-primary btn-block quick-run" onClick={primeSpeech}>
           <Zap size={22} strokeWidth={2.2} aria-hidden="true" />
           <span className="quick-run-text"><span>Quick run</span><small>Start recording now, no plan needed</small></span>

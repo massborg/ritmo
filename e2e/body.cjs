@@ -34,7 +34,7 @@ const tap = (page, name) => page.getByRole('radio', { name, exact: true }).or(pa
   await page.getByRole('button', { name: /Build my plan|Rebuild/ }).first().click(); await page.waitForTimeout(1500);
   await page.goto(`${APP}/`); await page.waitForTimeout(800);
   await page.getByRole('button', { name: /^Add a run/ }).click();
-  check(await page.getByText('Something hurts').count() === 0, 'without the flag there is no "Something hurts"');
+  check(await page.getByText('Something hurts').count() === 1, 'every runner has "Something hurts" (no flag needed)');
   await page.keyboard.press('Escape');
 
   mock.state.tables.feature_flags.push({ user_id: uid, flag: 'body' });

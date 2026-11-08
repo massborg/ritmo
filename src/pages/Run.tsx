@@ -1,15 +1,16 @@
 // The Run tab (review #2 §3): record a run with the phone's GPS, follow today's planned session step by step
-// with spoken cues, then save it as a Ritmo run and see the feedback. Behind the "run_tab" flag.
+// with spoken cues, then save it as a Ritmo run and see the feedback. Open to every runner, from the Run tab
+// or Quick run on the Training page.
 // Honest about the web: a browser may pause GPS when the screen locks, so Ritmo keeps the screen on and says so.
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Flag, Lock, Pause, Play, Square, Unlock } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
 import { fitView, mapsOn, setMapsOn, TILE } from '../lib/maptiles';
 import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
-import { Empty, Segmented, StatusLine } from '../components/ui';
+import { Segmented, StatusLine } from '../components/ui';
 import { dist, duration, pace as fmtPace, paceRange, ymd } from '../lib/format';
 import { addFix, addLap, avgPace, currentPace, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import type { Lap } from '../lib/types';
@@ -27,7 +28,7 @@ const say = (text: string, on: boolean) => {
 };
 
 export default function RunPage() {
-  const { hasFlag, plan, today, data, saveRecordedRun, session } = useApp();
+  const { plan, today, data, saveRecordedRun, session } = useApp();
   const nav = useNavigate();
   const U = data.profile.units;
   const key = `ritmo:run:active:${session?.user.id ?? 'anon'}`;
@@ -167,7 +168,6 @@ export default function RunPage() {
   const holdStart = () => { setHolding(true); holdTimer.current = window.setTimeout(() => { setHolding(false); finish(); }, 1500); };
   const holdEnd = () => { setHolding(false); window.clearTimeout(holdTimer.current); };
 
-  if (!hasFlag('run_tab')) return <Empty title="Not available yet" action={<Link to="/" className="btn">Back to Training</Link>}>Recording runs in Ritmo is being tested and will open to everyone soon.</Empty>;
 
   const t = track;
   const cp = t ? currentPace(t) : undefined;

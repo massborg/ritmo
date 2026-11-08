@@ -41,9 +41,7 @@ Deno.serve(async (req) => {
   const uid = u.user.id;
   const db = admin();
 
-  // Only accounts with the 'strava' flag can connect until it is opened to everyone
-  const { data: flag } = await db.from('feature_flags').select('flag').eq('user_id', uid).eq('flag', 'strava').maybeSingle();
-  if (!flag) return json({ error: 'not_available', message: 'Strava sync is not available on your account yet.' }, 403);
+  // Open to every signed-in runner (it was behind the 'strava' flag while being tested)
 
   let body: { action?: string; code?: string; state?: string; scope?: string };
   try { body = await req.json(); } catch { return json({ error: 'bad_request' }, 400); }
@@ -81,6 +79,8 @@ Deno.serve(async (req) => {
       inBackground(backfill(db, uid));
       return json({ connected: true, backfillDays: BACKFILL_DAYS });
     } catch (e) {
+      // Strava limits how many runners a new app can connect until it raises the app's capacity
+      if (/\((403|429)\)/.test((e as Error).message)) return json({ error: 'strava_full', message: 'Strava sync is full right now: Strava limits how many runners a new app can connect until it approves more. Your runs are safe; please try again later, or upload your files in the meantime.' }, 503);
       return json({ error: 'connect_failed', message: `Strava could not be connected: ${(e as Error).message}` }, 502);
     }
   }

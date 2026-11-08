@@ -205,6 +205,7 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
 }
 
 /** Settings that belong to the person, not to the data set */
+const OPEN_TO_ALL = new Set(['run_tab', 'hub', 'share_cards', 'body', 'strava']);
 const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt, consents: p.consents, dateOfBirth: p.dateOfBirth, avatar: p.avatar, reminders: p.reminders } : {});
 
 /** The training model (fitness, paces, load, readiness, the adapted plan) from the app's data. A plain function, so it
@@ -702,7 +703,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return finishBuild({ ...d, profile });
   };
 
-  const hasFlag = (f: string) => data.mode === 'real' && !!data.flags?.includes(f);
+  // Features tested with a few accounts first; those listed here are now open to every runner (with their own data).
+  // Garmin stays behind its flag until Garmin approves the integration.
+  const hasFlag = (f: string) => data.mode === 'real' && (OPEN_TO_ALL.has(f) || !!data.flags?.includes(f));
   const setRaceFlag = (ids: string[], race: boolean | null) => {
     const set = new Set(ids);
     setData((d) => ({ ...d, activities: d.activities.map((a) => (set.has(a.id) ? { ...a, isRace: race === true, notRace: race === false } : a)) }));
