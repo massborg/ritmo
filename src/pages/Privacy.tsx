@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { getConsent, setConsent } from '../lib/consent';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { COMPANY_ADDRESS, COMPANY_COUNTRY, COMPANY_NAME, COMPANY_REG_NO, COMPANY_VAT, CONTACT_EMAIL } from '../lib/contact';
@@ -9,6 +10,7 @@ import { COMPANY_ADDRESS, COMPANY_COUNTRY, COMPANY_NAME, COMPANY_REG_NO, COMPANY
 export default function Privacy() {
   const nav = useNavigate();
   const { exportData, deleteEverything, session, data, updateProfile } = useApp();
+  const [errorsConsent, setErrorsConsent] = useState(getConsent);
   const ai = data.profile.consents?.aiCoach;
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,12 +47,14 @@ export default function Privacy() {
           <li><strong>Supabase</strong> (database and accounts, EU region, Frankfurt).</li>
           <li><strong>Netlify</strong> (hosts the website; does not store your training data).</li>
           <li><strong>Anthropic</strong> (the AI model behind coach answers, reading laps from screenshots and Body chat; receives only what is needed for the request you made, and does not use it for training).</li>
-          <li><strong>Sentry</strong> (Functional Software, Inc.; error reports, so we can find and fix crashes). When something goes wrong in the app, a report of the error, the page it happened on (without any private link or code in the address), your browser and device type, and the app version is sent. Your name, email, account, IP address, runs and health data are not included.</li>
+          <li><strong>Sentry</strong> (Functional Software, Inc.; error reports, so we can find and fix crashes; only if you allow error reports on your device). When something goes wrong in the app, a report of the error, the page it happened on (without any private link or code in the address), your browser and device type, and the app version is sent. Your name, email, account, IP address, runs and health data are not included.</li>
           <li><strong>MET Norway</strong> (the Norwegian Meteorological Institute; the weather shown on your recent runs). Shortly after a run with GPS, Ritmo's server asks MET Norway for the weather at the run's starting area, rounded to about 1 km. Your name, email and account are never sent, and the weather is saved with the run so it is only looked up once.</li>
           <li><strong>OpenStreetMap Foundation</strong> (the map behind your own routes, on your run pages and while you record a run). To draw it, your device fetches map images for the area around the route from OpenStreetMap's servers, which receive your IP address and that map area. No account details, run data or health data are sent. You can switch maps off with "Hide map" under any route or the live map.</li>
         </ul>
         <h3 className="label">Strava (optional, only if you connect it)</h3>
         <p>If you connect Strava, Ritmo receives your runs from Strava (time, distance, pace, heart rate, cadence, elevation, laps and route) to give you your own analysis, plan and feedback. Runs that come from Strava are only ever shown to you: they cannot be posted to the Hub or shared as images, and nothing about them is sent to the AI model, which answers only from your other runs. Disconnecting Strava, in Ritmo or in Strava's settings, stops new data and revokes Ritmo's access; a run you delete on Strava is removed from Ritmo too. Deleting your Ritmo account also revokes Ritmo's access to Strava.</p>
+        <h3 className="label">Cookies and storage on your device</h3>
+        <p>Ritmo uses no cookies, and no advertising or analytics. It stores on your device only what it needs to work: your sign-in, a copy of your data so the app opens quickly and works with a weak signal, and your settings (such as units or whether maps are shown). Error reports to Sentry are optional and off until you allow them, in the notice shown on your first visit or under Your choices on this page.</p>
         <h3 className="label">Calendar link (optional, off unless you create it)</h3>
         <p>If you create a calendar link, your calendar app fetches your planned sessions and races from Ritmo through a long, random private link. Anyone who has the link can see those planned sessions and races, but nothing else: no runs, health data, locations or account details. You can reset the link or turn it off at any time, and the old link stops working straight away.</p>
         <h3 className="label">Sharing runs on the Hub (optional, off unless you turn it on)</h3>
@@ -76,6 +80,10 @@ export default function Privacy() {
             <div className="row-between wrap">
               <span className="muted">AI coach answers: {ai?.granted ? 'on' : ai ? 'off' : 'not chosen yet'}</span>
               <button className="btn btn-small" onClick={() => updateProfile({ consents: { ...data.profile.consents, aiCoach: { granted: !ai?.granted, at: new Date().toISOString() } } })}>{ai?.granted ? 'Turn off' : 'Turn on'}</button>
+            </div>
+            <div className="row-between wrap">
+              <span className="muted">Error reports on this device: {errorsConsent?.errors ? 'on' : errorsConsent ? 'off' : 'not chosen yet'}</span>
+              <button className="btn btn-small" onClick={() => setErrorsConsent(setConsent(!errorsConsent?.errors))}>{errorsConsent?.errors ? 'Turn off' : 'Turn on'}</button>
             </div>
           </section>
 

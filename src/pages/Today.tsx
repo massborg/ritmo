@@ -18,6 +18,7 @@ import { RUNS_FOR_PACES } from '../training/stage';
 import { weekReview } from '../training/report';
 import { explainWeek } from '../training/explain';
 import { shoeAlert, shoeTotals } from '../training/shoes';
+import { InstallPrompt } from '../components/InstallPrompt';
 import { activeNiggle, areaLabel, DISCLAIMER } from '../training/body';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions } from '../training/plan';
@@ -184,6 +185,7 @@ export default function Today() {
           })()}
         </div>
       )}
+      {isToday && data.mode === 'real' && <InstallPrompt />}
       {isToday && (() => {
         const shoes = data.profile.shoes ?? [];
         if (!shoes.length) return null;

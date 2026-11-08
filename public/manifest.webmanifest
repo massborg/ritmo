@@ -1,13 +1,34 @@
 {
+  "id": "/",
   "name": "Ritmo Running",
   "short_name": "Ritmo",
+  "description": "Your running coach: a plan built around you, a clear why for every session, and feedback after every run.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#FAF8F5",
   "theme_color": "#E8480C",
   "icons": [
-    { "src": "/brand/ritmo-app-icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "/brand/ritmo-app-icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/brand/ritmo-app-icon-1024.png", "sizes": "1024x1024", "type": "image/png" }
+    {
+      "src": "/brand/ritmo-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/ritmo-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/ritmo-app-icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/ritmo-app-icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
   ]
 }

@@ -300,7 +300,10 @@ function createMock() {
   }
 
   /** Install on a Playwright context. */
-  async function install(context, base) {
+  async function install(context, base, opts = {}) {
+    // Answer the cookie and storage notice in advance, so it does not cover the screens other tests use.
+    // Tests of the notice itself pass { consent: false }.
+    if (opts.consent !== false) await context.addInitScript(() => { try { if (!localStorage.getItem('ritmo:consent')) localStorage.setItem('ritmo:consent', JSON.stringify({ errors: false, at: '2026-11-08T00:00:00Z', v: 1 })); } catch { /* */ } });
     await context.route(`${base}/**`, async (route) => {
       const req = route.request();
       if (state.offline) return route.abort('internetdisconnected');

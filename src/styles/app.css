@@ -617,3 +617,13 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .strava-connect:focus-visible { outline: 3px solid var(--focus, #1a73e8); outline-offset: 2px; }
 .strava-powered { display: block; width: 146px; height: auto; margin-top: 4px; }
 .strava-link { color: #FC5200; font-weight: 600; }
+
+/* Cookie and storage notice: above the tab bar on phones, bottom-left on wide screens */
+.consent-banner { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 950; display: flex; flex-direction: column; gap: 8px; background: var(--surface-raised); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px 16px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.2); max-width: 520px; margin: 0 auto; }
+.app-bare .consent-banner { bottom: calc(16px + env(safe-area-inset-bottom)); }
+.consent-banner .caption { font-size: 14px; line-height: 1.45; }
+@media (min-width: 820px) { .consent-banner { left: 24px; right: auto; bottom: 24px; margin: 0; } }
+
+/* Install prompt */
+.install-card { display: flex; gap: var(--s3); align-items: flex-start; }
+.install-icon { border-radius: 12px; flex: none; }

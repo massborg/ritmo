@@ -5,9 +5,11 @@ import App from './App';
 import { initNative } from './native';
 import { reloadOnce } from './lib/chunks';
 import { initErrorTracking } from './lib/errors';
+import { captureInstallPrompt } from './lib/install';
 
 initNative();
-void initErrorTracking();
+initErrorTracking();
+captureInstallPrompt();
 
 // A file from an older deploy failed to preload: reload once to get the new version
 window.addEventListener('vite:preloadError', (e) => { if (reloadOnce()) e.preventDefault(); });
