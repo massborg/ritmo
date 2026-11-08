@@ -9,6 +9,7 @@ import { AvatarEditor, AvatarImage } from '../components/AvatarEditor';
 import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/format';
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
+import { PushReminders } from '../components/PushReminders';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
@@ -49,6 +50,7 @@ export default function Profile() {
         <Link to="/profile/privacy" className="row-between"><span className="row"><span className="row-icon"><Shield size={18} strokeWidth={2} aria-hidden="true" /></span><span className="label">Privacy and your data</span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
       </div>
 
+      <PushReminders />
       <CalendarFeed />
 
       <section className="card stack" aria-labelledby="ill">

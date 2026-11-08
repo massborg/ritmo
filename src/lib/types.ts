@@ -180,6 +180,8 @@ export interface Profile {
   shoes?: Shoe[];
   /** Calendar feed of the plan: the private link's token and the reminder settings */
   calendarFeed?: { token: string; createdAt: string; morningHour: number | null; eveReminder: boolean };
+  /** Push reminder times (local "HH:MM", null for off); notifications are turned on per device */
+  reminders?: import('../training/push-core').Reminders;
   /** Body check-ins (pain and niggles) and return-to-run progress; never shown on the Hub */
   body?: import('../training/body').BodyState;
 }

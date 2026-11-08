@@ -13,6 +13,7 @@ import { detailScore, merge } from '../data/integration';
 import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
+import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
 import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, startStravaConnect, stravaConnected } from '../data/strava';
@@ -204,7 +205,7 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
 }
 
 /** Settings that belong to the person, not to the data set */
-const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt, consents: p.consents, dateOfBirth: p.dateOfBirth, avatar: p.avatar } : {});
+const pickPrefs = (p?: Partial<Profile>): Partial<Profile> => (p ? { theme: p.theme, units: p.units, healthConsentAt: p.healthConsentAt, consents: p.consents, dateOfBirth: p.dateOfBirth, avatar: p.avatar, reminders: p.reminders } : {});
 
 /** The training model (fitness, paces, load, readiness, the adapted plan) from the app's data. A plain function, so it
  *  can also be computed without certain runs (Strava runs are never part of what the AI coach is told). */
@@ -998,6 +999,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => remove?.();
   }, [ready]);
 
+  // ---- Push reminders: keep this device's subscription and time zone current ----
+  useEffect(() => { if (ready && userId && data.mode === 'real') void refreshPush(); }, [ready, userId, data.mode]);
+
   // ---- Profile picture (private; never sent to the coach) ----
   const avatarPath = data.profile.avatar?.path;
   const avatarStamp = data.profile.avatar?.updatedAt;
@@ -1025,6 +1029,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     const uid = userId;
     window.clearTimeout(pushTimer.current);
+    await disablePush().catch(() => undefined); // a shared device never shows the last person's reminders
     await logOut(); // session ends first, so nothing saves to this device afterwards
     if (uid) await clearUserCache(uid);
   };

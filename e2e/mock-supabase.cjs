@@ -216,6 +216,21 @@ function createMock() {
       if (!paths.length || paths.some((p) => !p.startsWith(`${u.id}/`) || !state.files.has(`run-media/${p}`))) return { status: 400, body: { error: 'bad_request' } };
       return state.lapRead ? { status: 200, body: state.lapRead } : { status: 503, body: { error: 'not_configured' } };
     }
+    if (name === 'push') {
+      // Mirrors the real function's signed-in actions: the server key, save or forget this browser, a test message
+      const b = req.postDataJSON() ?? {};
+      state.push = state.push ?? { subs: new Map(), tests: 0 };
+      if (b.action === 'key') return { status: 200, body: { publicKey: 'BNtestVapidPublicKeyForTheMockOnly_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' } };
+      if (b.action === 'subscribe') {
+        const s = b.subscription;
+        if (!s?.endpoint || !s.keys?.p256dh || !s.keys?.auth) return { status: 400, body: { error: 'bad_request' } };
+        state.push.subs.set(s.endpoint, { user_id: u.id, tz: b.tz });
+        return { status: 200, body: { ok: true } };
+      }
+      if (b.action === 'unsubscribe') { const x = state.push.subs.get(b.endpoint); if (x?.user_id === u.id) state.push.subs.delete(b.endpoint); return { status: 200, body: { ok: true } }; }
+      if (b.action === 'test') { if (state.push.subs.get(b.endpoint)?.user_id !== u.id) return { status: 404, body: { error: 'not_subscribed' } }; state.push.tests++; return { status: 200, body: { sent: true } }; }
+      return { status: 400, body: { error: 'bad_request' } };
+    }
     if (name === 'weather') {
       // Mirrors the real function: own runs only, recent runs only (3 h), needs GPS, stores the result with the run.
       // state.weather is what MET Norway "returns"; unset means the service is unavailable.
