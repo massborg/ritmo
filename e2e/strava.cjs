@@ -63,7 +63,12 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   mock.state.tables.feature_flags.push({ user_id: uid, flag: 'strava' }, { user_id: uid, flag: 'hub' }, { user_id: uid, flag: 'share_cards' });
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
   await page.goto(`${APP}/profile/data`);
-  await tap(stravaRow().getByRole('button', { name: 'Connect with Strava' }));
+  const btn = stravaRow().getByRole('button', { name: 'Connect with Strava' });
+  await btn.waitFor({ timeout: 15000 });
+  const img = await btn.locator('img').evaluate((i) => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0, h: i.getBoundingClientRect().height }));
+  check(img.src === '/brand/strava/btn_strava_connect_with_orange.svg' && img.ok && img.h >= 44, `official "Connect with Strava" button image, ${Math.round(img.h)} px tall`);
+  await stravaRow().screenshot({ path: require('path').join(__dirname, 'out', 'strava-connect.png') });
+  await tap(btn);
   await page.waitForURL(/\/strava\/callback/, { timeout: 15000 });
   await page.getByText(/Strava is connected/).waitFor({ timeout: 15000 });
   check(mock.state.strava.connected.has(uid), 'connected after the round trip through Strava\'s callback');
@@ -73,7 +78,9 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   check(row('strava-111')?.source === 'strava' && row('strava-222')?.source === 'strava', 'last 30 days of runs arrived and were saved (run and trail run)');
   check(!row('strava-333'), 'the ride was ignored');
   check(mock.state.tables.strava_inbox.filter((r) => r.user_id === uid).length === 0, 'inbox cleared after the runs were saved');
-  check(await stravaRow().getByRole('button', { name: 'Sync now' }).isVisible() && await stravaRow().getByText('Powered by Strava').isVisible(), 'Strava row shows Sync now and "Powered by Strava"');
+  check(await stravaRow().getByRole('button', { name: 'Sync now' }).isVisible() && await stravaRow().getByRole('img', { name: 'Powered by Strava' }).isVisible(), 'Strava row shows Sync now and the official "Powered by Strava" logo');
+  const logo = await stravaRow().getByRole('img', { name: 'Powered by Strava' }).evaluate((i) => ({ src: i.getAttribute('src'), ok: i.complete && i.naturalWidth > 0 }));
+  check(logo.src === '/brand/strava/api_logo_pwrdBy_strava_horiz_orange.svg' && logo.ok, 'the official logo file loads');
 
   // ---- A Strava run: attribution and no sharing ----
   await page.goto(`${APP}/activity/strava-111`); await page.locator('h2#verdict').waitFor({ timeout: 15000 });
@@ -81,6 +88,11 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   check(/from Strava/.test(meta) && (await page.getByRole('link', { name: 'View on Strava' }).getAttribute('href')) === 'https://www.strava.com/activities/111', 'run page: "from Strava" with a View on Strava link');
   check(await page.getByRole('button', { name: 'Post to Hub' }).count() === 0 && await page.getByRole('button', { name: 'Share', exact: true }).count() === 0, 'no Post to Hub or Share for a Strava run');
   check(await page.getByText(/came from Strava, so it stays private to you/).isVisible(), 'explains why');
+  const shots = require('path').join(__dirname, 'out');
+  await page.locator('p.caption', { has: page.locator('a.strava-link') }).evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.screenshot({ path: require('path').join(shots, 'strava-run-attribution.png') });
+  await page.getByText(/came from Strava, so it stays private to you/).evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.screenshot({ path: require('path').join(shots, 'strava-run-private.png') });
   // A non-Strava run still offers sharing
   const own = rows.activities[rows.activities.length - 1].id;
   await page.goto(`${APP}/activity/${own}`); await page.locator('h2#verdict').waitFor({ timeout: 15000 });

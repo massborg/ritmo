@@ -610,7 +610,10 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .cal-link { word-break: break-all; font-family: var(--font-mono, monospace); font-size: 12px; padding: var(--s2) var(--s3); background: var(--surface-sunken); border-radius: var(--r-input); }
 .shoe-alert { display: block; text-decoration: none; color: inherit; }
 
-/* Strava: connect button in Strava's orange, as their brand guidelines ask (replace with the official button image before public launch) */
-.btn.strava-connect { background: #FC5200; border-color: #FC5200; color: #fff; }
-.strava-powered { font-weight: 600; color: #FC5200; }
+/* Strava: official "Connect with Strava" button and "Powered by Strava" logo (public/brand/strava, unmodified files) */
+.strava-connect { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 4px; flex: none; }
+.strava-connect img { display: block; width: 237px; max-width: 100%; height: auto; }
+.strava-connect:disabled { opacity: .6; cursor: default; }
+.strava-connect:focus-visible { outline: 3px solid var(--focus, #1a73e8); outline-offset: 2px; }
+.strava-powered { display: block; width: 146px; height: auto; margin-top: 4px; }
 .strava-link { color: #FC5200; font-weight: 600; }
