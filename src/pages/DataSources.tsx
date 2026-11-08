@@ -153,7 +153,7 @@ export default function DataSources() {
                   {s.kind === 'garmin' && garminOn && !st?.connected && <span className="caption">You will be asked to sign in to Garmin and allow Ritmo to read your activities. Only you see your Garmin data.</span>}
                   {s.kind === 'garmin' && garminErr && <StatusLine kind="danger">{garminErr}</StatusLine>}
                   {s.kind === 'strava' && stravaOn && <span className="caption">{st?.connected ? 'New runs on Strava appear here shortly after they upload.' : 'You will be asked to sign in to Strava and allow Ritmo to read your activities. Your last 30 days come across straight away.'} Strava runs are for your own coaching only: they cannot be posted to the Hub or shared as images, and the AI coach is never told about them.</span>}
-                  {s.kind === 'strava' && stravaOn && <span className="caption strava-powered">Powered by Strava</span>}
+                  {s.kind === 'strava' && stravaOn && <img className="strava-powered" src="/brand/strava/api_logo_pwrdBy_strava_horiz_orange.svg" width={146} height={15} alt="Powered by Strava" />}
                   {s.kind === 'strava' && stravaErr && <StatusLine kind="danger">{stravaErr}</StatusLine>}
                   {st?.lastSyncAt && <span className="caption">Last import {relTime(st.lastSyncAt)} · {st.activityCount} runs</span>}
                   {st?.lastError && <StatusLine kind="warning">{st.lastError}</StatusLine>}
@@ -164,7 +164,9 @@ export default function DataSources() {
                     : <button className="btn btn-small btn-primary" onClick={onConnectGarmin} disabled={garminBusy || data.mode !== 'real'}>{garminBusy ? 'Opening Garmin…' : 'Connect Garmin'}</button>)
                   : s.kind === 'strava' && stravaOn ? (st?.connected
                     ? <button className="btn btn-small" onClick={() => void syncStravaNow()} disabled={stravaSyncing}>{stravaSyncing ? 'Syncing…' : 'Sync now'}</button>
-                    : <button className="btn btn-small strava-connect" onClick={onConnectStrava} disabled={stravaBusy || data.mode !== 'real'}>{stravaBusy ? 'Opening Strava…' : 'Connect with Strava'}</button>)
+                    : <button type="button" className="strava-connect" onClick={onConnectStrava} disabled={stravaBusy || data.mode !== 'real'} aria-label={stravaBusy ? 'Opening Strava…' : 'Connect with Strava'} aria-busy={stravaBusy}>
+                        <img src="/brand/strava/btn_strava_connect_with_orange.svg" width={237} height={48} alt="" />
+                      </button>)
                   : s.availability === 'stage-2' ? <span className="tag">Coming soon</span>
                   : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="tag">In the phone app</Link>)
                   : <span className="tag">Planned</span>}
