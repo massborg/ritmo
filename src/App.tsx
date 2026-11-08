@@ -1,6 +1,7 @@
 import { lazyPage } from './lib/chunks';
 import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
+import { ConsentBanner } from './components/ConsentBanner';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, LineChart, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
@@ -258,6 +259,7 @@ function Shell() {
           </ChunkBoundary>
         </Gate>
         <UpdateToast />
+        <ConsentBanner />
         {!bare && COACH_FAB.some((r) => r.test(pathname)) && (
           <NavLink to="/coach" className="coach-fab" aria-label="Ask your coach"><MessageCircle size={24} strokeWidth={2} aria-hidden="true" /></NavLink>
         )}
