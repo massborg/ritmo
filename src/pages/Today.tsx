@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload, Zap } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
@@ -65,6 +65,9 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
     </section>
   );
 }
+
+/** iPhone Safari only speaks after a tap: a silent word now lets the run's audio cues play later. */
+const primeSpeech = () => { try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch { /* cues are optional */ } };
 
 export default function Today() {
   const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag, typeOf } = useApp();
@@ -184,6 +187,12 @@ export default function Today() {
             );
           })()}
         </div>
+      )}
+      {isToday && data.mode === 'real' && hasFlag('run_tab') && (
+        <Link to="/run?quick=1" className="btn btn-primary btn-block quick-run" onClick={primeSpeech}>
+          <Zap size={22} strokeWidth={2.2} aria-hidden="true" />
+          <span className="quick-run-text"><span>Quick run</span><small>Start recording now, no plan needed</small></span>
+        </Link>
       )}
       {isToday && data.mode === 'real' && <InstallPrompt />}
       {isToday && (() => {
