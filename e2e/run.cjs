@@ -57,6 +57,8 @@ async function account(mock, ctx, email, flagged) {
   await page.locator('.tabbar a[href="/run"]').click();
   await page.getByText(/GPS ready ±\d+ m/).waitFor({ timeout: 10000 });
   check(true, 'GPS accuracy shown before the start');
+  await page.waitForTimeout(500);
+  check(tiles.length > 0, `the map around the runner starts loading before the run starts (${tiles.length} tiles fetched while waiting)`);
   await page.getByRole('radio', { name: 'Free run' }).or(page.getByRole('button', { name: 'Free run' })).first().click();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await page.locator('.run-live').waitFor({ timeout: 8000 });

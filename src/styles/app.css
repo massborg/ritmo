@@ -407,6 +407,10 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
    ===================================================================== */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { max-width: 100%; overflow-x: clip; }
+/* Phone fit: no zooming. Text boxes are at least 16 px, or iPhones zoom in when you tap one; no double-tap zoom. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+input, select, textarea { font-size: max(16px, 1em); }
+img, svg, video, canvas { max-width: 100%; }
 body { overscroll-behavior-y: none; min-height: 100dvh; }
 button, a, [role='button'], input, select, textarea, label { touch-action: manipulation; }
 img, svg, video, canvas { max-width: 100%; }

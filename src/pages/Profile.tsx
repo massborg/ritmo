@@ -10,6 +10,7 @@ import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/fo
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
+import { RunVoiceCard } from '../components/RunVoiceCard';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
@@ -51,6 +52,7 @@ export default function Profile() {
       </div>
 
       <PushReminders />
+      <RunVoiceCard />
       <CalendarFeed />
 
       <section className="card stack" aria-labelledby="ill">

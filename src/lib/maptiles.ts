@@ -55,3 +55,24 @@ export function mapsOn(): boolean {
 export function setMapsOn(on: boolean) {
   try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch { /* storage blocked: the choice lasts for this visit */ }
 }
+
+const warmed = new Set<string>();
+/**
+ * Fetch the map tiles around a position ahead of time (into the browser's cache), so a run's map appears at once
+ * instead of loading tile by tile after the start. A handful of tiles at the zooms a run starts on; each only once.
+ */
+export function prefetchTiles(lat: number, lon: number, w = 360, h = 360, zooms = [16, 15]): number {
+  if (!mapsOn() || typeof Image === 'undefined') return 0;
+  let n = 0;
+  for (const z of zooms) {
+    for (const t of fitView([{ lat, lon }], w + TILE, h + TILE, 0, z)?.tiles ?? []) {
+      if (warmed.has(t.url)) continue;
+      warmed.add(t.url);
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = t.url;
+      n++;
+    }
+  }
+  return n;
+}
