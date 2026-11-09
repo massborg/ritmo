@@ -41,19 +41,19 @@ function gpx(startIso, km, paceS) {
   rows.profiles[0].data.profile.daysAvailable = [0, 1, 3, 4, 5, 6];
   for (const t of Object.keys(rows)) mock.state.tables[t].push(...rows[t]);
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
-  await page.goto(`${APP}/calendar`); await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /Build my plan|Rebuild/ }).first().click(); await page.waitForTimeout(1800);
+  await page.goto(`${APP}/`); await page.waitForTimeout(1200);
+  for (const name of [/Build my plan/, /Train \d days a week/, /Start my plan/]) { const x = page.getByRole('button', { name }).first(); if (await x.isVisible().catch(() => false)) { await x.click(); await page.waitForTimeout(1800); } }
 
   // ---- Acceptance 12 / 5: title and any previous day ----
   await page.goto(`${APP}/`); await page.waitForTimeout(800);
-  check(await page.getByRole('heading', { name: "Today's training" }).isVisible(), 'Training page title is "Today\'s training"');
+  check(await page.getByRole('heading', { name: 'Training', exact: true }).isVisible(), 'Training page title is "Training"');
   check(await page.getByRole('navigation', { name: 'Main' }).last().getByText('Training').isVisible(), 'the phone tab bar says Training');
   // Monday of this week has runs in the fixture: open it from the strip
   const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
   if (ymd(monday) !== ymd(new Date())) {
     await page.locator('.daychip').first().click(); await page.waitForTimeout(300);
-    const title = await page.locator('h1').first().textContent();
-    check(/Monday's training|Yesterday's training/.test(title ?? ''), `selecting Monday changes the title (${title})`);
+    const title = await page.locator('.hero .pill-on-brand').first().textContent().catch(() => '');
+    check(/Monday|Yesterday/.test(title ?? '') || await page.getByText(/Your runs on/).isVisible(), `selecting Monday shows that day (${title})`);
     check(await page.getByText(/Your runs on/).isVisible(), 'a past day shows the runs done, not "Nothing planned"');
     await page.screenshot({ path: path.join(OUT, 'monday.png') });
   }

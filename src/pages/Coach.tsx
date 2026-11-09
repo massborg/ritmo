@@ -7,6 +7,7 @@ import { FALLBACK_TEXT } from '../coach/coach';
 
 /** Answers written before Ritmo loaded every run (review #2 fix) may quote wrong totals */
 const DATA_FIX_AT = '2026-11-07T00:00:00.000Z';
+import { ReadinessStrip } from '../components/training';
 import { AppHeader, SampleChip } from '../components/app';
 import { suggestions } from '../coach/coach';
 import { localise } from '../lib/format';
@@ -14,7 +15,7 @@ import { Sheet } from '../components/inputs';
 
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal, hasFlag, updateBody, ready, plan } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal, hasFlag, updateBody, ready, plan, readinessToday } = useApp();
   const ai = data.profile.consents?.aiCoach;
   const [params, setParams] = useSearchParams();
   // Body mode (flagged): injury and recovery chat with its own safety rules, kept apart from the coach chat
@@ -65,6 +66,9 @@ export default function Coach() {
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={data.profile.body?.aiChat !== false} onChange={(e) => updateBody({ aiChat: e.target.checked })} /> Use AI for Body answers (separate from the Coach AI setting)</label>
         </div>
       )}
+
+      {/* The same readiness as Training and run feedback: one score, word and sentence */}
+      {!body && plan && <ReadinessStrip r={readinessToday} />}
 
       <div className="chat" aria-live="polite">
         {older.length > 0 && (

@@ -119,3 +119,13 @@ describe('9 Nov feedback screen: the verdict card', async () => {
     expect(v2.checks.every((c) => c.ok)).toBe(true);
   });
 });
+
+describe('a session logged with its reps is done, not swapped', async () => {
+  const { adaptPlan } = await import('./plan');
+  it('6 x 1 km entered by hand, averaging an easy-looking pace overall', () => {
+    const plan = { id: 'p', createdAt: '2026-11-01T00:00:00Z', startDate: '2026-11-02', endDate: '2026-12-06', phases: [], changes: [], sessions: [{ ...intervals, date: '2026-11-09' }] } as never;
+    const ranEasy = { ...run, id: 'm1', source: 'manual', streams: undefined, plannedSessionId: 's9', reps: [{ kind: 'work', label: 'Rep 1', timeS: 192, distanceM: 1000 }] } as Activity;
+    const out = adaptPlan({ plan, activities: [ranEasy], feedback: [], profile: { name: 'R', units: 'km' } as never, today: new Date('2026-11-10T09:00:00Z'), typeOf: () => 'easy' as never, paces });
+    expect(out.sessions[0].status).toBe('done');
+  });
+});

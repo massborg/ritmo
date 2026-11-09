@@ -157,6 +157,8 @@ export interface Profile {
   injuries: Injury[];
   onboarded: boolean;
   illnessUntil?: string; // YYYY-MM-DD, set when runner reports illness
+  /** Optional morning check-ins (sleep, legs, energy 1–5), the last two weeks, for readiness */
+  checkins?: { date: string; sleep: number; legs: number; energy: number }[];
   experience?: 'new' | 'runner';
   starter?: { canRun10: boolean; walksRegularly: boolean; startedAt: string };
   healthConsentAt?: string; // when the runner agreed to health data processing

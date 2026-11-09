@@ -85,7 +85,10 @@ export function adaptPlan(opts: {
     if (pick) {
       used.add(pick.id);
       const ran = typeOf(pick);
-      const outcome = sessionOutcome(s.type, ran);
+      // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
+      // even if the average pace over the whole run (warm-up and jogs included) looks easy
+      const repsDone = !!pick.reps?.some((r) => r.kind === 'work' && r.timeS);
+      const outcome = repsDone ? { status: 'done' as const } : sessionOutcome(s.type, ran);
       s.status = outcome.status;
       s.swappedTo = outcome.status === 'swapped' ? ran : undefined;
       s.completedActivityId = pick.id;
@@ -462,7 +465,7 @@ export function isUnplanned(plan: Plan | undefined, date: string): boolean {
   return !s || s.type === 'rest';
 }
 
-export type SwapKind = 'shorter' | 'easy' | 'treadmill' | 'similar';
+export type SwapKind = 'shorter' | 'easy' | 'treadmill' | 'similar' | 'rest';
 
 /** Change one planned session at the runner's request, with the reason logged. */
 export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces: TrainingPaces): Plan {
@@ -476,6 +479,8 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
     s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || Math.round(s.distanceM * f);
     s.durationS = Math.round(s.steps.reduce((a, x) => a + (x.durationS ?? 0), 0)) || Math.round(s.durationS * f);
     s.title = `${s.title.replace(/ \(shorter\)$/, '')} (shorter)`;
+  } else if (kind === 'rest') {
+    Object.assign(s, { ...restDay(s.date, s.phase, 'Swapped to rest because your readiness was low. Recovery today makes the next sessions count.'), id: s.id, title: 'Rest day (swapped)' });
   } else if (kind === 'easy') {
     Object.assign(s, { ...easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces }), id: s.id, title: 'Easy run (swapped)' });
   } else if (kind === 'treadmill') {

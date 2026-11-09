@@ -28,8 +28,8 @@ fs.mkdirSync(OUT, { recursive: true });
   rows.profiles[0].data.profile.daysAvailable = [0, 1, 3, 4, 5, 6];
   for (const t of Object.keys(rows)) mock.state.tables[t].push(...rows[t]);
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
-  await page.goto(`${APP}/calendar`); await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /Build my plan|Rebuild/ }).first().click(); await page.waitForTimeout(900);
+  await page.goto(`${APP}/`); await page.waitForTimeout(1200);
+  for (const name of [/Build my plan/, /Train \d days a week/, /Start my plan/]) { const x = page.getByRole('button', { name }).first(); if (await x.isVisible().catch(() => false)) { await x.click(); await page.waitForTimeout(900); } }
   await page.goto(`${APP}/`); await page.waitForTimeout(900);
   await page.getByRole('button', { name: /^Add a run/ }).click(); await shot('1-plus-menu');
   await page.getByText('Not feeling 100%', { exact: true }).click(); await shot('2-not-feeling');
