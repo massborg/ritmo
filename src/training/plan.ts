@@ -85,7 +85,10 @@ export function adaptPlan(opts: {
     if (pick) {
       used.add(pick.id);
       const ran = typeOf(pick);
-      const outcome = sessionOutcome(s.type, ran);
+      // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
+      // even if the average pace over the whole run (warm-up and jogs included) looks easy
+      const repsDone = !!pick.reps?.some((r) => r.kind === 'work' && r.timeS);
+      const outcome = repsDone ? { status: 'done' as const } : sessionOutcome(s.type, ran);
       s.status = outcome.status;
       s.swappedTo = outcome.status === 'swapped' ? ran : undefined;
       s.completedActivityId = pick.id;

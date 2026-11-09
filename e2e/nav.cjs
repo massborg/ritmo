@@ -59,10 +59,9 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   await page.goto(`${APP}/progress`); await page.waitForTimeout(800);
   check(new URL(page.url()).pathname === '/you', `/progress opens You (${new URL(page.url()).pathname})`);
   check(await page.locator('.tab.active').innerText() === 'You', 'You is the active tab');
-  await page.goto(`${APP}/calendar`); await page.waitForTimeout(800);
-  check(await page.getByRole('heading', { name: 'Calendar' }).isVisible(), 'the month calendar is still reachable');
-  await page.goto(`${APP}/`); await page.waitForTimeout(800);
-  check(await page.getByRole('link', { name: 'Month calendar' }).isVisible(), 'Training links to the month calendar');
+  await page.goto(`${APP}/calendar`); await page.waitForTimeout(1200);
+  check(new URL(page.url()).pathname === '/' && await page.locator('#month').isVisible(), '/calendar opens the month calendar on Training');
+  check(await page.locator('.tab.active').innerText() === 'Training', 'Training is the active tab there');
 
   // The avatar opens Profile on each main screen
   for (const p of ['/', '/coach', '/run', '/hub', '/you']) {
