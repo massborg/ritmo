@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Camera, ChevronRight, Database, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
@@ -14,8 +14,11 @@ import { RunVoiceCard } from '../components/RunVoiceCard';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
-  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace } = useApp();
+  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace, hrIssue } = useApp();
   const nav = useNavigate();
+  const { hash } = useLocation();
+  // Links such as /profile#hr (from a run's "Check your max heart rate" card) open at that section
+  useEffect(() => { if (hash) document.getElementById(hash.slice(1))?.closest('section')?.scrollIntoView({ block: 'start' }); }, [hash]);
   const p = data.profile;
   const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string }>();
   const [photo, setPhoto] = useState(false);
@@ -76,6 +79,13 @@ export default function Profile() {
           <Stepper id="maxhr" label="Maximum heart rate" unit="bpm" value={p.maxHr} placeholder={String(hr.max)} min={120} max={230} onChange={(v) => updateProfile({ maxHr: v })} />
           <Stepper id="resthr" label="Resting heart rate" unit="bpm" value={p.restHr} placeholder={String(hr.rest)} min={30} max={100} onChange={(v) => updateProfile({ restHr: v })} />
         </div>
+        {hrIssue && (
+          <div className="banner banner-stack" role="note">
+            <StatusLine kind="warning">Your zones may be set too low</StatusLine>
+            <p>{hrIssue.reason}{hrIssue.suggestedMax ? ` Your runs this year suggest a maximum of about ${hrIssue.suggestedMax} bpm.` : ' If you know your real maximum, enter it above.'}</p>
+            {hrIssue.suggestedMax && <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => updateProfile({ maxHr: hrIssue.suggestedMax })}>Use {hrIssue.suggestedMax} bpm</button>}
+          </div>
+        )}
         <div className="table-scroll"><table className="data"><caption className="sr-only">Heart rate zones</caption><thead><tr><th scope="col">Zone</th><th scope="col">From</th><th scope="col">To</th></tr></thead>
           <tbody>{zones.map((z) => <tr key={z.zone}><td style={{ fontFamily: 'var(--font-body)' }}><span className="row" style={{ gap: 8 }}><span className={`zone-dot z${z.zone}`} aria-hidden="true" />Z{z.zone}</span></td><td>{z.min}</td><td>{z.max}</td></tr>)}</tbody></table></div>
         {!hasHr && <p className="caption">Zones are used once your runs include heart rate from a watch or chest strap.</p>}

@@ -125,10 +125,12 @@ const ymd = (d) => d.toISOString().slice(0, 10);
   await page.waitForTimeout(2500);
   check(row(orig.id).source_ids?.hidden === true, 'run left out of stats (saved)');
   await page.getByText('Leave out of my stats').click();
-  await page.locator('#fix-km').fill('9.5');
+  // About 5% shorter than the run itself (the fixture's latest run changes with the date: 9.5 km, or a 1 km cool-down)
+  const fixM = Math.floor((orig.distance_m * 0.95) / 100) * 100;
+  await page.locator('#fix-km').fill(String(fixM / 1000));
   await tap(page.getByRole('button', { name: 'Save distance' }));
   await page.waitForTimeout(2500);
-  check(row(orig.id).distance_m === 9500 && row(orig.id).source_ids?.distFrom > 0, `distance corrected to 9.5 km, original kept (${row(orig.id).source_ids?.distFrom})`);
+  check(row(orig.id).distance_m === fixM && row(orig.id).source_ids?.distFrom > 0, `distance corrected to ${fixM / 1000} km, original kept (${row(orig.id).source_ids?.distFrom})`);
   await tap(page.getByRole('button', { name: 'Restore original' }));
   await page.waitForTimeout(2500);
   check(row(orig.id).distance_m === row(orig.id).distance_m && !row(orig.id).source_ids?.distFrom, 'original distance restored');

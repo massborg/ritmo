@@ -80,8 +80,8 @@ function gpx(startIso, km, paceS) {
   await page.screenshot({ path: path.join(OUT, 'log-session.png') });
   await page.getByRole('button', { name: 'Save and see feedback' }).click();
   await page.waitForURL(/\/activity\//);
-  await page.getByText(/^Session score/).first().waitFor({ timeout: 8000 }).catch(() => {});
-  check(await page.getByText(/^Session score/).first().isVisible(), 'saving opens the feedback for the run');
+  await page.locator('.verdict-card').waitFor({ timeout: 8000 }).catch(() => {});
+  check(await page.locator('.verdict-card').isVisible(), 'saving opens the feedback for the run');
   await page.waitForTimeout(1800);
   const saved = mock.state.tables.activities.find((r) => r.source === 'manual' && r.user_id === uid);
   check(saved?.source_ids?.planned === q.id, 'the run is linked to the planned session');

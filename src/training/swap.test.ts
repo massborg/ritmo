@@ -85,3 +85,37 @@ describe('impossible runs stay out of the stats', () => {
     expect(forStats([r(15000, 75), r(10000, 2400)]).map((a) => a.distanceM)).toEqual([10000]);
   });
 });
+
+describe('9 Nov feedback screen: the verdict card', async () => {
+  const { buildVerdict } = await import('./verdict');
+  const type = classify(run, paces, zones, 3600).type;
+  const check = hrCheck([{ ...run, maxHr: 177 }], { max: 175, rest: 44, estimated: false }, paces.easy[0], new Date('2026-11-09T12:00:00Z'));
+  const an = analyse({ a: run, all: [run], paces, zones, typicalMovingS: 3600, planned: intervals, pastFeedback: [], units: 'km', typeOf: () => type, hrSuspect: !!check });
+  const rep = buildReport({ a: run, an, planned: an.planned, all: [run], race: safi, paces, fitnessVdot: 63.3, units: 'km', typeOf: () => type });
+  const v = buildVerdict({ a: run, an, rep, paces, zones, units: 'km', hrSuspect: !!check });
+  it('is a good easy run, checked against the easy range, distance and finish', () => {
+    const labels = v.checks.map((c) => c.label);
+    expect(labels).toContain('Pace in your easy range');
+    expect(labels).toContain('Distance as planned');
+    expect(labels).toContain('Relaxed finish is fine');
+    expect(v.checks.find((c) => c.label === 'Distance as planned')?.detail).toBe('16.3 of 16.0 km');
+    expect(v.checks.find((c) => c.label === 'Pace in your easy range')?.detail).toMatch(/^4:25\/km · range 4:\d\d–4:\d\d\/km$/);
+    expect(v.checks.length).toBeGreaterThanOrEqual(3);
+    expect(v.checks.length).toBeLessThanOrEqual(5);
+  });
+  it('blames the heart rate settings, not the runner, and never says "start slower"', () => {
+    const text = v.checks.map((c) => `${c.label} ${c.detail ?? ''}`).join(' ');
+    expect(text).not.toMatch(/start (the first third )?slower/i);
+    expect(text).not.toMatch(/Heart rate ran high/);
+    expect(v.title).toBe('Good easy run');
+  });
+  it('without the heart rate problem, it is simply a good easy run', () => {
+    const okZones = hrZones({ max: 190, rest: 44 } as never);
+    const an2 = analyse({ a: run, all: [run], paces, zones: okZones, typicalMovingS: 3600, planned: intervals, pastFeedback: [], units: 'km', typeOf: () => type });
+    const rep2 = buildReport({ a: run, an: an2, planned: an2.planned, all: [run], race: safi, paces, fitnessVdot: 63.3, units: 'km', typeOf: () => type });
+    const v2 = buildVerdict({ a: run, an: an2, rep: rep2, paces, zones: okZones, units: 'km' });
+    expect(v2.title).toBe('Good easy run');
+    expect(v2.zone).toBe(2);
+    expect(v2.checks.every((c) => c.ok)).toBe(true);
+  });
+});

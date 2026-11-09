@@ -686,3 +686,24 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 @keyframes page-in { from { opacity: .55; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .page-in { animation: none; } }
 
+
+/* Run feedback (brief 7.3): four headline stats, swap banner, verdict checklist, settings check */
+.stat-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4) var(--s3); }
+.stat-2x2 .stat { font-size: clamp(22px, 6.4vw, 28px); line-height: 1.2; white-space: nowrap; }
+.stat-2x2 .stat small { font-size: 0.55em; font-weight: 600; margin-left: 2px; }
+.mono-caption { font-family: var(--font-mono); }
+.banner-info { background: color-mix(in srgb, var(--info) 12%, var(--surface-raised)); color: var(--ink); border: 1px solid color-mix(in srgb, var(--info) 35%, transparent); }
+.banner-info > svg { color: var(--info); }
+.zone-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 10px; border-radius: 999px; background: var(--surface-sunken); font: 600 13px/18px var(--font-body); white-space: nowrap; }
+.check-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.check-list li { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3) 0; border-top: 1px solid var(--hairline); }
+.check-list li:first-child { border-top: 0; padding-top: 0; }
+.check-list li > svg { flex: none; margin-top: 1px; }
+.check-list li.ok > svg { color: var(--success); }
+.check-list li.warn > svg { color: var(--warning); }
+.check-list li.warn .check-label { color: var(--warning); }
+.check-list .check-label { display: block; font-weight: 600; }
+.check-list .check-detail { display: block; overflow-wrap: anywhere; }
+.race-line p.label { margin-bottom: 2px; }
+.settings-check { border: 1px solid var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface-raised)); }
+.settings-check svg { color: var(--warning); }

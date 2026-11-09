@@ -84,19 +84,19 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
 
   // ---- A Strava run: attribution and no sharing ----
   await page.goto(`${APP}/activity/strava-111`); await page.locator('h2#verdict').waitFor({ timeout: 15000 });
-  const meta = await page.locator('p.caption', { has: page.locator('a.strava-link') }).textContent();
-  check(/from Strava/.test(meta) && (await page.getByRole('link', { name: 'View on Strava' }).getAttribute('href')) === 'https://www.strava.com/activities/111', 'run page: "from Strava" with a View on Strava link');
-  check(await page.getByRole('button', { name: 'Post to Hub' }).count() === 0 && await page.getByRole('button', { name: 'Share', exact: true }).count() === 0, 'no Post to Hub or Share for a Strava run');
+  const meta = await page.locator('header.large-title p.caption').textContent();
+  check(/· Strava$/.test(meta) && (await page.getByRole('link', { name: 'View on Strava' }).getAttribute('href')) === 'https://www.strava.com/activities/111', 'run page: dated "· Strava" with a View on Strava link');
+  check(await page.getByRole('button', { name: 'Post to Hub' }).count() === 0 && await page.getByRole('button', { name: 'Share this run' }).count() === 0, 'no Post to Hub or Share for a Strava run');
   check(await page.getByText(/came from Strava, so it stays private to you/).isVisible(), 'explains why');
   const shots = require('path').join(__dirname, 'out');
-  await page.locator('p.caption', { has: page.locator('a.strava-link') }).evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.locator('a.strava-link').evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-attribution.png') });
   await page.getByText(/came from Strava, so it stays private to you/).evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-private.png') });
   // A non-Strava run still offers sharing
   const own = rows.activities[rows.activities.length - 1].id;
   await page.goto(`${APP}/activity/${own}`); await page.locator('h2#verdict').waitFor({ timeout: 15000 });
-  check(await page.getByRole('button', { name: 'Share', exact: true }).count() === 1, 'a run from another source can still be shared');
+  check(await page.getByRole('button', { name: 'Share this run' }).count() === 1, 'a run from another source can still be shared');
 
   // ---- The AI coach is told nothing derived from Strava runs ----
   await page.goto(`${APP}/coach`); await page.locator('#ask').waitFor({ timeout: 15000 });

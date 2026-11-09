@@ -5,6 +5,16 @@ import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek,
 
 /** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
 const dayLabel = (d: string) => longDate(parseYmd(d));
+// "a 16.3 km", but "an 8.0 km", "an 11 km", "an 18.2 km": the article follows how the number is said
+const article = (km: string) => (/^(8|11|18)(\D|$)|^8\d/.test(km) ? 'an' : 'a');
+
+/** The plan-impact line for a quality session run easy: shown in the plan changes and on the run's page. */
+export function swapLine(s: PlannedSession, run: Activity | undefined, sessions: PlannedSession[]): string {
+  const next = sessions.find((o) => o.date > s.date && o.status === 'planned' && QUALITY_TYPES.includes(o.type));
+  const km = run ? `${(run.distanceM / 1000).toFixed(1)} km` : '';
+  const ran = SESSION_SHORT[s.swappedTo ?? 'easy'] ?? 'easy run';
+  return `On ${dayLabel(s.date)} you ran ${km ? `${article(km)} ${km} ${ran}` : `an ${ran}`} instead of ${s.title.toLowerCase()}. The ${SESSION_SHORT[s.type] ?? 'session'} won't be added back${next ? `: your next quality session is ${dayLabel(next.date)}'s ${next.title.toLowerCase()}.` : '.'}`;
+}
 import type { TrainingPaces } from './fitness';
 import { easyRun, generatePlan, type GenInput, type PlanProblem, restDay } from './generator';
 
@@ -118,12 +128,12 @@ export function adaptPlan(opts: {
     }
   }
 
-  // 1c) Swapped sessions: a quality session run easy is not added back; say so, and name the next quality session
+  // 1c) Swapped sessions: a quality session run easy is not added back; say so, and name the next quality session.
+  // The entry is rewritten when the facts change (the run is corrected, or another run is linked), never left stale.
   for (const s of plan.sessions.filter((x) => x.status === 'swapped' && daysBetween(parseYmd(x.date), today) <= 3)) {
-    const next = plan.sessions.find((o) => o.date > s.date && o.status === 'planned' && QUALITY_TYPES.includes(o.type));
-    const run = activities.find((a) => a.id === s.completedActivityId);
-    const km = run ? `${(run.distanceM / 1000).toFixed(1)} km ` : '';
-    log(`swapped:${s.id}`, 'easier', `On ${dayLabel(s.date)} you ran an ${km}${(SESSION_SHORT[s.swappedTo ?? 'easy'] ?? 'easy run')} instead of ${s.title.toLowerCase()}. The ${SESSION_SHORT[s.type] ?? 'session'} won't be added back${next ? `: your next quality session is ${dayLabel(next.date)}'s ${next.title.toLowerCase()}.` : '.'}`);
+    const summary = swapLine(s, activities.find((a) => a.id === s.completedActivityId), plan.sessions);
+    const old = plan.changes.find((c) => c.id === `swapped:${s.id}`);
+    if (old) old.summary = summary; else log(`swapped:${s.id}`, 'easier', summary);
   }
 
   // 2) Missed sessions

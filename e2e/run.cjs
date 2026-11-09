@@ -95,7 +95,7 @@ async function account(mock, ctx, email, flagged) {
   await page.waitForURL(/\/activity\/gps-/);
   await page.waitForTimeout(800);
   const body = await page.locator('main').innerText();
-  check(/Session score/.test(body), `saving opens the feedback for the run (${body.slice(0, 160).replace(/\n/g, ' / ')})`);
+  check(/How the run went|Session score/.test(body) || await page.locator('.verdict-card').isVisible(), `saving opens the feedback for the run (${body.slice(0, 160).replace(/\n/g, ' / ')})`);
   await page.waitForTimeout(2000);
   const row = mock.state.tables.activities.find((r) => r.user_id === uid && r.source === 'ritmo_gps');
   const err = row ? Math.abs(row.distance_m - counted) / counted : 1;
