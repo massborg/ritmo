@@ -5,6 +5,7 @@ const { createMock } = require('./mock-supabase.cjs');
 const { ryanRows } = require('./fixtures/ryan.cjs');
 const APP = process.env.APP_URL || 'http://localhost:4173';
 const SUPA = 'https://gujuzacfqxbwfpprkgrx.supabase.co';
+const PHOTO = require('path').join(__dirname, '..', 'public', 'brand', 'ritmo-app-icon-1024.png');
 let passed = 0, failed = 0;
 const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); ok ? passed++ : failed++; };
 
@@ -48,10 +49,19 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   check(await page.locator('#sh-name').inputValue() === 'Nike Vomero Plus (Black)', 'picking Black names it "Nike Vomero Plus (Black)"');
   check(await det.locator('[aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]', { hasText: 'Long runs' }).count() === 1, 'what they are for is filled in (long runs)');
   check(await page.locator('#sh-ret').inputValue() === '800', 'the retire distance is filled in (800 km)');
+  // A photo of your own pair, stored privately in your own folder
+  await det.locator('input[type=file]').setInputFiles(PHOTO); await page.waitForTimeout(1200);
+  check(await det.locator('img.shoe-photo').isVisible(), 'your photo replaces the drawing');
+  const key = [...mock.state.files.keys()].find((k) => k.startsWith(`avatars/${uid}/shoe-`));
+  check(!!key, `the photo is stored in your private folder (${key})`);
   await det.getByRole('button', { name: 'Save shoes' }).click(); await page.waitForTimeout(2200);
   const saved = mock.state.tables.profiles.find((r) => r.user_id === uid).data.profile.shoes ?? [];
   check(saved.some((s) => s.name === 'Nike Vomero Plus (Black)' && s.brand === 'Nike' && s.model === 'Vomero Plus' && s.colour === 'Black' && s.use === 'long' && s.retireKm === 800), 'saved with brand, model, colour, use and lifespan');
-  check(await page.locator('#shoes-card .shoe-pic').count() >= 1 && await page.locator('#shoes-card').getByText('Nike Vomero Plus (Black)').isVisible(), 'the list shows the shoe with its picture');
+  check(saved.find((s) => s.name === 'Nike Vomero Plus (Black)')?.photo === key.replace(/^avatars\//, ''), 'the shoe remembers its photo');
+  await page.waitForTimeout(800);
+  check(await page.locator('#shoes-card img.shoe-photo').count() >= 1 && await page.locator('#shoes-card').getByText('Nike Vomero Plus (Black)').isVisible(), 'the list shows the shoe with your photo');
+  await page.locator('#shoes-card').getByRole('button', { name: 'Remove photo' }).first().click(); await page.waitForTimeout(2200);
+  check(!mock.state.files.has(key) && !mock.state.tables.profiles.find((r) => r.user_id === uid).data.profile.shoes.find((s) => s.name === 'Nike Vomero Plus (Black)').photo, 'removing the photo deletes it and goes back to the drawing');
 
   // Not listed: add by name
   await page.locator('#shoes-card').getByRole('button', { name: 'Add shoes' }).click();

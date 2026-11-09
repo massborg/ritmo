@@ -217,7 +217,7 @@ export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string
 export interface LogEntry { id: string; date: string; kind: 'cross' | 'note'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string }
 
 export type ShoeUse = 'everyday' | 'fast' | 'long' | 'trail';
-export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean; /** From the shoe finder: brand, model and colour (for the picture) */ brand?: string; model?: string; colour?: string; /** What the shoe is for, used to assign runs automatically (default everyday) */ use?: ShoeUse; /** When it was retired (YYYY-MM-DD); runs after that never count for it */ retiredAt?: string }
+export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean; /** From the shoe finder: brand, model and colour (for the picture) */ brand?: string; model?: string; colour?: string; /** A photo of the runner's own pair, in their private storage folder */ photo?: string; /** What the shoe is for, used to assign runs automatically (default everyday) */ use?: ShoeUse; /** When it was retired (YYYY-MM-DD); runs after that never count for it */ retiredAt?: string }
 
 export interface Consents {
   /** Required: processing health and training data to coach the runner */

@@ -2,7 +2,10 @@
 // colour, and the rest fills itself in (what they are for, when to retire them). A shoe that is not listed can still
 // be added by name. The picture is Ritmo's own drawing in the shoe's colour, not a product photo.
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Search, Trash2 } from 'lucide-react';
+import { useApp } from '../app/AppContext';
+import { StatusLine } from './ui';
+import { prepareShoePhoto, removeShoePhoto, shoePhotoProblem, uploadShoePhoto, useShoePhoto } from '../data/shoe-photo';
 import { Chips, DateField, Sheet, Stepper } from './inputs';
 import { SHOE_BRANDS, SHOE_COLOURS, searchShoes, shoeDisplayName, type CatalogShoe } from '../training/shoe-catalog';
 import { SHOE_USE } from '../training/shoes';
@@ -33,8 +36,46 @@ export function ShoePicture({ colour, size = 72, label }: { colour?: string; siz
   );
 }
 
+/** The runner's own photo when there is one, otherwise the drawing in the shoe's colour */
+export function ShoeImage({ shoe, size = 56 }: { shoe: Pick<Shoe, 'photo' | 'colour' | 'name'>; size?: number }) {
+  const url = useShoePhoto(shoe.photo);
+  if (shoe.photo && url) return <img className="shoe-photo" src={url} alt={`Your ${shoe.name}`} style={{ width: size, height: size * 0.625 }} />;
+  return <ShoePicture size={size} colour={shoe.colour} />;
+}
+
+/** Take or choose a photo of your pair: resized on the device, then stored privately */
+export function ShoePhotoButton({ shoeId, onDone, label = 'Add a photo of your pair' }: { shoeId: string; onDone: (path: string | undefined, preview?: string) => void; label?: string }) {
+  const { session, data } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  if (!session || data.mode !== 'real') return null;
+  const pick = async (f?: File) => {
+    if (!f) return;
+    const problem = shoePhotoProblem(f);
+    if (problem) { setErr(problem); return; }
+    setBusy(true); setErr(undefined);
+    try {
+      const jpeg = await prepareShoePhoto(f);
+      const path = await uploadShoePhoto(session.user.id, shoeId, jpeg);
+      onDone(path, URL.createObjectURL(jpeg));
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="stack-sm">
+      <label className="btn btn-small shoe-photo-btn" aria-disabled={busy}>
+        <Camera size={18} strokeWidth={2} aria-hidden="true" />{busy ? 'Saving photo…' : label}
+        <input type="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" className="sr-only" disabled={busy} onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
+      </label>
+      {err && <div role="alert"><StatusLine kind="danger">{err}</StatusLine></div>}
+    </div>
+  );
+}
+
 export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: (s: Shoe) => void }) {
   const [step, setStep] = useState<'find' | 'details'>('find');
+  const [shoeId, setShoeId] = useState(() => uid());
+  const [photo, setPhoto] = useState<string>();
+  const [preview, setPreview] = useState<string>();
   const [q, setQ] = useState('');
   const [brand, setBrand] = useState<string>();
   const [pick, setPick] = useState<CatalogShoe | null>(null);
@@ -47,8 +88,9 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
   const [retire, setRetire] = useState<number | undefined>(700);
   const results = useMemo(() => searchShoes(q, brand), [q, brand]);
 
-  const reset = () => { setStep('find'); setQ(''); setBrand(undefined); setPick(null); setColour(undefined); setName(''); setNamed(false); setUse('everyday'); setStart(ymd(new Date())); setStartKm(0); setRetire(700); };
-  const close = () => { reset(); onClose(); };
+  const reset = () => { setShoeId(uid()); setPhoto(undefined); setPreview(undefined); setStep('find'); setQ(''); setBrand(undefined); setPick(null); setColour(undefined); setName(''); setNamed(false); setUse('everyday'); setStart(ymd(new Date())); setStartKm(0); setRetire(700); };
+  // A photo taken but not saved with a shoe is removed again, so nothing is left behind in storage
+  const close = (saved = false) => { if (photo && !saved) void removeShoePhoto(photo); reset(); onClose(); };
   const choose = (s: CatalogShoe | null) => {
     setPick(s); setColour(undefined); setNamed(false);
     setName(s ? shoeDisplayName(s.brand, s.model) : q.trim());
@@ -56,12 +98,12 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
   };
   const pickColour = (c: string) => { setColour(c); if (pick && !named) setName(shoeDisplayName(pick.brand, pick.model, c)); };
   const save = () => {
-    onSave({ id: uid(), name: name.trim(), startDate: start, startKm: startKm ?? 0, retireKm: retire ?? 700, use, brand: pick?.brand, model: pick?.model, colour });
-    close();
+    onSave({ id: shoeId, name: name.trim(), startDate: start, startKm: startKm ?? 0, retireKm: retire ?? 700, use, brand: pick?.brand, model: pick?.model, colour, photo });
+    close(true);
   };
 
   return (
-    <Sheet open={open} onClose={close} title={step === 'find' ? 'Find your shoes' : pick ? `${pick.brand} ${pick.model}` : 'Add shoes'}
+    <Sheet open={open} onClose={() => close()} title={step === 'find' ? 'Find your shoes' : pick ? `${pick.brand} ${pick.model}` : 'Add shoes'}
       footer={step === 'details' ? <div className="row" style={{ gap: 8 }}><button className="btn btn-block" onClick={() => setStep('find')}><ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />Back</button><button className="btn btn-primary btn-block" disabled={!name.trim()} onClick={save}>Save shoes</button></div> : undefined}>
       {step === 'find' ? (
         <div className="stack shoe-finder">
@@ -93,7 +135,12 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
         </div>
       ) : (
         <div className="stack">
-          <div className="shoe-hero"><ShoePicture size={180} colour={colour} label={`${name || 'Shoe'} picture`} /></div>
+          <div className="shoe-hero">{preview ? <img className="shoe-photo shoe-photo-lg" src={preview} alt={`Your ${name || 'shoes'}`} /> : <ShoePicture size={180} colour={colour} label={`${name || 'Shoe'} picture`} />}</div>
+          <div className="row wrap" style={{ gap: 8 }}>
+            <ShoePhotoButton shoeId={shoeId} label={photo ? 'Change photo' : 'Add a photo of your pair'} onDone={(p, url) => { setPhoto(p); setPreview(url); }} />
+            {photo && <button type="button" className="btn btn-small btn-ghost" onClick={() => { if (photo) void removeShoePhoto(photo); setPhoto(undefined); setPreview(undefined); }}><Trash2 size={16} strokeWidth={2} aria-hidden="true" />Use the drawing</button>}
+          </div>
+          <p className="caption">Optional. Your photo is stored privately and only you see it.</p>
           {pick && (
             <div className="stack-sm">
               <span className="label" id="shoe-colour">Colour</span>
