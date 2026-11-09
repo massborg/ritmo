@@ -63,8 +63,8 @@ const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
   check(calls2 - calls1 === 2, `only the 2 recent outdoor runs asked (${calls2 - calls1}); old and indoor runs never`);
 
   await page.goto(`${APP}/activity/${hot.id}`); await page.locator('.run-weather').waitFor({ timeout: 8000 });
-  const line = (await page.locator('.run-weather').textContent()).replace(/\s+/g, ' ').trim();
-  check(line === 'Weather 29°C, feels like 33°C · humidity 71% · wind 14 km/h S · partly cloudy · MET Norway', `weather line: "${line}"`);
+  const lines = (await page.locator('.run-weather p').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim());
+  check(lines.join(' | ') === 'Weather | 29°C, feels like 33°C · humidity 71% · wind 14 km/h S · partly cloudy | Weather data: MET Norway', `weather block: "${lines.join(' | ')}"`);
   check(await page.getByRole('link', { name: 'MET Norway' }).getAttribute('href') === 'https://www.met.no/en', 'MET Norway credited and linked');
   check(/^Hot and humid \(feels like 33°C\)/.test(await page.locator('.weather-note').textContent()), 'hot-day note in the feedback');
   await page.locator('section[aria-labelledby="verdict"]').screenshot({ path: path.join(OUT, 'verdict.png') });

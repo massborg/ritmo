@@ -141,7 +141,7 @@ export default function ActivityPage() {
               ? <><span className="caption">{a.isRace ? 'You marked this as a race.' : 'Ritmo thinks this was a race.'}</span>
                 {!a.isRace && <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], true)}>Yes, it was</button>}
                 <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], false)}>Not a race</button></>
-              : <button className="btn btn-small btn-ghost" onClick={() => setRaceFlag([a.id], true)}>This was a race</button>}
+              : <button className="btn btn-small" onClick={() => setRaceFlag([a.id], true)}>This was a race</button>}
           </div>
         )}
       </div>
@@ -149,25 +149,26 @@ export default function ActivityPage() {
       {group && group.parts.length > 1 && (
         <section className="card stack-sm" aria-labelledby="session-parts">
           <h2 id="session-parts" className="label">{role === 'main' ? 'Your session that day' : `This is the ${ROLE_LABEL[role!].toLowerCase()} of a session`}: {dist(group.totalM, U)} in total</h2>
-          <DayRuns runs={group.parts} />
+          <DayRuns runs={group.parts} currentId={a.id} />
           {role !== 'main' && <p className="caption">The full feedback is on the main run. Short pieces like this one are not compared with other runs.</p>}
         </section>
       )}
 
-      <section className="card row wrap" style={{ gap: 'var(--s5)', justifyContent: 'space-between' }}>
-        <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-          <div><p className="caption">Distance</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{dist(a.distanceM, U, 2).split(' ')[0]}<span className="label"> {U}</span></p></div>
-          <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{duration(a.movingS)}</p></div>
-          <div><p className="caption">Pace</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{pace(a.movingS / (a.distanceM / 1000), U)}</p></div>
-          {a.avgHr && <div><p className="caption">Avg HR</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.avgHr}</p></div>}
-          {a.avgCadence && <div><p className="caption">Cadence</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.avgCadence}</p></div>}
-          {a.elevGainM != null && <div><p className="caption">Climb</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{a.elevGainM} m</p></div>}
+      <section className="card stack" aria-label="Run summary">
+        <div><p className="caption">Distance</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{dist(a.distanceM, U, 2).split(' ')[0]}<span className="label"> {U}</span></p></div>
+        <div className="stat-grid">
+          <div><p className="caption">Time</p><p className="stat">{duration(a.movingS)}</p></div>
+          <div><p className="caption">Pace</p><p className="stat">{pace(a.movingS / (a.distanceM / 1000), U).replace(/\/(km|mi)$/, '')}<small>/{U}</small></p></div>
+          {a.avgHr && <div><p className="caption">Avg HR</p><p className="stat">{a.avgHr}</p></div>}
+          {a.avgCadence && <div><p className="caption">Cadence</p><p className="stat">{a.avgCadence}</p></div>}
+          {a.elevGainM != null && <div><p className="caption">Climb</p><p className="stat">{a.elevGainM}<small> m</small></p></div>}
         </div>
         {a.weather && (
-          <p className="caption run-weather" style={{ flexBasis: '100%' }}>
-            <span className="label">Weather</span> {weatherLine(a.weather, U)}
-            <span style={{ opacity: 0.7 }}> · <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a></span>
-          </p>
+          <div className="run-weather">
+            <p className="caption"><strong>Weather</strong></p>
+            <p className="caption">{weatherLine(a.weather, U)}</p>
+            <p className="caption" style={{ opacity: 0.75 }}>Weather data: <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a></p>
+          </div>
         )}
       </section>
 
@@ -177,7 +178,7 @@ export default function ActivityPage() {
       {/* Asked near the top until answered, so it actually gets filled in */}
       {!fb && feelSection}
 
-      {an.limitedData && <div className="banner" role="note"><StatusLine kind="info">Limited data</StatusLine><p>{an.limitedData}</p></div>}
+      {an.limitedData && <div className="banner banner-stack" role="note"><StatusLine kind="info">Limited data</StatusLine><p>{an.limitedData}</p></div>}
 
       <section className="card stack" aria-labelledby="verdict">
         <div className="row" style={{ gap: 'var(--s4)', alignItems: 'flex-start' }}>

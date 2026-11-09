@@ -664,3 +664,23 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .voice-play .pulse { animation: voice-pulse .8s ease-in-out infinite alternate; }
 @keyframes voice-pulse { from { opacity: 1; } to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .voice-play .pulse { animation: none; } }
+
+/* ---------- Run page: summary numbers, weather, selected run ---------- */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: var(--s4) var(--s3); align-items: start; }
+.stat-grid .stat { font-size: clamp(19px, 5.6vw, 24px); line-height: 1.25; white-space: nowrap; }
+.stat-grid .stat small, .stat-xl small { font-size: 0.6em; font-weight: 600; margin-left: 1px; }
+.run-weather { display: grid; gap: 2px; padding-top: var(--s3); border-top: 1px solid var(--hairline); }
+.run-weather strong { color: var(--ink); font-weight: 600; }
+.banner-stack { flex-direction: column; gap: var(--s2); }
+.banner-stack > .status { white-space: nowrap; }
+.run-part-name { color: var(--ink); }
+.run-here { color: var(--quick-run); font-weight: 700; }
+/* The run you are looking at, and a tap on any run, show in orange */
+.run-link { border-radius: var(--r-input); transition: background-color .15s ease; -webkit-tap-highlight-color: transparent; }
+.session-parts .run-link { padding: 4px var(--s3); margin-left: calc(-1 * var(--s3)); }
+.run-link:active { background: color-mix(in srgb, var(--quick-run) 22%, transparent); }
+.run-link.is-current { background: color-mix(in srgb, var(--quick-run) 16%, transparent); box-shadow: inset 3px 0 0 var(--quick-run); }
+.run-link.is-current .run-part-name, .run-link.is-current .label { color: var(--quick-run); }
+.list-item.run-link { padding-left: var(--s3); padding-right: var(--s3); }
+@media (prefers-reduced-motion: reduce) { .run-link { transition: none; } }
+
