@@ -247,7 +247,7 @@ export default function RunPage() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Run" eyebrow="Record a run with your phone" />
+      <AppHeader title="Run" eyebrow="Record a run with your phone" avatar />
       {unfinished && (
         <div className="card stack-sm" role="alert">
           <StatusLine kind="warning">An unfinished run from {new Date(unfinished.track.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}: {dist(unfinished.track.distanceM, U)}</StatusLine>

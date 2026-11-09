@@ -402,10 +402,10 @@ async function run(label, deviceOpts) {
     await logOut(page);
     await logIn(page, A, 'Runner2026');
     await see(page, 'That email and password do not match');
-    await page.goto(`${APP}/progress`);
-    await page.waitForURL(/next=%2Fprogress/);
+    await page.goto(`${APP}/you`);
+    await page.waitForURL(/next=%2Fyou/);
     await logIn(page, A, 'NewPass2026');
-    await page.waitForURL(`${APP}/progress`, { timeout: 8000 });
+    await page.waitForURL(`${APP}/you`, { timeout: 8000 });
   }, page);
   await step(P('network errors are explained'), async () => {
     await logOut(page);

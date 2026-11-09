@@ -62,7 +62,7 @@ export default function Story() {
         <div className="grid-3">{st.pbs.map((p) => <Kpi key={p.label} label={p.label} value={duration(p.timeS)} sub={shortDate(parseYmd(p.date))} />)}</div>
       </section>
 
-      {setup ? <Link to="/goals?setup=1" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>Set my goals</Link> : <Link to="/progress" className="btn" style={{ alignSelf: 'flex-start' }}>Back to progress</Link>}
+      {setup ? <Link to="/goals?setup=1" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>Set my goals</Link> : <Link to="/you" className="btn" style={{ alignSelf: 'flex-start' }}>Back to You</Link>}
     </div>
   );
 }

@@ -75,7 +75,7 @@ export default function HubPage() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Ritmo Hub" right={<>
+      <AppHeader avatar title="Ritmo Hub" right={<>
         <button className="icon-btn" aria-label="Find runners" onClick={() => setSheet({ kind: 'find' })}><Search size={22} strokeWidth={2} /></button>
         <button className="icon-btn hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} onClick={() => setSheet({ kind: 'notes' })}><Bell size={22} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</button>
         <button className="icon-btn" aria-label="Hub settings" onClick={() => setSheet({ kind: 'settings' })}><Settings size={22} strokeWidth={2} /></button>
@@ -114,7 +114,7 @@ function OptIn({ existing, onDone }: { existing?: HubProfile; onDone: (p: HubPro
   const [err, setErr] = useState<string>();
   return (
     <div className="stack-lg">
-      <AppHeader title="Ritmo Hub" />
+      <AppHeader avatar title="Ritmo Hub" />
       <section className="card stack">
         <h2 className="title">Share your runs on the Hub?</h2>
         <p>The Hub is where runners share runs and give each other a ritmo. It is off until you turn it on.</p>

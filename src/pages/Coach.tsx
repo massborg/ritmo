@@ -57,7 +57,7 @@ export default function Coach() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title={body ? 'Body' : 'Coach'} eyebrow={body ? 'Injury and recovery support from your training. General guidance, not medical advice.' : 'Answers from your own runs and plan. Coaching guidance, not medical advice.'} right={chat.length > 0 && !body ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
+      <AppHeader avatar title={body ? 'Body' : 'Coach'} eyebrow={body ? 'Injury and recovery support from your training. General guidance, not medical advice.' : 'Answers from your own runs and plan. Coaching guidance, not medical advice.'} right={chat.length > 0 && !body ? <button className="btn btn-ghost btn-small" onClick={clearCoach}>Clear</button> : <SampleChip />} />
       {hasFlag('body') && <Segmented<'coach' | 'body'> label="Chat" value={topic} onChange={setTopic} options={[{ value: 'coach', label: 'Coach' }, { value: 'body', label: 'Body' }]} />}
       {body && (
         <div className="card stack-sm">
