@@ -78,7 +78,10 @@ function Prefetch() {
   const { ready } = useApp();
   useEffect(() => {
     if (!ready) return;
-    const go = () => { void import('./pages/Calendar'); void import('./pages/Progress'); void import('./pages/Coach'); void import('./pages/Profile'); void import('./pages/Planned'); };
+    const go = () => {
+      for (const load of [() => import('./pages/Activity'), () => import('./pages/Calendar'), () => import('./pages/Progress'), () => import('./pages/Run'), () => import('./pages/Planned'),
+        () => import('./pages/Profile'), () => import('./pages/Coach'), () => import('./pages/Hub'), () => import('./pages/Goals'), () => import('./pages/DataSources'), () => import('./pages/Race')]) void load().catch(() => undefined);
+    };
     const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
     if (w.requestIdleCallback) w.requestIdleCallback(go); else setTimeout(go, 1500);
   }, [ready]);
@@ -217,11 +220,14 @@ function Shell() {
           <p className="caption sidebar-foot">Train to your own rhythm.</p>
         </aside>
       ) : <span />}
-      <main id="main" className={`main page${bare ? ' main-bare' : ''}`} key={pathname}>
+      <main id="main" className={`main page${bare ? ' main-bare' : ''}`}>
         <SyncBanner />
         <Gate>
           <ChunkBoundary resetKey={pathname}>
           <Suspense fallback={<Loading />}>
+            {/* Each screen starts fresh (key), and fades in gently; the Suspense around it stays, so while the next
+                screen's code loads the current one stays visible instead of flashing to a loading placeholder */}
+            <div key={pathname} className="page-in">
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<SignUp />} />
@@ -255,6 +261,7 @@ function Shell() {
               <Route path="/review/:period" element={<Review />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </div>
           </Suspense>
           </ChunkBoundary>
         </Gate>
@@ -278,7 +285,7 @@ function Shell() {
 export default function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ThemeSync />
         <Prefetch />
         <ScrollTop />

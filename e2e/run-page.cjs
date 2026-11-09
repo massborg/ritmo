@@ -51,7 +51,8 @@ const runs = (uid) => [
   check(await other.evaluate((el) => getComputedStyle(el).backgroundColor) === 'rgba(0, 0, 0, 0)', 'the other run is not highlighted');
   await other.click();
   await page.waitForURL(/piece-main/);
-  check(await page.locator('section', { has: page.locator('#session-parts') }).locator('a[aria-current="page"]').getAttribute('href') === '/activity/piece-main', 'opening the other run moves the highlight to it');
+  const moved = await page.locator('section', { has: page.locator('#session-parts') }).locator('a[aria-current="page"][href="/activity/piece-main"]').waitFor({ timeout: 5000 }).then(() => true, () => false);
+  check(moved, 'opening the other run moves the highlight to it');
 
   await page.goto(`${APP}/activity/piece-strides`); await page.locator('.stat-grid').waitFor();
   const labels = await page.locator('.stat-grid .caption').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
