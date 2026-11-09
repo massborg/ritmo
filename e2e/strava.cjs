@@ -59,8 +59,8 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   await page.goto(`${APP}/profile/data`); await stravaRow().waitFor({ timeout: 15000 });
   check(await stravaRow().getByText('Coming soon').count() === 0 && await stravaRow().getByRole('button', { name: 'Connect with Strava' }).count() === 1, 'every runner can connect Strava (no flag needed)');
 
-  // ---- Flagged: connect (round trip through the callback page) ----
-  mock.state.tables.feature_flags.push({ user_id: uid, flag: 'strava' }, { user_id: uid, flag: 'hub' }, { user_id: uid, flag: 'share_cards' });
+  // ---- Connect (round trip through the callback page), as a runner without any feature flags: Strava is open to
+  //      everyone, so the runs Strava sends must be imported without the old 'strava' flag ----
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
   await page.goto(`${APP}/profile/data`);
   const btn = stravaRow().getByRole('button', { name: 'Connect with Strava' });

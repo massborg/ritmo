@@ -252,7 +252,8 @@ function computeDerived(data: AppData): Derived {
     ? adaptPlan({ plan: data.plan, activities: acts, feedback: data.feedback, profile: data.profile, today, typeOf, paces: paces ?? trainingPaces(35) })
     : data.plan;
   // Body (flagged): pain check-ins change the coming days; red flags pause running until checked
-  const bodyOn = data.mode === 'real' && !!data.flags?.includes('body');
+  // Body is open to every runner too: its plan changes apply whether or not the account has the old flag
+  const bodyOn = data.mode === 'real' && (OPEN_TO_ALL.has('body') || !!data.flags?.includes('body'));
   const plan = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
   const t = ymd(today);
   const todaySession = plan?.sessions.find((s) => s.date === t);
@@ -926,7 +927,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // The webhook and the first 30-day backfill fill strava_inbox; here the app turns those into runs. A run deleted on
   // Strava is removed here too (Strava's terms), unless the runner has the same run from another source.
   const syncStravaNow = async () => {
-    if (dataRef.current.mode !== 'real' || !dataRef.current.flags?.includes('strava')) return;
+    // Strava is open to every runner (OPEN_TO_ALL), not only accounts with the old flag
+    if (dataRef.current.mode !== 'real' || !(OPEN_TO_ALL.has('strava') || dataRef.current.flags?.includes('strava'))) return;
     setStravaSyncing(true);
     try {
       const { runs, deleted, clear } = await pullStravaInbox();
@@ -963,7 +965,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return friendlyError(e);
     }
   };
-  const stravaFlag = data.mode === 'real' && !!data.flags?.includes('strava');
+  const stravaFlag = data.mode === 'real' && (OPEN_TO_ALL.has('strava') || !!data.flags?.includes('strava'));
   useEffect(() => {
     if (!ready || !stravaFlag) return;
     let live = true;
