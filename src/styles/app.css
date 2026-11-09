@@ -725,3 +725,20 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .sidebar .navlink.active { background: var(--surface-raised); color: var(--ink); }
 .sidebar .navlink.active svg { color: var(--brand); }
 .appbar-side .avatar { flex: none; }
+
+/* Shoe finder */
+.shoe-search { position: relative; display: block; }
+.shoe-search > svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ink-muted); pointer-events: none; }
+.shoe-search .input { padding-left: 42px; width: 100%; }
+.shoe-brands { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; margin: 0 calc(-1 * var(--s4)); padding-left: var(--s4); padding-right: var(--s4); }
+.shoe-brands::-webkit-scrollbar { display: none; }
+.shoe-brands .chip { flex: none; }
+.shoe-results { list-style: none; margin: 0; padding: 0; }
+.shoe-results li + li { border-top: 1px solid var(--hairline); }
+.shoe-result { display: grid; grid-template-columns: 64px minmax(0, 1fr) 18px; align-items: center; gap: var(--s3); width: 100%; min-height: 60px; padding: var(--s2) var(--s3); background: none; border: 0; text-align: left; color: var(--ink); cursor: pointer; }
+.shoe-result:hover { background: var(--surface-sunken); }
+.shoe-hero { display: flex; justify-content: center; padding: var(--s4) 0; border-radius: var(--r-card); background: var(--surface-sunken); }
+.shoe-colours { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; }
+.swatch.on { box-shadow: 0 0 0 3px var(--surface-raised), 0 0 0 5px var(--ink); }
+.shoe-pic { flex: none; display: block; }

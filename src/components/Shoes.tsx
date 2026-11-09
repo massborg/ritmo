@@ -3,29 +3,22 @@
 // before the retirement distance.
 import { useMemo, useState } from 'react';
 import { useApp } from '../app/AppContext';
-import { Chips, DateField, Stepper } from './inputs';
+import { ShoeFinder, ShoePicture } from './ShoeFinder';
 import { StatusLine } from './ui';
-import { shortDate, parseYmd, uid, ymd } from '../lib/format';
-import type { Shoe, ShoeUse } from '../lib/types';
+import { shortDate, parseYmd, ymd } from '../lib/format';
+import type { Shoe } from '../lib/types';
 import { SHOE_USE, shoeAlert, shoeTotals } from '../training/shoes';
-
-const USE_OPTIONS = (Object.keys(SHOE_USE) as ShoeUse[]).map((value) => ({ value, label: SHOE_USE[value] }));
 
 export function Shoes() {
   const { data, updateProfile, typeOf } = useApp();
   const shoes = useMemo(() => data.profile.shoes ?? [], [data.profile.shoes]);
   const totals = useMemo(() => shoeTotals(data.activities, shoes, typeOf), [data.activities, shoes, typeOf]);
-  const [use, setUse] = useState<ShoeUse>('everyday');
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
-  const [start, setStart] = useState(ymd(new Date()));
-  const [startKm, setStartKm] = useState<number | undefined>(0);
-  const [retire, setRetire] = useState<number | undefined>(700);
   const save = (list: Shoe[]) => updateProfile({ shoes: list });
   if (data.mode === 'sample') return null;
   return (
     <section className="card stack" aria-labelledby="shoes" id="shoes-card">
-      <div className="row-between"><h2 id="shoes" className="title">Shoes</h2>{!adding && <button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button>}</div>
+      <div className="row-between"><h2 id="shoes" className="title">Shoes</h2><button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button></div>
       {!shoes.length && !adding && <p className="caption">Add your shoes and Ritmo counts the distance, so you know when they are worn out. Most running shoes last 500 to 800 km.</p>}
       {shoes.length > 0 && <p className="caption">Runs are assigned automatically: fast shoes for intervals, tempo runs and races, long-run shoes for long runs, everyday shoes for the rest. Change a run's shoes on its page.</p>}
       <ul className="list">{shoes.map((s) => {
@@ -34,7 +27,13 @@ export function Shoes() {
         const near = !!alert;
         return (
           <li key={s.id} className="list-item stack-sm">
-            <div className="row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{s.name}{s.retired ? ' (retired)' : ''}</span><span className="caption">{SHOE_USE[s.use ?? 'everyday']}</span></span><span className="stat">{Math.round(km)} / {s.retireKm} km</span></div>
+            <div className="row-between" style={{ gap: 'var(--s3)' }}>
+              <span className="row" style={{ gap: 'var(--s3)', minWidth: 0 }}>
+                <ShoePicture size={56} colour={s.colour} />
+                <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{s.name}{s.retired ? ' (retired)' : ''}</span><span className="caption">{SHOE_USE[s.use ?? 'everyday']}</span></span>
+              </span>
+              <span className="stat" style={{ whiteSpace: 'nowrap' }}>{Math.round(km)} / {s.retireKm} km</span>
+            </div>
             <div className="progress" role="progressbar" aria-label={`${s.name} distance`} aria-valuemin={0} aria-valuemax={s.retireKm} aria-valuenow={Math.round(km)}><span style={{ width: `${Math.min(100, (km / s.retireKm) * 100)}%`, background: near ? 'var(--warning)' : undefined }} /></div>
             <div className="row-between"><span className="caption">Since {shortDate(parseYmd(s.startDate))}</span>
               <button className="btn btn-ghost btn-small" onClick={() => save(shoes.map((x) => (x.id === s.id ? { ...x, retired: !x.retired, retiredAt: x.retired ? undefined : ymd(new Date()) } : x)))}>{s.retired ? 'Use again' : 'Retire'}</button></div>
@@ -42,19 +41,7 @@ export function Shoes() {
           </li>
         );
       })}</ul>
-      {adding && (
-        <div className="stack">
-          <div className="field"><label htmlFor="sh-name">Name</label><input id="sh-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, daily trainers" /></div>
-          <Chips label="What they are for" value={use} onChange={setUse} options={USE_OPTIONS} />
-          <DateField id="sh-date" label="First run in them" value={start} onChange={setStart} />
-          <div className="grid-2">
-            <Stepper id="sh-km" label="Distance already (km)" value={startKm} onChange={setStartKm} min={0} max={2000} step={10} unit="km" />
-            <Stepper id="sh-ret" label="Retire at (km)" value={retire} onChange={setRetire} min={100} max={2000} step={50} unit="km" />
-          </div>
-          <div className="row"><button className="btn" onClick={() => setAdding(false)}>Cancel</button>
-            <button className="btn btn-primary" disabled={!name.trim()} onClick={() => { save([...shoes, { id: uid(), name: name.trim(), startDate: start, startKm: startKm ?? 0, retireKm: retire ?? 700, use }]); setAdding(false); setName(''); setUse('everyday'); }}>Save shoes</button></div>
-        </div>
-      )}
+      <ShoeFinder open={adding} onClose={() => setAdding(false)} onSave={(sh) => save([...shoes, sh])} />
     </section>
   );
 }
