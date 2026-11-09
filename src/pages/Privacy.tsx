@@ -25,6 +25,7 @@ export default function Privacy() {
           <li><strong>Your email and password</strong>: to create your account and keep your data private to you. Everyone needs an account to use Ritmo. Ritmo is for adults aged 18 and over.</li>
           <li><strong>Your name and date of birth</strong>: to talk to you and to apply the age rule. Your date of birth is never shown to anyone.</li>
           <li><strong>Your profile picture</strong> (optional): shown only to you in the app, also if you use the Hub (other runners see your initials). It is cropped and re-saved on your device before upload, which removes location and other hidden details, and is stored privately. It is never sent to the AI coach or used for anything else.</li>
+          <li><strong>Photos of your shoes</strong> (optional): shown only to you. Like the profile picture, each is resized and re-saved on your device before upload, which removes location and other hidden details, and stored privately in your own folder.</li>
           <li><strong>Health check</strong>: Ritmo keeps only the outcome (whether you were advised to check with a doctor, and when you confirmed), not your individual answers.</li>
           <li><strong>Your runs</strong> (distance, time, pace, heart rate, cadence, elevation, laps, route): to analyse sessions, estimate fitness and plan training.</li>
           <li><strong>Body check-ins and AI injury chat</strong> (pain, where and when it hurts, warning signs, return-to-run steps): to adjust your plan and give general guidance. This is health data covered by your health-data permission. It is never shown on the Hub or in share images. The Body AI chat is optional and can be switched off separately from the Coach AI; if it is on, your question and a summary of your training load and logged pain are sent to the AI model for that answer only.</li>
@@ -90,7 +91,7 @@ export default function Privacy() {
 
           <section className="card stack">
             <h2 className="title">Export everything</h2>
-            <p className="muted">Download all your data as a JSON file: account details, profile and setup answers, your choices above, runs, plan, races, feedback, coach chats and your profile picture.</p>
+            <p className="muted">Download all your data as a JSON file: account details, profile and setup answers, your choices above, runs, plan, races, feedback, coach chats and your profile picture and any photos of your shoes.</p>
             <button className="btn" style={{ alignSelf: 'flex-start' }} onClick={exportData}><Download size={18} strokeWidth={2} aria-hidden="true" />Export my data</button>
           </section>
 

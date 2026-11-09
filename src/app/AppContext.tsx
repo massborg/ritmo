@@ -846,7 +846,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const exportData = async () => {
     const picture = data.profile.avatar ? await avatarDataUrl(data.profile.avatar.path) : undefined;
-    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', account: { email: session?.user.email, createdAt: session?.user.created_at }, profilePicture: picture, ...data }, null, 2)], { type: 'application/json' });
+    // Photos of the runner's shoes are in the same private folder as the profile picture
+    const shoePhotos = Object.fromEntries(await Promise.all((data.profile.shoes ?? []).filter((x) => x.photo).map(async (x) => [x.id, await avatarDataUrl(x.photo!)] as const)));
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Ritmo', account: { email: session?.user.email, createdAt: session?.user.created_at }, profilePicture: picture, shoePhotos, ...data }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `ritmo-export-${ymd(new Date())}.json`;
