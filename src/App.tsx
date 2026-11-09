@@ -4,7 +4,7 @@ import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, LineChart, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
+import { CircleUserRound, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo, StatusLine } from './components/ui';
 import Today from './pages/Today';
@@ -37,23 +37,15 @@ const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
-/** Desktop sidebar: everything */
-const SIDEBAR: Tab[] = [
-  { to: '/', label: 'Training', icon: Sun },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { to: '/progress', label: 'Progress', icon: LineChart },
+/** The five main screens, in this order on the phone tab bar and the desktop menu. A fixed list, never built from
+ *  loaded data, so no item drops out while a page is loading. Run sits in the middle as the raised orange button. */
+const TABS: Tab[] = [
+  { to: '/', label: 'Training', icon: Sun, also: ['/calendar', '/session/', '/goals'] },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
-  { to: '/profile', label: 'Profile', icon: User },
+  { to: '/run', label: 'Run', icon: Play },
+  { to: '/hub', label: 'Hub', icon: Users },
+  { to: '/you', label: 'You', icon: User, also: ['/activity/', '/race/', '/story', '/review'] },
 ];
-/** Phone tab bar: Training, Calendar, You (Progress with Profile behind a settings button). Coach is a
- *  floating button on Training, run and session pages, and has an entry in You. */
-const MOBILE: Tab[] = [
-  { to: '/', label: 'Training', icon: Sun },
-  { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { to: '/progress', label: 'You', icon: User, also: ['/profile', '/coach', '/goals', '/story', '/review'] },
-];
-/** Pages with the floating coach button */
-const COACH_FAB = [/^\/$/, /^\/activity\//, /^\/session\//];
 
 /** Pages anyone can open without an account */
 const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy', '/terms', '/about'];
@@ -93,10 +85,27 @@ function Prefetch() {
   return null;
 }
 
+/** /progress is now You: keep old links and bookmarks working, with their query and section */
+function ToYou() {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/you${search}${hash}`} replace />;
+}
+
 function ScrollTop() {
   const { pathname, hash } = useLocation();
-  // A link to a section (/profile#hr) is scrolled by its page; everything else opens at the top
-  useEffect(() => { if (!hash) window.scrollTo(0, 0); }, [pathname, hash]);
+  // A link to a section (/profile#hr, /you#shoes-card) opens at that section once the page has drawn it; anything
+  // else opens at the top
+  useEffect(() => {
+    if (!hash) { window.scrollTo(0, 0); return; }
+    let tries = 0, timer = 0;
+    const find = () => {
+      const el = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (el) (el.closest('section') ?? el).scrollIntoView({ block: 'start' });
+      else if (tries++ < 20) timer = window.setTimeout(find, 100);
+    };
+    find();
+    return () => window.clearTimeout(timer);
+  }, [pathname, hash]);
   return null;
 }
 
@@ -207,12 +216,8 @@ function PlanProblemSheet() {
 
 function Shell() {
   const { pathname } = useLocation();
-  const { session, hasFlag } = useApp();
-  // Run (centre, orange) and Hub are open to every runner using their own data
-  // Run (centre, orange) and Hub appear for accounts with those flags: Training · Calendar · Run · Hub · You
-  const extra: Tab[] = [...(hasFlag('run_tab') ? [{ to: '/run', label: 'Run', icon: Play }] : []), ...(hasFlag('hub') ? [{ to: '/hub', label: 'Hub', icon: Users }] : [])];
-  const mobile: Tab[] = [MOBILE[0], MOBILE[1], ...extra, MOBILE[2]];
-  const sidebar: Tab[] = [SIDEBAR[0], SIDEBAR[1], ...extra, ...SIDEBAR.slice(2)];
+  const { session } = useApp();
+  const on = (t: Tab, isActive: boolean) => isActive || !!t.also?.some((p) => pathname.startsWith(p));
   const bare = BARE.includes(pathname) || !session;
   return (
     <div className={`app${bare ? ' app-bare' : ''}`}>
@@ -221,9 +226,12 @@ function Shell() {
         <aside className="sidebar" aria-label="Main navigation">
           <NavLink to="/" className="sidebar-logo" aria-label="Ritmo, go to Today"><Logo variant="compact" width={112} alt="Ritmo" /></NavLink>
           <nav className="stack-sm" aria-label="Main">
-            {sidebar.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className="navlink"><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `navlink${on(t, isActive) ? ' active' : ''}`}><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
           </nav>
-          <p className="caption sidebar-foot">Train to your own rhythm.</p>
+          <div className="sidebar-foot stack-sm">
+            <NavLink to="/profile" className={({ isActive }) => `navlink${isActive || pathname.startsWith('/profile') ? ' active' : ''}`}><CircleUserRound size={20} strokeWidth={2} aria-hidden="true" />Profile</NavLink>
+            <p className="caption" style={{ padding: '0 var(--s3)' }}>Train to your own rhythm.</p>
+          </div>
         </aside>
       ) : <span />}
       <main id="main" className={`main page${bare ? ' main-bare' : ''}`}>
@@ -249,7 +257,8 @@ function Shell() {
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/race/:id/day" element={<RaceDay />} />
-              <Route path="/progress" element={<Progress />} />
+              <Route path="/you" element={<Progress />} />
+              <Route path="/progress" element={<ToYou />} />
               <Route path="/run" element={<RunPage />} />
               <Route path="/hub" element={<HubPage />} />
               <Route path="/coach" element={<Coach />} />
@@ -273,15 +282,14 @@ function Shell() {
         </Gate>
         <UpdateToast />
         <ConsentBanner />
-        {!bare && COACH_FAB.some((r) => r.test(pathname)) && (
-          <NavLink to="/coach" className="coach-fab" aria-label="Ask your coach"><MessageCircle size={24} strokeWidth={2} aria-hidden="true" /></NavLink>
-        )}
         <LegacyOffer />
         <PlanProblemSheet />
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">
-          {mobile.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${t.to === '/run' ? ' tab-run' : ''}${isActive || t.also?.some((p) => pathname.startsWith(p)) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+          {TABS.map((t) => t.to === '/run'
+            ? <NavLink key={t.to} to={t.to} className={({ isActive }) => `tab tab-run${isActive ? ' active' : ''}`} onClick={() => void tapHaptic()}><span className="tab-run-btn" aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>{t.label}</NavLink>
+            : <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${on(t, isActive) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
         </nav>
       )}
     </div>

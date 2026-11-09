@@ -7,7 +7,8 @@ import type { ReadinessLevel } from '../training/load';
 import { useApp } from '../app/AppContext';
 
 /** iOS-style header: large title that collapses into a compact sticky bar on scroll. */
-export function AppHeader({ title, eyebrow, right, back, large = true }: { title: string; eyebrow?: ReactNode; right?: ReactNode; back?: boolean; large?: boolean }) {
+/** Screen header. Main screens pass `avatar` (Profile at the top left); other screens pass `back`. */
+export function AppHeader({ title, eyebrow, right, back, avatar, large = true }: { title: string; eyebrow?: ReactNode; right?: ReactNode; back?: boolean; avatar?: boolean; large?: boolean }) {
   const nav = useNavigate();
   const [compact, setCompact] = useState(false);
   useEffect(() => {
@@ -20,7 +21,7 @@ export function AppHeader({ title, eyebrow, right, back, large = true }: { title
     <>
       <div className={`appbar${compact ? ' appbar-compact' : ''}`}>
         <div className="appbar-inner">
-          <div className="appbar-side">{back && <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><ChevronLeft size={26} strokeWidth={2} /></button>}</div>
+          <div className="appbar-side">{back ? <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><ChevronLeft size={26} strokeWidth={2} /></button> : avatar ? <Avatar /> : null}</div>
           <span className="appbar-title" aria-hidden={!compact}>{title}</span>
           <div className="appbar-side appbar-right">{right}</div>
         </div>

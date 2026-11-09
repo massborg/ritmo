@@ -31,7 +31,7 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
     await page.goto(`${APP}/`); await page.waitForTimeout(1500);
     for (const name of [/Train 6 days a week/, /Start my plan/]) { const x = page.getByRole('button', { name }); if (await x.isVisible().catch(() => false)) { await x.click(); await page.waitForTimeout(1200); } }
     const act = rows.activities?.[0]?.id;
-    for (const p of ['/', '/calendar', '/progress', '/goals', '/coach', '/run', '/hub', '/profile', '/profile/data', '/privacy', act ? `/activity/${act}` : null].filter(Boolean)) {
+    for (const p of ['/', '/calendar', '/you', '/goals', '/coach', '/run', '/hub', '/profile', '/profile/data', '/privacy', act ? `/activity/${act}` : null].filter(Boolean)) {
       await page.goto(APP + p); await page.waitForTimeout(1300);
       results.push(await measure(page, width, p));
     }

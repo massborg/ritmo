@@ -5,7 +5,7 @@ import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
 import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
-import { AppHeader, Avatar, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
+import { AppHeader, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
 import { LogRunSheet } from '../components/LogRun';
 import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
@@ -98,6 +98,8 @@ export default function Today() {
   const swipe = useRef<number | undefined>(undefined);
   const latest = data.activities.length ? data.activities.reduce((m, x) => (x.startTime > m.startTime ? x : m)) : undefined;
   const { run: last } = useRunDetail(latest, data.mode === 'real');
+  // The month calendar, until it moves into Training itself
+  const calendarButton = <Link to="/calendar" className="icon-btn" aria-label="Month calendar"><CalendarDays size={22} strokeWidth={2} /></Link>;
   const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
@@ -109,7 +111,7 @@ export default function Today() {
   if (!data.activities.length && !plan) {
     return (
       <div className="stack-lg">
-        <AppHeader title="Today" eyebrow={longDate(today)} right={<><SampleChip />{logButton}<Avatar /></>} />
+        <AppHeader title="Today" eyebrow={longDate(today)} avatar right={<><SampleChip />{calendarButton}{logButton}</>} />
         <Empty icon={<Sparkles size={28} strokeWidth={2} aria-hidden="true" />} title="Let's get you started"
           action={<div className="stack-sm" style={{ width: '100%' }}>
             <Link to="/setup" className="btn btn-primary"><Footprints size={18} strokeWidth={2} aria-hidden="true" />Get my plan</Link>
@@ -159,7 +161,7 @@ export default function Today() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title={dayTitle(selected, t)} eyebrow={isToday ? `${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}` : undefined} right={<><SampleChip />{logButton}<Avatar /></>} />
+      <AppHeader title={dayTitle(selected, t)} eyebrow={isToday ? `${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}` : undefined} avatar right={<><SampleChip />{calendarButton}{logButton}</>} />
 
       {(plan || data.activities.length > 0) && (
         <div className="stack-sm"
@@ -201,7 +203,7 @@ export default function Today() {
         const totals = shoeTotals(data.activities, shoes, typeOf);
         const worn = shoes.map((sh) => ({ sh, km: totals.get(sh.id) ?? 0 })).find(({ sh, km }) => shoeAlert(sh, km));
         if (!worn) return null;
-        return <Link to="/progress#shoes-card" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
+        return <Link to="/you#shoes-card" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
       })()}
       {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
       {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
@@ -343,15 +345,15 @@ export default function Today() {
         </section>
       )}
 
-      <SectionTitle action={<Link to="/progress" className="btn btn-ghost btn-small">Progress</Link>}>At a glance</SectionTitle>
+      <SectionTitle action={<Link to="/you" className="btn btn-ghost btn-small">You</Link>}>At a glance</SectionTitle>
       <div className="tiles">
         {durationBased
           ? <Tile to="/calendar" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
           : <Tile to="/calendar" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? <span className="stack-sm" style={{ gap: 6 }}>of {toUnit(plannedM, U).toFixed(0)} {U} planned<span className="progress" style={{ display: 'block' }}><span style={{ width: `${Math.min(100, (doneM / (plannedM || 1)) * 100)}%` }} /></span></span> : 'run so far'} />}
         {aRace && daysToRace != null && <Tile to={`/race/${aRace.id}`} accent label={aRace.name} value={daysToRace} unit="days" sub={`${aRace.priority} race`} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
-        {fitness && stage.predictions && <Tile to="/progress" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
-        {!stage.predictions && <Tile to="/progress" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}
+        {fitness && stage.predictions && <Tile to="/you" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
+        {!stage.predictions && <Tile to="/you" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}
       </div>
 
       {last && lastAn && (

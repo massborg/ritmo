@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Flag, Plus, RefreshCw } from 'lucide-react';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { useApp } from '../app/AppContext';
-import { AppHeader, Avatar, SampleChip } from '../components/app';
+import { AppHeader, SampleChip } from '../components/app';
 import { Segmented, StatusLine } from '../components/ui';
 import { addDays, DAY_SHORT, dist, distanceLabel, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
@@ -109,7 +109,7 @@ export default function Calendar() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Calendar" right={<><SampleChip /><Avatar /></>} />
+      <AppHeader title="Calendar" back right={<SampleChip />} />
       <div className="row-between">
         <Segmented<View> label="Calendar view" value={view} onChange={setView} options={[{ value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
         <button className="chip" onClick={() => setCursor(today)}>Today</button>

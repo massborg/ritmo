@@ -101,7 +101,7 @@ export default function ActivityPage() {
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
-  if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
+  if (!a) return <Empty title="Run not found" action={<Link to="/you" className="btn">Back</Link>} />;
   const an = analysisFor(a);
   const rep = buildReport({ a, an, planned: an.planned, all: forStats(data.activities), plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
   const verdict = buildVerdict({ a, an, rep, paces, zones: a.avgHr ? zones : undefined, units: data.profile.units, hrSuspect: !!hrIssue });

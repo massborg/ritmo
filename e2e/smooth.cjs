@@ -64,7 +64,7 @@ const watch = () => {
   check(f.every((x) => !x.loading && x.chars > 40), 'a second run opens smoothly too');
 
   // 3) Tab change to a page whose code is slow
-  f = await tapAndWatch(page.locator('.tabbar a[href="/calendar"]'), /\/calendar/);
+  f = await tapAndWatch(page.locator('.tabbar a[href="/coach"]'), /\/coach/);
   check(f.every((x) => !x.loading && x.chars > 40), 'switching tabs never flashes blank or loading');
 
   // Each screen still starts fresh: a run page's state does not leak into the next run
