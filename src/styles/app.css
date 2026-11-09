@@ -303,9 +303,6 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 }
 @media (max-width: 819px) { .topbar { display: none; } }
 
-/* Page entrance */
-.page { animation: page-in 220ms ease backwards; }
-@keyframes page-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* Avatar */
 .avatar { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--graphite); color: var(--on-graphite); font: 600 14px/1 var(--font-body); text-decoration: none; }
@@ -683,4 +680,9 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .run-link.is-current .run-part-name, .run-link.is-current .label { color: var(--quick-run); }
 .list-item.run-link { padding-left: var(--s3); padding-right: var(--s3); }
 @media (prefers-reduced-motion: reduce) { .run-link { transition: none; } }
+
+/* ---------- Moving between screens: a gentle fade instead of a flash ---------- */
+.page-in { animation: page-in .2s ease-out both; }
+@keyframes page-in { from { opacity: .55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .page-in { animation: none; } }
 
