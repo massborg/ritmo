@@ -68,7 +68,7 @@ export default function RacePage() {
       </div>
     );
   }
-  if (!race) return <Empty title="Race not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
+  if (!race) return <Empty title="Race not found" action={<Link to="/" className="btn">Back to Training</Link>} />;
 
   const past = race.date < ymd(today);
   const days = daysUntil(today, race.date);
@@ -99,7 +99,7 @@ export default function RacePage() {
       {!past && !rr && (
         <section className="card stack">
           <StatusLine kind="info">Predictions are not available yet</StatusLine>
-          <p className="muted">To predict your finish time and race readiness, Ritmo needs a timed effort such as a 5K time trial or a race. {stage.next}</p>
+          <p className="muted">To predict your finish time and race preparation, Ritmo needs a timed effort such as a 5K time trial or a race. {stage.next}</p>
           <p><strong>Taper guidance.</strong> {taperGuidance(race, today)}</p>
           <div className="row wrap"><Link to="/" className="btn btn-primary">Log a run</Link><Link to="/profile/data" className="btn">Upload files</Link></div>
         </section>
@@ -113,7 +113,7 @@ export default function RacePage() {
           </section>
           <div className="grid-2">
             <section className="card stack">
-              <div className="row" style={{ gap: 'var(--s4)' }}><ScoreRing score={rr.score} /><div className="stack-sm"><h2 className="title">Race readiness</h2><p>{rr.summary}</p></div></div>
+              <div className="row" style={{ gap: 'var(--s4)' }}><ScoreRing score={rr.score} /><div className="stack-sm"><h2 className="title">Race preparation</h2><p>{rr.summary}</p></div></div>
               <ul className="list">{rr.parts.map((p) => <li key={p.label} className="row-between" style={{ padding: '10px 0' }}><span className="caption" style={{ color: 'var(--ink)' }}>{p.label}</span><StatusLine kind={p.ok ? 'success' : 'warning'}>{p.value}</StatusLine></li>)}</ul>
             </section>
             <section className="card stack"><h2 className="title">Taper guidance</h2><p>{taperGuidance(race, today)}</p>
@@ -151,7 +151,7 @@ export default function RacePage() {
 
       <div className="row wrap">
         <button className="btn" onClick={() => setEditing(true)}>Edit race</button>
-        <button className="btn btn-danger" onClick={() => { if (confirm(`Delete ${race.name}?`)) { deleteRace(race.id); nav('/calendar'); } }}><Trash2 size={18} strokeWidth={2} aria-hidden="true" />Delete race</button>
+        <button className="btn btn-danger" onClick={() => { if (confirm(`Delete ${race.name}?`)) { deleteRace(race.id); nav('/'); } }}><Trash2 size={18} strokeWidth={2} aria-hidden="true" />Delete race</button>
       </div>
     </div>
   );

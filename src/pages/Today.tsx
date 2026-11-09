@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, Plus, Sparkles, Upload, Zap } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeftRight, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, MessageCircle, Play, Plus, Sparkles, Upload, Zap } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
-import { Empty, Lanes, ReadinessStatus, StatusLine, ZoneTag } from '../components/ui';
-import { AppHeader, ReadinessGauge, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
+import { Empty, Lanes, StatusLine, ZoneTag } from '../components/ui';
+import { AppHeader, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
+import { CheckInCard, MonthPlan, NextRaceCard, PlanChanges, ReadinessStrip, RestOfWeek, SessionSheet, WeekBar } from '../components/training';
+import { buildReport } from '../training/report';
+import { buildVerdict } from '../training/verdict';
+import { forStats } from '../data/quality';
 import { LogRunSheet } from '../components/LogRun';
 import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, daysBetween, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -21,13 +25,8 @@ import { shoeAlert, shoeTotals } from '../training/shoes';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { activeNiggle, areaLabel, DISCLAIMER } from '../training/body';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
-import { missedKeySession, missedMoveOptions } from '../training/plan';
+import { missedKeySession, missedMoveOptions, swapLine } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
-
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-}
 
 /** "Today's training", "Yesterday's training", "Tomorrow's training" or "Monday's training · 2 Nov" */
 function dayTitle(d: string, t: string): string {
@@ -70,11 +69,13 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
 const primeSpeech = () => { try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch { /* cues are optional */ } };
 
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf } = useApp();
+  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue } = useApp();
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
-  const [selected, setSelected] = useState(t);
+  const [params] = useSearchParams();
+  const [selected, setSelected] = useState(() => { const d = params.get('day'); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : t; });
+  const [sheetDay, setSheetDay] = useState<string>();
   const [explaining, setExplaining] = useState(false);
   const [logFor, setLogFor] = useState<PlannedSession | 'free' | null>(null);
   const [planMsg, setPlanMsg] = useState<string>();
@@ -98,8 +99,6 @@ export default function Today() {
   const swipe = useRef<number | undefined>(undefined);
   const latest = data.activities.length ? data.activities.reduce((m, x) => (x.startTime > m.startTime ? x : m)) : undefined;
   const { run: last } = useRunDetail(latest, data.mode === 'real');
-  // The month calendar, until it moves into Training itself
-  const calendarButton = <Link to="/calendar" className="icon-btn" aria-label="Month calendar"><CalendarDays size={22} strokeWidth={2} /></Link>;
   const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
@@ -111,7 +110,7 @@ export default function Today() {
   if (!data.activities.length && !plan) {
     return (
       <div className="stack-lg">
-        <AppHeader title="Today" eyebrow={longDate(today)} avatar right={<><SampleChip />{calendarButton}{logButton}</>} />
+        <AppHeader title="Training" eyebrow={longDate(today)} avatar right={<><SampleChip />{logButton}</>} />
         <Empty icon={<Sparkles size={28} strokeWidth={2} aria-hidden="true" />} title="Let's get you started"
           action={<div className="stack-sm" style={{ width: '100%' }}>
             <Link to="/setup" className="btn btn-primary"><Footprints size={18} strokeWidth={2} aria-hidden="true" />Get my plan</Link>
@@ -138,13 +137,22 @@ export default function Today() {
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
   const lastAn = last ? analysisFor(last) : undefined;
-  const daysToRace = aRace ? daysUntil(today, aRace.date) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
   const missedTo = plan && missed ? missedMoveOptions(plan, missed.id, today).slice(0, 3) : [];
   const ranHereKm = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).reduce((x, a) => x + a.distanceM, 0);
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
-  const tsb = series.find((d) => d.date === t)?.tsb ?? 0;
-  const gauge = Math.round(readiness.level === 'ready' ? Math.max(65, Math.min(98, 78 + tsb)) : readiness.level === 'easy' ? Math.max(40, Math.min(64, 58 + tsb / 2)) : Math.max(10, Math.min(39, 30 + tsb / 3)));
+  const phaseNow = plan?.phases.find((p) => p.start <= t && p.end >= t);
+  // "Safi 5K · build phase until 22 Nov": what the plan is for and where it is
+  const subtitle = [aRace?.name, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase until ${shortDate(parseYmd(phaseNow.end))}` : plan ? `plan until ${shortDate(parseYmd(plan.endDate))}` : longDate(today)].filter(Boolean).join(' · ');
+  const ranToday = data.activities.some((a) => a.startTime.slice(0, 10) === t);
+  const checkedIn = !!data.profile.checkins?.some((c) => c.date === t);
+  // A swapped session: what was run, and how it went, in one line
+  const swappedNote = done && s?.status === 'swapped' ? (() => {
+    const an = analysisFor(done);
+    const rep = buildReport({ a: done, an, planned: an.planned, all: forStats(data.activities), plan, race: aRace, paces, units: U, typeOf, workPace: an.workPace });
+    const v = buildVerdict({ a: done, an, rep, paces, zones: done.avgHr ? zones : undefined, units: U, hrSuspect: !!hrIssue });
+    return { ran: `You ran ${labelOf(done).split(' · ')[0].toLowerCase().replace(/ run$/, '')} ${dist(done.distanceM, U)} instead · ${pace(done.movingS / (done.distanceM / 1000), U)} · ${duration(done.movingS)} · ${v.title.toLowerCase()}`, next: plan ? swapLine(s, done, plan.sessions) : '' };
+  })() : undefined;
   const upcoming = (plan?.sessions ?? []).filter((x) => x.date >= t && x.type !== 'rest');
   const isStarter = plan?.sessions.some((x) => x.type === 'runwalk' || x.type === 'timetrial');
 
@@ -161,7 +169,7 @@ export default function Today() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title={dayTitle(selected, t)} eyebrow={isToday ? `${greeting()}${data.profile.name ? `, ${data.profile.name}` : ''} · ${longDate(today)}` : undefined} avatar right={<><SampleChip />{calendarButton}{logButton}</>} />
+      <AppHeader title="Training" eyebrow={subtitle} avatar right={<><SampleChip />{logButton}</>} />
 
       {(plan || data.activities.length > 0) && (
         <div className="stack-sm"
@@ -188,6 +196,7 @@ export default function Today() {
               </div>
             );
           })()}
+          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} />}
         </div>
       )}
       {isToday && data.mode === 'real' && (
@@ -196,7 +205,6 @@ export default function Today() {
           <span className="quick-run-text"><span>Quick run</span><small>Start recording now, no plan needed</small></span>
         </Link>
       )}
-      {isToday && data.mode === 'real' && <InstallPrompt />}
       {isToday && (() => {
         const shoes = data.profile.shoes ?? [];
         if (!shoes.length) return null;
@@ -216,7 +224,7 @@ export default function Today() {
         <section className="hero stack" aria-labelledby="session-title">
           <Lanes />
           <div className="hero-top">
-            <span className="pill-on-brand">{isToday ? 'Today' : longDate(parseYmd(selected))}</span>
+            <span className="pill-on-brand">{isToday ? 'Today' : dayTitle(selected, t).replace("'s training", '')}</span>
             <span className="label">{s.focus} · {PHASE_LABEL[s.phase]}</span>
           </div>
           <h2 id="session-title" className="display-lg">{s.title}</h2>
@@ -230,15 +238,27 @@ export default function Today() {
               <p className="body hero-why"><strong>Why: </strong>{s.purpose}</p>
             </>
           ) : ranHereKm > 0 ? <p className="body">You ran {dist(ranHereKm, U)} on a rest day. It counts toward your week, and the rest of the week adjusts if needed.</p> : <p className="body">{s.purpose}</p>}
-          {done && s.status === 'swapped' && (
-            <p className="swapped-line"><span className="tag">Swapped</span> You ran {labelOf(done).split(' · ')[0].toLowerCase().replace(/ run$/, '')} instead: {dist(done.distanceM, U)} · {pace(done.movingS / (done.distanceM / 1000), U)} · {duration(done.movingS)}. It won't be added back.</p>
+          {swappedNote && (
+            <div className="swapped-block stack-sm">
+              <span className="tag tag-swapped"><ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />Swapped</span>
+              <p className="swapped-line">{swappedNote.ran}</p>
+              {swappedNote.next && <p className="swapped-next">{swappedNote.next}</p>}
+            </div>
           )}
+          {done && s.status === 'done' && <p className="swapped-line"><span className="tag">Done</span> {dist(done.distanceM, U)} · {pace(done.movingS / (done.distanceM / 1000), U)} · {duration(done.movingS)}</p>}
           {!done && s.type !== 'rest' && selected < t && s.status !== 'skipped' && <p className="label">Did you do this session?</p>}
           {s.status === 'skipped' && <p className="label">You skipped this session.</p>}
           <div className="row wrap">
             {done
-              ? <><Link to={`/activity/${done.id}`} className="btn btn-primary">See your feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
-                <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span></>
+              ? <><Link to={`/activity/${done.id}`} className="btn btn-primary">See feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
+                <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(done.startTime))} go?`)}`} className="btn"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask coach</Link>
+                {!swappedNote && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
+              : isToday && s.type !== 'rest' && s.status === 'planned'
+                ? <>
+                    <Link to="/run" className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+                    <button className="btn" onClick={() => setSheetDay(s.date)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Swap</button>
+                    <button className="btn btn-ghost" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I’ve done this run</button>
+                  </>
               : s.type !== 'rest' && selected <= t && s.status !== 'skipped'
                 ? <>
                     <button className="btn btn-primary" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />{selected < t ? 'Log this session' : 'I\u2019ve done this run'}</button>
@@ -246,21 +266,25 @@ export default function Today() {
                     {selected < t && <button className="btn" onClick={() => setAdding(true)}>I did something else</button>}
                   </>
                 : null}
-            {!done && <Link to={`/session/${s.id}`} className="btn">{s.type === 'rest' ? 'Why rest matters' : selected > t ? 'Move or change' : 'Session details'}</Link>}
+            {!done && <Link to={`/session/${s.id}`} className="btn btn-ghost">{s.type === 'rest' ? 'Why rest matters' : selected > t ? 'Move or change' : 'Session details'}</Link>}
             {isToday && s.type !== 'rest' && !done && <Link to="/coach?q=I only have 30 minutes, what should I do?" className="btn btn-ghost">Short on time?</Link>}
             {isToday && <button className="btn btn-ghost" onClick={() => setUnwell(true)}>Not feeling 100%?</button>}
           </div>
         </section>
-      ) : runsHere.length ? null : plan ? (
+      ) : plan ? (runsHere.length && upcoming.length ? null : (
         <Empty title={upcoming.length ? 'Nothing planned' : 'Your plan is complete'} action={!upcoming.length && <button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my next plan</button>}>
           {upcoming.length ? 'Enjoy the day off. A gentle walk is always fine.' : 'Well done for finishing it. Ritmo can build your next plan from what you have done.'}
         </Empty>
-      ) : (
+      )) : (
         <Empty title="No plan yet" action={<button className="btn btn-primary" onClick={() => setPlanMsg(buildMyPlan())}>Build my plan</button>}>
           Ritmo builds a plan from your past training, current fitness and goals, then adapts it as you go.
         </Empty>
       )}
       {planMsg && <div role="alert"><StatusLine kind="warning">{planMsg}</StatusLine></div>}
+
+      {/* Readiness, directly under today's session (brief 4A.1), and the optional morning check-in before the first run */}
+      {isToday && plan && <ReadinessStrip r={readinessToday} />}
+      {isToday && plan && !checkedIn && !ranToday && data.mode === 'real' && new Date().getHours() < 14 && <CheckInCard compact />}
 
       {/* Sundays: the week in review */}
       {review && (
@@ -312,10 +336,9 @@ export default function Today() {
         </section>
       )}
 
-      <section className="card stack-sm" aria-label="Readiness">
-        <ReadinessStatus level={readiness.level} label={readiness.label} />
-        <p>{readiness.summary}</p>
-      </section>
+      <NextRaceCard />
+      <RestOfWeek from={isToday ? t : selected < t ? t : selected} />
+      <MonthPlan initial={selected} />
 
       {insight && (
         <section className="card stack-sm" aria-labelledby="insight">
@@ -325,16 +348,7 @@ export default function Today() {
         </section>
       )}
 
-      <SeeMore label="See more: readiness, this week and last run">
-      <SectionTitle>How you are today</SectionTitle>
-      <section className="card stack" aria-label="Readiness details">
-        {stage.predictions && <div className="row" style={{ gap: 'var(--s4)' }}><ReadinessGauge level={readiness.level} value={gauge} label={readiness.label} /><p className="caption">Readiness combines your recent training load with how your runs felt.</p></div>}
-        {!stage.predictions && <p className="caption">A readiness score with training load appears once Ritmo knows your fitness. Until then it is based on how your runs felt and any pain or illness you log.</p>}
-        <details>
-          <summary className="label row" style={{ cursor: 'pointer', minHeight: 44, gap: 6 }}>What this is based on</summary>
-          <ul className="bullets caption">{readiness.basedOn.map((b) => <li key={b}>{b}</li>)}</ul>
-        </details>
-      </section>
+      <SeeMore label="See more: fitness, predictions and last run">
 
       {!stage.predictions && (
         <section className="card stack-sm" aria-labelledby="unlock">
@@ -348,11 +362,10 @@ export default function Today() {
       <SectionTitle action={<Link to="/you" className="btn btn-ghost btn-small">You</Link>}>At a glance</SectionTitle>
       <div className="tiles">
         {durationBased
-          ? <Tile to="/calendar" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
-          : <Tile to="/calendar" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? <span className="stack-sm" style={{ gap: 6 }}>of {toUnit(plannedM, U).toFixed(0)} {U} planned<span className="progress" style={{ display: 'block' }}><span style={{ width: `${Math.min(100, (doneM / (plannedM || 1)) * 100)}%` }} /></span></span> : 'run so far'} />}
-        {aRace && daysToRace != null && <Tile to={`/race/${aRace.id}`} accent label={aRace.name} value={daysToRace} unit="days" sub={`${aRace.priority} race`} />}
+          ? <Tile to="/#month" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
+          : <Tile to="/you" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? `of ${toUnit(plannedM, U).toFixed(0)} ${U} planned` : 'run so far'} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
-        {fitness && stage.predictions && <Tile to="/you" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race readiness ${aRaceReadiness.score}` : undefined} />}
+        {fitness && stage.predictions && <Tile to="/you" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race preparation ${aRaceReadiness.score}` : undefined} />}
         {!stage.predictions && <Tile to="/you" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}
       </div>
 
@@ -372,6 +385,9 @@ export default function Today() {
         </>
       )}
       </SeeMore>
+      <PlanChanges />
+      {data.mode === 'real' && <InstallPrompt />}
+      <SessionSheet date={sheetDay} onClose={() => setSheetDay(undefined)} />
       {sheet}
     </div>
   );

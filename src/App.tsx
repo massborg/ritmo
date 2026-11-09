@@ -3,7 +3,7 @@ import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CircleUserRound, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo, StatusLine } from './components/ui';
@@ -13,7 +13,6 @@ import { Sheet } from './components/inputs';
 import { syncStatusBar, tapHaptic } from './native';
 import { ForgotPassword, Login, ResetPassword, SignUp } from './pages/Auth';
 
-const Calendar = lazyPage(() => import('./pages/Calendar'));
 const Progress = lazyPage(() => import('./pages/Progress'));
 const Coach = lazyPage(() => import('./pages/Coach'));
 const Profile = lazyPage(() => import('./pages/Profile'));
@@ -35,12 +34,13 @@ const About = lazyPage(() => import('./pages/About'));
 const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
+const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** The five main screens, in this order on the phone tab bar and the desktop menu. A fixed list, never built from
  *  loaded data, so no item drops out while a page is loading. Run sits in the middle as the raised orange button. */
 const TABS: Tab[] = [
-  { to: '/', label: 'Training', icon: Sun, also: ['/calendar', '/session/', '/goals'] },
+  { to: '/', label: 'Training', icon: Sun, also: ['/session/', '/goals', '/readiness'] },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
   { to: '/run', label: 'Run', icon: Play },
   { to: '/hub', label: 'Hub', icon: Users },
@@ -74,7 +74,7 @@ function Prefetch() {
       // A page file missing after a new deploy must not reload the app in the background (the runner may be typing):
       // background fetches fail quietly, and the reload happens only if that page is actually opened
       const w2 = window as Window & { __ritmoPrefetching?: number };
-      const loads = [() => import('./pages/Activity'), () => import('./pages/Calendar'), () => import('./pages/Progress'), () => import('./pages/Run'), () => import('./pages/Planned'),
+      const loads = [() => import('./pages/Activity'), () => import('./pages/Progress'), () => import('./pages/Run'), () => import('./pages/Planned'),
         () => import('./pages/Profile'), () => import('./pages/Coach'), () => import('./pages/Hub'), () => import('./pages/Goals'), () => import('./pages/DataSources'), () => import('./pages/Race')];
       w2.__ritmoPrefetching = (w2.__ritmoPrefetching ?? 0) + 1;
       void Promise.allSettled(loads.map((load) => load())).finally(() => { w2.__ritmoPrefetching = Math.max(0, (w2.__ritmoPrefetching ?? 1) - 1); });
@@ -89,6 +89,12 @@ function Prefetch() {
 function ToYou() {
   const { search, hash } = useLocation();
   return <Navigate to={`/you${search}${hash}`} replace />;
+}
+
+/** /calendar/:date is now that day on Training */
+function ToDay() {
+  const { date } = useParams();
+  return <Navigate to={`/?day=${date ?? ''}`} replace />;
 }
 
 function ScrollTop() {
@@ -251,8 +257,9 @@ function Shell() {
               <Route path="/terms" element={<Terms />} />
               <Route path="/about" element={<About />} />
               <Route path="/" element={<Today />} />
-              <Route path="/calendar" element={<Calendar />} />
-              <Route path="/calendar/:date" element={<Calendar />} />
+              <Route path="/calendar" element={<Navigate to="/#month" replace />} />
+              <Route path="/calendar/:date" element={<ToDay />} />
+              <Route path="/readiness" element={<ReadinessPage />} />
               <Route path="/session/:id" element={<PlannedPage />} />
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />

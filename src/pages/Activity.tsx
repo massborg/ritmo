@@ -9,9 +9,10 @@ import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
-import { dist, duration, longDate, pace, type Units } from '../lib/format';
+import { dist, duration, longDate, pace, type Units, ymd } from '../lib/format';
 import { EASY_FAMILY, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import { buildVerdict } from '../training/verdict';
+import { ReadinessStrip } from '../components/training';
 import { swapLine } from '../training/plan';
 import { raceEvidence, zoneOf } from '../training/fitness';
 import { ROLE_LABEL } from '../training/sessions';
@@ -97,7 +98,7 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
@@ -245,6 +246,9 @@ export default function ActivityPage() {
           {planLine && <><h2 className="label">{an.swappedFrom ? 'Your plan' : 'Next session'}</h2><p>{planLine}</p></>}
         </section>
       )}
+
+      {/* Today's run: the same readiness as Training and Coach, including this run */}
+      {plan && a.startTime.slice(0, 10) === ymd(today) && <div className="stack-sm"><h2 className="label">Readiness now</h2><ReadinessStrip r={readinessToday} /></div>}
 
       {showHrCheck && (
         <section className="card stack-sm settings-check" aria-labelledby="hr-check">

@@ -12,7 +12,7 @@ export default function NotFound() {
       </div>
       <div className="row wrap">
         <Link to="/" className="btn btn-primary">Go to Today</Link>
-        <Link to="/calendar" className="btn">Open Calendar</Link>
+        <Link to="/#month" className="btn">Open the calendar</Link>
       </div>
     </div>
   );

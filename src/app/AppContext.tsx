@@ -18,7 +18,8 @@ import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/h
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
 import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, startStravaConnect, stravaConnected } from '../data/strava';
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces, hrCheck, type HrCheck } from '../training/fitness';
-import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
+import { type LoadDay, loadSeries, type Readiness } from '../training/load';
+import { asReadiness, readinessScore, type ReadinessScore } from '../training/readiness';
 import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
@@ -65,6 +66,8 @@ interface Derived {
   stage: StageInfo;
   series: LoadDay[];
   readiness: Readiness;
+  /** Today's readiness score with its factors (brief 4A) */
+  readinessToday: ReadinessScore;
   plan?: Plan;
   todaySession?: PlannedSession;
   typeOf: (a: Activity) => SessionType;
@@ -259,11 +262,11 @@ function computeDerived(data: AppData): Derived {
   const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
   const aRace = upcoming.find((r) => r.priority === 'A') ?? upcoming[0];
   const nextRace = upcoming[0];
-  let readiness = computeReadiness({ today, profile: data.profile, series, activities: acts, feedback: data.feedback, simple: !stage.predictions });
-  // On a planned rest day, good readiness means the rest is working, not "go and train"
-  if (todaySession?.type === 'rest' && readiness.level === 'ready') {
-    readiness = { ...readiness, label: 'Recovering well', summary: `Enjoy the rest day: you are absorbing your training. You are in good shape for ${plan?.sessions.find((x) => x.date > t && x.type !== 'rest')?.title.toLowerCase() ?? 'your next session'}.` };
-  }
+  // Heart-rate zones that make easy runs look hard (max HR set too low): one check for every screen
+  const hrIssue = paces ? hrCheck(acts, hr, paces.easy[0], today) : undefined;
+  // Readiness (brief 4A): worked out once here, so every screen shows the same score, word and sentence
+  const readinessToday = readinessScore({ now: today, series, activities: acts, feedback: data.feedback, profile: data.profile, typeOf, zones, paces, todaySession, race: aRace, simple: !stage.predictions, hrSuspect: !!hrIssue });
+  const readiness = asReadiness(readinessToday);
   const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
   const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
   const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
@@ -288,9 +291,7 @@ function computeDerived(data: AppData): Derived {
     const base = TYPE_LABEL[typeOf(a)];
     return s?.status === 'swapped' ? `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}` : base;
   };
-  // Heart-rate zones that make easy runs look hard (max HR set too low): one check for every screen
-  const hrIssue = paces ? hrCheck(acts, hr, paces.easy[0], today) : undefined;
-  return { hrIssue, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
+  return { hrIssue, readinessToday, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {

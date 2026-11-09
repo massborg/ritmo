@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Check, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { LogRunSheet } from '../components/LogRun';
@@ -7,6 +7,7 @@ import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
 import { DAY_SHORT, durationWords, localise, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+import { keepPlanToday } from '../training/readiness';
 
 const CONCEPTS: Record<string, string> = {
   easy: 'Easy running is conversational. It builds your aerobic engine with little fatigue, so around 80% of your running should feel like this.',
@@ -26,13 +27,14 @@ const CONCEPTS: Record<string, string> = {
 export default function Planned() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { plan, data, moveSession, today, swap } = useApp();
+  const { plan, data, moveSession, today, swap, readinessToday } = useApp();
+  const [params, setParams] = useSearchParams();
   const [warnMove, setWarnMove] = useState<string>();
   const s = plan?.sessions.find((x) => x.id === id);
   const [moving, setMoving] = useState(false);
   const [logging, setLogging] = useState(false);
   const U = data.profile.units;
-  if (!s) return <Empty title="Session not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
+  if (!s) return <Empty title="Session not found" action={<Link to="/" className="btn">Back to Training</Link>} />;
 
   const options = plan ? moveTargets(s, today) : [];
   const done = s.completedActivityId;
@@ -40,6 +42,18 @@ export default function Planned() {
   return (
     <div className="stack-lg">
       <AppHeader title="Session" back large={false} />
+      {/* Opened from the readiness strip's "Swap to easy / rest": the suggested swap, nothing changes until it is tapped */}
+      {(params.get('swap') === 'easy' || params.get('swap') === 'rest') && s.status === 'planned' && readinessToday.swap?.sessionId === s.id && (
+        <section className="card stack-sm rd-suggest" aria-labelledby="rd-suggest">
+          <h2 id="rd-suggest" className="title">Readiness {readinessToday.score}: {readinessToday.word}</h2>
+          <p>{readinessToday.line} {readinessToday.swap.kind === 'easy' ? `Swap ${s.title.toLowerCase()} for an easy ${readinessToday.swap.km} km run?` : `Swap ${s.title.toLowerCase()} for rest?`}</p>
+          <div className="row wrap">
+            <button className="btn btn-graphite" onClick={() => { swap(s.id, readinessToday.swap!.kind); nav('/'); }}>{readinessToday.swap.kind === 'easy' ? `Swap to easy ${readinessToday.swap.km} km` : 'Swap to rest'}</button>
+            <button className="btn" onClick={() => { keepPlanToday(today); setParams({}, { replace: true }); }}>Keep plan</button>
+          </div>
+          <p className="caption">The change shows under Plan changes on Training, with the reason.</p>
+        </section>
+      )}
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(s.date))} · {PHASE_LABEL[s.phase]} phase{s.movedFrom ? ` · moved from ${DAY_SHORT[weekday(parseYmd(s.movedFrom))]}` : ''}</p>
         <h1 className="display-lg">{s.title}</h1>
@@ -93,7 +107,7 @@ export default function Planned() {
             {['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'similar')}>Something similar</button>}
             <button className="btn btn-small" onClick={() => swap(s.id, 'treadmill')}>Treadmill version</button>
           </div>
-          <p className="caption">Every change is shown under Plan changes in Calendar, with the reason.</p>
+          <p className="caption">Every change is shown under Plan changes on Training, with the reason.</p>
         </section>
       )}
       {logging && <LogRunSheet open onClose={() => setLogging(false)} session={s} />}
@@ -108,7 +122,7 @@ export default function Planned() {
                 <button key={d} className="chip" onClick={() => {
                   const clash = !!plan && moveClash(plan, s, d);
                   if (clash && warnMove !== d) { setWarnMove(d); return; }
-                  moveSession(s.id, d); setMoving(false); setWarnMove(undefined); nav('/calendar');
+                  moveSession(s.id, d); setMoving(false); setWarnMove(undefined); nav("/");
                 }}>
                   {DAY_SHORT[weekday(parseYmd(d))]} {parseYmd(d).getDate()}<span className="caption">{other ? other.title : 'Free'}</span>
                 </button>

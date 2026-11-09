@@ -30,8 +30,8 @@ const tap = (page, name) => page.getByRole('radio', { name, exact: true }).or(pa
   rows.profiles[0].data.profile.daysAvailable = [0, 1, 3, 4, 5, 6];
   for (const t of Object.keys(rows)) mock.state.tables[t].push(...rows[t]);
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
-  await page.goto(`${APP}/calendar`); await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /Build my plan|Rebuild/ }).first().click(); await page.waitForTimeout(1500);
+  await page.goto(`${APP}/`); await page.waitForTimeout(1200);
+  for (const name of [/Build my plan/, /Train \d days a week/, /Start my plan/]) { const x = page.getByRole('button', { name }).first(); if (await x.isVisible().catch(() => false)) { await x.click(); await page.waitForTimeout(1500); } }
   await page.goto(`${APP}/`); await page.waitForTimeout(800);
   await page.getByRole('button', { name: /^Add a run/ }).click();
   check(await page.getByText('Something hurts').count() === 1, 'every runner has "Something hurts" (no flag needed)');
@@ -53,8 +53,8 @@ const tap = (page, name) => page.getByRole('radio', { name, exact: true }).or(pa
   check(await page.getByText(/Left calf pain 5\/10: running is replaced with cross-training/).first().isVisible(), 'a 5/10 calf check-in replaces runs with cross-training, with the reason');
   check(await page.getByText(/no hills, spikes or fast strides/).first().isVisible(), 'and removes hills and strides');
   await page.getByRole('button', { name: 'Done' }).click();
-  await page.goto(`${APP}/calendar`); await page.waitForTimeout(600);
-  check(await page.getByText('Cross-training instead of running').first().isVisible(), 'the calendar shows cross-training days');
+  await page.goto(`${APP}/`); await page.waitForTimeout(800);
+  check(await page.getByText('Cross-training instead of running').first().isVisible(), 'Training shows cross-training days');
 
   // 18: pain at night → red flag
   await page.goto(`${APP}/`); await page.waitForTimeout(800);

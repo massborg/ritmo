@@ -68,7 +68,7 @@ export function buildFacts(c: CoachContext): string[] {
   if (c.race) {
     const d = daysUntil(c.today, c.race.date);
     f.push(`Next A race: ${c.race.name}, ${distanceLabel(c.race.distanceM)}, ${shortDate(parseYmd(c.race.date))} (${d} days away)${c.race.goalS ? `, goal ${duration(c.race.goalS)}` : ''}.`);
-    if (c.raceReadiness) f.push(`Predicted finish ${duration(c.raceReadiness.predictedS)}. Race readiness ${c.raceReadiness.score}/100: ${c.raceReadiness.parts.map((p) => `${p.label} ${p.value}`).join('; ')}.`);
+    if (c.raceReadiness) f.push(`Predicted finish ${duration(c.raceReadiness.predictedS)}. Race preparation ${c.raceReadiness.score}/100: ${c.raceReadiness.parts.map((p) => `${p.label} ${p.value}`).join('; ')}.`);
   }
   if (c.last) {
     const a = c.last.activity, an = c.last.analysis;
@@ -158,7 +158,7 @@ export function localReply(q: string, c: CoachContext): CoachReply {
   }
 
   if (/why.*(easy|rest|recovery|today)|what.*today|today'?s/.test(lower)) {
-    if (!s) return { text: `There is no plan yet. Build one from Calendar and I will explain every session. Right now you are: ${c.readiness.label.toLowerCase()}. ${c.readiness.summary}`, facts };
+    if (!s) return { text: `There is no plan yet. Build one from Training and I will explain every session. Right now you are: ${c.readiness.label.toLowerCase()}. ${c.readiness.summary}`, facts };
     const reason = s.type === 'rest' ? 'Rest is when your body turns training into fitness.' : s.purpose;
     if (s.type === 'runwalk') return { text: `Today is ${s.title.toLowerCase()}. ${s.purpose} ${s.howItHelps} Keep the running easy enough to talk, and walk the walking breaks.`, facts };
     return {
@@ -173,7 +173,7 @@ export function localReply(q: string, c: CoachContext): CoachReply {
         : c.planStart && c.planStart > ymd(c.today) ? ` Your plan starts ${longDate(parseYmd(c.planStart))}.` : '';
       return { text: `${c.runCount ? `You have logged ${c.runCount} run${c.runCount > 1 ? 's' : ''}.` : 'You have not logged a run yet.'}${progress} Turning up regularly is what matters most right now. ${c.stage.next}`, facts };
     }
-    if (!c.race || !c.raceReadiness) return { text: 'Add a target race in Calendar and I will predict your finish time and track how ready you are.', facts };
+    if (!c.race || !c.raceReadiness) return { text: 'Add a target race (the + on Training) and I will predict your finish time and track how ready you are.', facts };
     const r = c.raceReadiness, race = c.race;
     const days = daysUntil(c.today, race.date);
     const gap = race.goalS ? r.predictedS - race.goalS : 0; // positive: prediction slower than goal
@@ -183,7 +183,7 @@ export function localReply(q: string, c: CoachContext): CoachReply {
         : `Your fitness currently predicts ${duration(r.predictedS)}, ${gapWords(gap)} slower than your goal of ${duration(race.goalS)}.`
       : `Your current fitness predicts ${duration(r.predictedS)}.`;
     const weak = r.parts.find((p) => !p.ok);
-    return { text: `${goal} Race readiness is ${r.score} out of 100 with ${days} days to go. ${weak ? `The gap is ${weak.label.toLowerCase()} (${weak.value}).` : 'Every marker is where it should be.'} ${r.summary}`, facts };
+    return { text: `${goal} Race preparation is ${r.score} out of 100 with ${days} days to go. ${weak ? `The gap is ${weak.label.toLowerCase()} (${weak.value}).` : 'Every marker is where it should be.'} ${r.summary}`, facts };
   }
 
   if (/last run|yesterday|how did|my run/.test(lower) && !c.last) {

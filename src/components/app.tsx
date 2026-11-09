@@ -1,7 +1,7 @@
 // App-style building blocks: large-title header, week strip, workout graph, readiness gauge, tiles.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ArrowLeftRight, ChevronLeft } from 'lucide-react';
 import type { PlannedSession, SessionType } from '../lib/types';
 import type { ReadinessLevel } from '../training/load';
 import { useApp } from '../app/AppContext';
@@ -58,13 +58,19 @@ export function WeekStrip({ days, selected, onSelect }: { days: { date: string; 
         const z = d.session ? ZONE_OF[d.session.type] : undefined;
         return (
           <button key={d.date} role="tab" aria-selected={selected === d.date} className={`daychip${d.today ? ' is-today' : ''}`} onClick={() => onSelect(d.date)}
-            aria-label={`${d.dow} ${d.dom}: ${d.unplanned ? 'unplanned run' : d.session ? d.session.title : 'nothing planned'}${d.done && !d.unplanned ? ', done' : d.missed ? ', missed' : ''}`}>
+            aria-label={`${d.dow} ${d.dom}: ${d.unplanned ? 'unplanned run' : d.session ? d.session.title : 'nothing planned'}${d.session?.status === 'swapped' ? ', swapped' : d.done && !d.unplanned ? ', done' : d.missed ? ', missed' : ''}`}>
             <span className="daychip-dow">{d.dow.slice(0, 1)}</span>
             <span className="daychip-dom">{d.dom}</span>
-            {/* done: solid; planned: zone colour; missed: hollow warning ring; unplanned run: accent */}
-            <span className="daychip-mark" style={d.missed
-              ? { background: 'transparent', border: '2px solid var(--warning)' }
-              : { background: d.unplanned ? 'var(--accent)' : d.done ? 'currentColor' : z ? `var(--zone-${z})` : 'transparent', borderColor: z || d.done ? 'transparent' : 'var(--hairline)' }} />
+            {/* Status under each day: done a filled dot, planned a hollow ring, rest the word, swapped a swap icon,
+                missed a warning ring, an unplanned run an accent dot */}
+            {d.session?.status === 'swapped'
+              ? <ArrowLeftRight className="daychip-swap" size={14} strokeWidth={2.5} aria-hidden="true" />
+              : d.unplanned ? <span className="daychip-mark" style={{ background: 'var(--accent)', borderColor: 'transparent' }} />
+              : d.done ? <span className="daychip-mark mark-done" />
+              : d.missed ? <span className="daychip-mark" style={{ background: 'transparent', border: '2px solid var(--warning)' }} />
+              : d.session?.type === 'rest' ? <span className="daychip-rest">Rest</span>
+              : d.session ? <span className="daychip-mark mark-planned" data-zone={z} />
+              : <span className="daychip-mark" style={{ background: 'transparent', borderColor: 'transparent' }} />}
           </button>
         );
       })}

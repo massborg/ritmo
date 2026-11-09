@@ -24,7 +24,7 @@ export default function RaceDay() {
       .sort((a, b) => Number(!!b.isRace) - Number(!!a.isRace) || Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM) || b.detailScore - a.detailScore)[0]
     : undefined;
   const { run } = useRunDetail(result, data.mode === 'real');
-  if (!race) return <Empty title="Race not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
+  if (!race) return <Empty title="Race not found" action={<Link to="/" className="btn">Back to Training</Link>} />;
 
   const U = data.profile.units;
   const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today) : undefined;
