@@ -94,8 +94,9 @@ function Prefetch() {
 }
 
 function ScrollTop() {
-  const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  const { pathname, hash } = useLocation();
+  // A link to a section (/profile#hr) is scrolled by its page; everything else opens at the top
+  useEffect(() => { if (!hash) window.scrollTo(0, 0); }, [pathname, hash]);
   return null;
 }
 
