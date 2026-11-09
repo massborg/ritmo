@@ -27,7 +27,10 @@ export const PB_DISTANCES: { label: string; m: number }[] = [
   ...RACE_DISTANCES.slice(2, 3), { label: '30K', m: 30000 }, ...RACE_DISTANCES.slice(3, 4),
 ];
 export const PB_KIND_LABEL: Record<PbKind, string> = { race: 'race', timetrial: 'time trial', training: 'training effort' };
-export interface PB { label: string; m: number; timeS: number; date: string; activityId: string; fromRace: boolean; kind: PbKind }
+export interface PB { label: string; m: number; timeS: number; date: string; activityId: string; fromRace: boolean; kind: PbKind; /** The fastest stretch inside a longer run, not the whole run's time */ within?: boolean }
+
+/** How a PB is described: "race", or "best 5K inside a race" when it is the fastest part of a longer run. */
+export const pbSource = (pb: Pick<PB, 'kind' | 'within' | 'label'>) => (pb.within ? `best ${pb.label} inside a ${PB_KIND_LABEL[pb.kind]}` : PB_KIND_LABEL[pb.kind]);
 
 /** Best times at race distances: whole runs of that distance and best efforts inside longer runs.
  *  `races` (the runner's calendar) helps label which PBs were set in races. */
@@ -37,14 +40,15 @@ export function personalBests(activities: Activity[], races: Race[] = []): PB[] 
     let best: PB | undefined;
     for (const a of activities) {
       let t: number | undefined;
+      let within = false;
       if (a.distanceM >= d.m * 0.99 && a.distanceM <= d.m * 1.03) t = a.movingS * (d.m / a.distanceM);
       if (a.distanceM >= d.m) {
         const e = effortOf(a, d.m);
-        if (e && (!t || e < t)) t = e;
+        if (e && (!t || e < t - 0.5)) { t = e; within = true; }
       }
       if (t && (!best || t < best.timeS)) {
         const kind: PbKind = a.isTimeTrial ? 'timetrial' : raceEvidence(a, races) ? 'race' : 'training';
-        best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: kind === 'race', kind };
+        best = { label: d.label, m: d.m, timeS: t, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: kind === 'race', kind, within };
       }
     }
     if (best) out.push(best);
@@ -231,7 +235,13 @@ export function easyHardBalance(opts: {
   if (!total) return undefined;
   const easy = runs.filter((a) => EASY_TYPES.includes(typeOf(a))).reduce((x, a) => x + a.movingS, 0);
   const easyPct = Math.round((easy / total) * 100);
-  const planned = sessions.filter((s) => inWindow(parseYmd(s.date)) && s.type !== 'rest' && s.durationS > 0);
+  // The plan's own mix over four weeks: the last 28 days, or, for a plan younger than that, its first 28 days
+  // (otherwise a plan that started today is judged on today's session alone, e.g. "0% easy" from one interval day)
+  const runDays = sessions.filter((s) => s.type !== 'rest' && s.durationS > 0);
+  const firstDay = runDays.map((s) => s.date).sort()[0];
+  const from = firstDay && firstDay > ymd(addDays(today, -27)) ? firstDay : ymd(addDays(today, -27));
+  const to = ymd(addDays(parseYmd(from), 27));
+  const planned = runDays.filter((s) => s.date >= from && s.date <= to);
   const plannedTotal = planned.reduce((x, s) => x + s.durationS, 0);
   if (plannedTotal > 0) {
     const plannedEasyPct = Math.round((planned.filter((s) => EASY_TYPES.includes(s.type)).reduce((x, s) => x + s.durationS, 0) / plannedTotal) * 100);

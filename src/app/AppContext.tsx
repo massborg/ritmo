@@ -17,9 +17,9 @@ import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
 import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, startStravaConnect, stravaConnected } from '../data/strava';
-import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces } from '../training/fitness';
+import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces, hrCheck, type HrCheck } from '../training/fitness';
 import { type LoadDay, loadSeries, readiness as computeReadiness, type Readiness } from '../training/load';
-import { analyse, type Analysis, classify, type Zones } from '../training/analysis';
+import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { activeNiggle, applyBody, areaLabel, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
@@ -68,6 +68,12 @@ interface Derived {
   plan?: Plan;
   todaySession?: PlannedSession;
   typeOf: (a: Activity) => SessionType;
+  /** Heart-rate zones look set too low (a run above max HR, or easy runs reading Z3): suggest checking them */
+  hrIssue?: HrCheck;
+  /** The run's label on every screen, e.g. "Easy run · swapped from intervals" */
+  labelOf: (a: Activity) => string;
+  /** The planned session this run completed or replaced */
+  sessionOfRun: (activityId: string) => PlannedSession | undefined;
   aRace?: Race;
   nextRace?: Race;
   aRaceReadiness?: RaceReadiness;
@@ -133,6 +139,7 @@ interface Ctx extends Derived {
   setRunHidden: (id: string, hidden: boolean) => void;
   setRunShoe: (id: string, shoeId: string | undefined) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
+  fixRunTime: (run: Activity, seconds: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
   swap: (sessionId: string, kind: SwapKind) => void;
   applyCoachProposal: (messageId: string) => void;
@@ -273,7 +280,17 @@ function computeDerived(data: AppData): Derived {
   };
   const groups = groupIndex(groupRuns(acts));
   const groupOf = (id: string) => groups.get(id);
-  return { today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
+  // One label per run, everywhere: its own type, plus what it replaced when it was a swapped session
+  const sessionByRun = new Map((plan?.sessions ?? []).filter((s) => s.completedActivityId).map((s) => [s.completedActivityId!, s]));
+  const sessionOfRun = (id: string) => sessionByRun.get(id);
+  const labelOf = (a: Activity) => {
+    const s = sessionByRun.get(a.id);
+    const base = TYPE_LABEL[typeOf(a)];
+    return s?.status === 'swapped' ? `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}` : base;
+  };
+  // Heart-rate zones that make easy runs look hard (max HR set too low): one check for every screen
+  const hrIssue = paces ? hrCheck(acts, hr, paces.easy[0], today) : undefined;
+  return { hrIssue, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -462,7 +479,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const planned = derived.plan?.sessions.find((s) => s.completedActivityId === a.id);
     const res = analyse({
       a, all: data.activities, paces: derived.paces ?? trainingPaces(40), zones: a.avgHr ? derived.zones : undefined,
-      typicalMovingS: derived.typicalMovingS, planned, feedback: data.feedback.find((f) => f.activityId === a.id),
+      typicalMovingS: derived.typicalMovingS, planned, feedback: data.feedback.find((f) => f.activityId === a.id), hrSuspect: !!derived.hrIssue,
       pastFeedback: data.feedback.filter((f) => f.activityId !== a.id && daysBetween(new Date(f.loggedAt), new Date(a.startTime)) <= 30 && f.loggedAt < a.startTime),
       units: data.profile.units, typeOf: derived.typeOf,
     });
@@ -626,11 +643,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /** Builds a plan from the runner's settings. Returns the problem (and options) instead when it does not fit. */
   const makePlan = (d: AppData, race: Race | undefined, why?: string): { plan?: Plan; problem?: PlanProblem } => {
     const today = d.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
-    const hr = hrSetup(d.profile, d.activities, today);
-    const f = estimateFitness(d.activities, hr, today, d.races);
+    const runs = forStats(d.activities);
+    const hr = hrSetup(d.profile, runs, today);
+    const f = estimateFitness(runs, hr, today, d.races);
     if (!f) return {};
-    const recent = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 28; });
-    const longest = d.activities.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
+    const recent = runs.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 28; });
+    const longest = runs.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
     const t0 = ymd(today);
     const otherRaces = d.races.filter((r) => r.id !== race?.id && r.date >= t0 && (!race || r.date < race.date));
     const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn, otherRaces });
@@ -720,6 +738,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const patchRun = (id: string, patch: Partial<Activity>) => setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const setRunHidden = (id: string, hidden: boolean) => patchRun(id, { hidden: hidden || undefined });
   const setRunShoe = (id: string, shoeId: string | undefined) => patchRun(id, { shoeId });
+  /** Correct a run's time (a mistyped manual entry, e.g. 75 seconds for 75 minutes). Only for runs without a GPS track. */
+  const fixRunTime = (run: Activity, seconds: number) => patchRun(run.id, { movingS: seconds, durationS: Math.max(seconds, run.durationS === run.movingS ? seconds : run.durationS) });
   const fixRunDistance = (run: Activity, distanceM: number) => {
     const fixed = withDistance(run, distanceM);
     setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === run.id ? { ...x, ...fixed } : x)) }));
@@ -780,7 +800,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // With the AI on, everything it is told comes from runs that did not come from Strava
       const { d: derived, acts: coachActs } = aiOn ? aiView() : { d: derivedState, acts: data.activities };
       const lastAnalysis = (a: Activity) => (derived === derivedState ? analysisFor(a) : analyse({
-        a, all: coachActs, paces: derived.paces ?? trainingPaces(40), zones: a.avgHr ? derived.zones : undefined, typicalMovingS: derived.typicalMovingS,
+        a, all: coachActs, paces: derived.paces ?? trainingPaces(40), zones: a.avgHr ? derived.zones : undefined, typicalMovingS: derived.typicalMovingS, hrSuspect: !!derived.hrIssue,
         planned: derived.plan?.sessions.find((s) => s.completedActivityId === a.id), feedback: data.feedback.find((f) => f.activityId === a.id),
         pastFeedback: data.feedback.filter((f) => f.activityId !== a.id && daysBetween(new Date(f.loggedAt), new Date(a.startTime)) <= 30 && f.loggedAt < a.startTime),
         units: data.profile.units, typeOf: derived.typeOf,
@@ -1040,7 +1060,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

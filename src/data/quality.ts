@@ -3,8 +3,26 @@
 // a run out of the stats without deleting it.
 import type { Activity } from '../lib/types';
 
-/** Runs that count towards fitness, PBs, volume and reviews. */
-export const forStats = (acts: Activity[]) => acts.filter((a) => !a.hidden);
+/** Faster than this over a kilometre or more is beyond world-record pace: the time or distance was mistyped. */
+export const FASTEST_PACE_S_PER_KM = 150; // 2:30 /km
+
+/**
+ * Why a run cannot be right, if it cannot: a mistyped time or distance (15 km in 75 seconds), or a GPS blip of a few
+ * metres. Such runs are left out of fitness, load, PBs, predictions and volume until they are corrected, so one typo
+ * cannot turn fatigue into 440 or a 15K best into "1:15".
+ */
+export function implausible(a: Activity): string | undefined {
+  const s = a.movingS || a.durationS;
+  if (!(a.distanceM >= 100) || !(s >= 30)) return 'too short to be a run (a GPS blip or a test)';
+  if (a.distanceM >= 1000 && s / (a.distanceM / 1000) < FASTEST_PACE_S_PER_KM) return 'faster than world-record pace, so the time or distance is probably mistyped';
+  return undefined;
+}
+
+/** Runs that count towards fitness, load, PBs, predictions, volume and reviews. */
+export const forStats = (acts: Activity[]) => acts.filter((a) => !a.hidden && !implausible(a));
+
+/** Runs that need checking: not hidden, but impossible as recorded. */
+export const needsChecking = (acts: Activity[]) => acts.filter((a) => !a.hidden && implausible(a) && a.distanceM >= 100);
 
 const close = (x: number, y: number, tol: number) => Math.abs(x - y) <= tol * Math.max(x, y, 1);
 /** Same run twice: distance and duration within 3%, and starting within 10 minutes or an exact 1 to 3 hours apart. */

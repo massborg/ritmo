@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { forStats, implausible } from '../data/quality';
 import { garminAttribution } from '../data/garmin';
 import { isStravaRun, stravaUrl } from '../data/strava';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -92,13 +93,13 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   if (!a) return <Empty title="Run not found" action={<Link to="/progress" className="btn">Back</Link>} />;
   const an = analysisFor(a);
-  const rep = buildReport({ a, an, planned: an.planned, all: data.activities, plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
+  const rep = buildReport({ a, an, planned: an.planned, all: forStats(data.activities), plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
   const group = groupOf(a.id);
   const role = group?.roles[a.id];
   const U = data.profile.units;
@@ -134,7 +135,7 @@ export default function ActivityPage() {
       <div className="stack-sm">
         <p className="caption">{longDate(new Date(a.startTime))} · {new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · from {isStravaRun(a) ? 'Strava' : garminAttribution(a) ?? (a.source === 'sample' ? 'sample data' : a.source === 'upload' ? 'file upload' : a.source)}{stravaUrl(a) && <> · <a className="strava-link" href={stravaUrl(a)} target="_blank" rel="noopener noreferrer">View on Strava</a></>}</p>
         <h1 className="display-lg">{a.name}</h1>
-        <div className="row wrap"><span className="tag">{TYPE_LABEL[an.type]}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span></div>
+        <div className="row wrap"><span className="tag">{labelOf(a)}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span></div>
         {data.mode === 'real' && (
           <div className="row wrap" style={{ gap: 8 }}>
             {raceEvidence(a, data.races)
@@ -146,6 +147,12 @@ export default function ActivityPage() {
         )}
       </div>
 
+      {implausible(a) && !a.hidden && (
+        <div className="banner banner-stack" role="alert">
+          <StatusLine kind="warning">This run can't be right</StatusLine>
+          <p>{dist(a.distanceM, U, 2)} in {duration(a.movingS)} is {implausible(a)}. It is left out of your fitness, load, personal bests and predictions until you fix it under Fix this run below.</p>
+        </div>
+      )}
       {group && group.parts.length > 1 && (
         <section className="card stack-sm" aria-labelledby="session-parts">
           <h2 id="session-parts" className="label">{role === 'main' ? 'Your session that day' : `This is the ${ROLE_LABEL[role!].toLowerCase()} of a session`}: {dist(group.totalM, U)} in total</h2>
@@ -311,11 +318,14 @@ export default function ActivityPage() {
 
 /** Data-quality tools for one run: possible duplicate (merge), shoes, leave out of stats, correct the distance. */
 function FixRun({ run }: { run: Activity }) {
-  const { data, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, typeOf } = useApp();
+  const { data, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, typeOf } = useApp();
   const nav = useNavigate();
   const U = data.profile.units;
   const toU = (m: number) => (U === 'mi' ? m / 1609.344 : m / 1000);
   const [km, setKm] = useState('');
+  const [time, setTime] = useState('');
+  // "1:15:00", "75:00" or "75" (minutes)
+  const newS = (() => { const p = time.trim().split(':').map(Number); if (!time.trim() || p.some((x) => !Number.isFinite(x))) return NaN; return p.length === 1 ? p[0] * 60 : p.length === 2 ? p[0] * 60 + p[1] : p[0] * 3600 + p[1] * 60 + p[2]; })();
   const [msg, setMsg] = useState<string>();
   const shoes = (data.profile.shoes ?? []).filter((s) => !s.retired || s.id === run.shoeId);
   const auto = shoeForRun({ startTime: run.startTime }, typeOf(run), data.profile.shoes ?? []);
@@ -360,6 +370,16 @@ function FixRun({ run }: { run: Activity }) {
           {run.distFrom && <button className="btn btn-small btn-ghost" onClick={() => { fixRunDistance(run, run.distFrom!); setMsg('Original distance restored.'); }}>Restore original</button>}
         </div>
       </div>
+      {!run.streams?.length && (
+        <div className="stack-sm" id="fix-time-block">
+          <label htmlFor="fix-time" className="label">Correct the time</label>
+          <p className="caption">For a run typed in by hand with the wrong time. Enter it as hours:minutes:seconds or minutes:seconds, or just minutes.</p>
+          <div className="row wrap">
+            <input id="fix-time" className="input" style={{ maxWidth: 160 }} inputMode="numeric" placeholder={duration(run.movingS)} value={time} onChange={(e) => setTime(e.target.value)} />
+            <button className="btn btn-small" disabled={!(newS >= 60 && newS < 86400 && Math.abs(newS - run.movingS) >= 1)} onClick={() => { fixRunTime(run, newS); setTime(''); setMsg(`Time set to ${duration(newS)}.`); }}>Save time</button>
+          </div>
+        </div>
+      )}
       {msg && <p role="status" className="caption">{msg}</p>}
     </section>
   );

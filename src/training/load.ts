@@ -12,7 +12,8 @@ export function activityLoad(a: Activity, hr: HrSetup, thresholdPace?: number): 
   }
   if (thresholdPace && a.distanceM > 0) {
     const p = a.movingS / (a.distanceM / 1000);
-    const intensity = thresholdPace / p;
+    // Capped: nobody holds 25% faster than threshold for long, so a mistyped time cannot explode the load
+    const intensity = Math.min(1.25, thresholdPace / p);
     return (a.movingS / 3600) * intensity * intensity * 100;
   }
   return (a.movingS / 3600) * 55;

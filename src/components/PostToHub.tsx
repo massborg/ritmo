@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
-import { createPost, shareableRoute, type Visibility } from '../data/hub';
+import { createPost, shareableRoute, type Visibility, defaultPostTitle } from '../data/hub';
 import { Chips, Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { TYPE_LABEL } from '../training/analysis';
@@ -11,8 +11,7 @@ import type { Activity, SessionType } from '../lib/types';
 
 export function PostToHub({ run, type, badges, compliance, onClose }: { run: Activity; type: SessionType; badges: string[]; compliance?: string; onClose: () => void }) {
   const { session } = useApp();
-  const day = new Date(run.startTime).toLocaleDateString('en-GB', { weekday: 'long' });
-  const [title, setTitle] = useState(`${day} ${TYPE_LABEL[type].toLowerCase()}`.replace(/^\w/, (c) => c.toUpperCase()));
+  const [title, setTitle] = useState(defaultPostTitle(run.startTime));
   const [body, setBody] = useState('');
   const [vis, setVis] = useState<Visibility>('followers');
   const [map, setMap] = useState(true);
@@ -26,7 +25,7 @@ export function PostToHub({ run, type, badges, compliance, onClose }: { run: Act
       await createPost({
         id: crypto.randomUUID(), user_id: session!.user.id, activity_id: run.id, title: title.trim(), body: body.trim() || null, visibility: vis,
         show_map: map && !!route, show_hr: hr, route: map ? route : null, city: null,
-        stats: { distanceM: run.distanceM, movingS: run.movingS, paceS: run.movingS / (run.distanceM / 1000), elevGainM: run.elevGainM, avgHr: hr ? run.avgHr : undefined, type, typeLabel: TYPE_LABEL[type], badges, compliance },
+        stats: { startedAt: run.startTime, distanceM: run.distanceM, movingS: run.movingS, paceS: run.movingS / (run.distanceM / 1000), elevGainM: run.elevGainM, avgHr: hr ? run.avgHr : undefined, type, typeLabel: TYPE_LABEL[type], badges, compliance },
       });
       setState('done');
     } catch (e) { setErr((e as Error).message); setState('idle'); }

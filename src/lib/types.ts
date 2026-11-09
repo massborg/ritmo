@@ -278,8 +278,11 @@ export interface PlannedSession {
   paceTarget?: { minSPerKm: number; maxSPerKm: number };
   hrZones?: number[]; // e.g. [2] or [3,4]
   phase: Phase;
-  status: 'planned' | 'done' | 'missed' | 'moved' | 'skipped';
+  /** done: run as planned. swapped: a quality session run easy instead (judged as what was run, not added back) */
+  status: 'planned' | 'done' | 'swapped' | 'missed' | 'moved' | 'skipped';
   completedActivityId?: string;
+  /** For a swapped session: the type that was actually run */
+  swappedTo?: SessionType;
   movedFrom?: string;
   /** A second, easy run the same day (doubles) */
   second?: { distanceM: number; durationS: number; title: string; detail: string };

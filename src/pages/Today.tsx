@@ -11,7 +11,7 @@ import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, localise, duration, durationWords, longDate, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, daysBetween, daysUntil, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, startOfWeek, toUnit, ymd } from '../lib/format';
 import { TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -70,7 +70,7 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
 const primeSpeech = () => { try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch { /* cues are optional */ } };
 
 export default function Today() {
-  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag, typeOf } = useApp();
+  const { data, today, readiness, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, series, fitness, stage, paces, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf } = useApp();
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
@@ -228,6 +228,9 @@ export default function Today() {
               <p className="body hero-why"><strong>Why: </strong>{s.purpose}</p>
             </>
           ) : ranHereKm > 0 ? <p className="body">You ran {dist(ranHereKm, U)} on a rest day. It counts toward your week, and the rest of the week adjusts if needed.</p> : <p className="body">{s.purpose}</p>}
+          {done && s.status === 'swapped' && (
+            <p className="swapped-line"><span className="tag">Swapped</span> You ran {labelOf(done).split(' · ')[0].toLowerCase().replace(/ run$/, '')} instead: {dist(done.distanceM, U)} · {pace(done.movingS / (done.distanceM / 1000), U)} · {duration(done.movingS)}. It won't be added back.</p>
+          )}
           {!done && s.type !== 'rest' && selected < t && s.status !== 'skipped' && <p className="label">Did you do this session?</p>}
           {s.status === 'skipped' && <p className="label">You skipped this session.</p>}
           <div className="row wrap">

@@ -254,7 +254,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of d.activities) ps.activities.set(a.id, actPrint(a));

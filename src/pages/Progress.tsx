@@ -8,7 +8,7 @@ import { AppHeader, Avatar, SampleChip } from '../components/app';
 import { BarChart, LineChart } from '../components/charts';
 import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
 import { addDays, daysBetween, dist, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
-import { easyHardBalance, monthKey, type PB, PB_KIND_LABEL, pbHistory, personalBests, racesToReview, runningStory, totalsBy, weekKey } from '../training/insights';
+import { easyHardBalance, monthKey, type PB, PB_KIND_LABEL, pbHistory, pbSource, personalBests, racesToReview, runningStory, totalsBy, weekKey } from '../training/insights';
 import { Sheet } from '../components/inputs';
 import type { Activity } from '../lib/types';
 import { PHASE_LABEL } from '../training/plan';
@@ -249,7 +249,7 @@ function PbRow({ pb }: { pb: PB }) {
     <li>
       <div className="row-between" style={{ gap: 8 }}>
         <Link to={`/activity/${pb.activityId}`} className="list-item row-between" style={{ flex: 1 }}>
-          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{pb.label}</span><span className="caption">{shortDate(parseYmd(pb.date))} · {PB_KIND_LABEL[pb.kind]}</span></span>
+          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{pb.label}</span><span className="caption">{shortDate(parseYmd(pb.date))} · {pbSource(pb)}</span></span>
           <span className="stat" style={{ fontSize: 20 }}>{duration(pb.timeS)}</span>
         </Link>
         <button className="btn btn-ghost btn-small" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Hide' : 'History'}</button>

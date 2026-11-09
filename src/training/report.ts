@@ -4,7 +4,7 @@
 import type { Activity, Plan, PlannedSession, Race, SessionType } from '../lib/types';
 import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, type Units, ymd } from '../lib/format';
 import type { Analysis } from './analysis';
-import { TYPE_LABEL } from './analysis';
+import { TYPE_LABEL, STEADY_TYPES, EASY_FAMILY } from './analysis';
 import { predictTime, type TrainingPaces, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 import { PB_DISTANCES, pbHistory } from './insights';
@@ -69,7 +69,8 @@ export function buildReport(o: {
     const mean = ps.reduce((x, y) => x + y, 0) / ps.length;
     const spread = (Math.max(...ps) - Math.min(...ps)) / mean;
     breakdown.push({ key: 'consistency', label: 'Consistency', value: clamp(100 - spread * 800), note: `Reps within ${Math.round(Math.max(...ps) - Math.min(...ps))} s/km of each other` });
-  } else if (an.patterns.fadePct != null) {
+  } else if (an.patterns.fadePct != null && STEADY_TYPES.includes(type)) {
+    // Only on steady sessions: a slower last 20% of an easy, recovery or long run is not a fault
     breakdown.push({ key: 'consistency', label: 'Consistency', value: clamp(100 - Math.max(0, an.patterns.fadePct) * 6), note: an.patterns.fadePct > 0 ? `Last 20% was ${an.patterns.fadePct}% slower` : 'Even or faster at the end' });
   }
   if (an.patterns.easyTooHardPct != null) breakdown.push({ key: 'effort', label: 'Effort control', value: clamp(100 - Math.max(0, an.patterns.easyTooHardPct - 10) * 1.6), note: `${100 - an.patterns.easyTooHardPct}% of the time in Z1–Z2` });
@@ -106,7 +107,9 @@ export function buildReport(o: {
 
   // ---- What it means for the goal ----
   let goalNote: string | undefined;
-  if (race && (type === 'race' || type === 'timetrial' || HARD.includes(type))) {
+  // Race estimates move only on real efforts: races, time trials and hard sessions. Easy running never changes them.
+  if (race && EASY_FAMILY.includes(type)) goalNote = `${race.name} prediction not changed: easy runs don't move your race estimate.`;
+  else if (race && (type === 'race' || type === 'timetrial' || HARD.includes(type))) {
     const best = [race.distanceM, 5000, 3000, 10000].map((m) => ({ m, t: effortOf(a, m) })).find((x) => x.t && (type === 'race' || type === 'timetrial' || x.m >= 3000));
     if (best?.t) {
       const v = vdotFromPerformance(best.m, best.t) * (type === 'race' || type === 'timetrial' ? 1 : 0.985);

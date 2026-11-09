@@ -80,6 +80,33 @@ export function hrSetup(profile: Profile, activities: Activity[], today = new Da
   return { max: Math.round(208 - 0.7 * age), rest: profile.restHr ?? 55, estimated: true };
 }
 
+export interface HrCheck {
+  /** Why the zones look wrong, in plain words */
+  reason: string;
+  /** A max HR read from the runner's hardest efforts in the last 12 months, to suggest (never applied without asking) */
+  suggestedMax?: number;
+}
+
+/**
+ * Heart-rate settings that make easy runs look hard: a run recorded above the set max, or several easy-paced runs
+ * averaging Z3 or more. Then the zones (not the runner) are the likely problem.
+ */
+export function hrCheck(activities: Activity[], hr: HrSetup, easyPaceFast: number, today = new Date()): HrCheck | undefined {
+  const zones = hrZones(hr);
+  const z3 = zones[2].min;
+  const since = today.getTime() - 56 * 86400000, yearAgo = today.getTime() - 365 * 86400000;
+  const recent = activities.filter((a) => new Date(a.startTime).getTime() >= since);
+  const over = recent.filter((a) => a.maxHr && a.maxHr > hr.max + 1).sort((a, b) => (b.maxHr ?? 0) - (a.maxHr ?? 0));
+  const easyPaced = recent.filter((a) => a.avgHr && a.distanceM >= 3000 && a.movingS / (a.distanceM / 1000) >= easyPaceFast);
+  const easyHot = easyPaced.filter((a) => a.avgHr! >= z3);
+  // Suggest the second-highest max HR of the year (one spike from a loose strap is ignored)
+  const peaks = activities.filter((a) => a.maxHr && new Date(a.startTime).getTime() >= yearAgo).map((a) => a.maxHr!).sort((a, b) => b - a);
+  const suggestedMax = peaks.length >= 2 && peaks[1] > hr.max ? peaks[1] : undefined;
+  if (over.length) return { reason: `A recent run recorded ${over[0].maxHr} bpm, above your max of ${hr.max}.`, suggestedMax };
+  if (easyHot.length >= 3 && easyHot.length >= easyPaced.length / 2) return { reason: `${easyHot.length} of your last ${easyPaced.length} easy-paced runs averaged Z3 or higher.`, suggestedMax };
+  return undefined;
+}
+
 /** Five zones on heart-rate reserve (Karvonen). Returns lower bounds Z1..Z5 and the ceiling. */
 export function hrZones(hr: HrSetup): { zone: number; min: number; max: number }[] {
   const r = hr.max - hr.rest;

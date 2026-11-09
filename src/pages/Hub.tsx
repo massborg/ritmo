@@ -182,7 +182,7 @@ function PostCard({ post: p, author, mineRitmo, own, onRitmo, onComments, onGive
       <div className="row-between">
         <div className="row" style={{ gap: 10 }}>
           <span className="hub-avatar" aria-hidden="true">{initials(author?.display_name)}</span>
-          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{author?.display_name ?? 'Runner'}</span><span className="caption">{ago(p.created_at)}{p.city ? ` · ${p.city}` : ''}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span></span>
+          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{author?.display_name ?? 'Runner'}</span><span className="caption">{p.stats.startedAt && p.stats.startedAt.slice(0, 10) !== p.created_at.slice(0, 10) ? `Run on ${new Date(p.stats.startedAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · posted ${ago(p.created_at)}` : ago(p.created_at)}{p.city ? ` · ${p.city}` : ''}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span></span>
         </div>
         <button className="icon-btn" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal size={20} /></button>
       </div>
@@ -197,7 +197,7 @@ function PostCard({ post: p, author, mineRitmo, own, onRitmo, onComments, onGive
       {done && <StatusLine kind="info">{done}</StatusLine>}
       <h2 id={`post-${p.id}`} className="title">{p.title}</h2>
       {p.body && <p>{p.body}</p>}
-      {p.show_map && p.route && p.route.length > 4 && <RouteThumb route={p.route} onDoubleTap={() => { if (!mineRitmo) onRitmo(true); }} />}
+      {p.show_map && p.route && p.route.length > 4 && <RouteThumb route={p.route} onDoubleTap={own ? undefined : () => { if (!mineRitmo) onRitmo(true); }} />}
       <div className="hub-stats">
         <div><span className="caption">Distance</span><span className="stat">{dist(s.distanceM, U)}</span></div>
         <div><span className="caption">Time</span><span className="stat">{duration(Math.round(s.movingS))}</span></div>
@@ -212,9 +212,10 @@ function PostCard({ post: p, author, mineRitmo, own, onRitmo, onComments, onGive
       </div>
       <div className="row-between hub-actions">
         <div className="row" style={{ gap: 6 }}>
-          <button className={`btn btn-small ritmo-btn${mineRitmo ? ' on' : ''}`} aria-pressed={mineRitmo} aria-label={mineRitmo ? 'Take back your ritmo' : 'Give a ritmo'} onClick={() => onRitmo(!mineRitmo)}>
+          {/* No reacting to your own run */}
+          {!own && <button className={`btn btn-small ritmo-btn${mineRitmo ? ' on' : ''}`} aria-pressed={mineRitmo} aria-label={mineRitmo ? 'Take back your ritmo' : 'Give a ritmo'} onClick={() => onRitmo(!mineRitmo)}>
             <Flame size={18} strokeWidth={2} fill={mineRitmo ? 'var(--brand)' : 'none'} color="var(--brand)" aria-hidden="true" />Ritmo
-          </button>
+          </button>}
           {p.ritmo_count > 0 ? <button className="ritmo-count" onClick={onGivers} aria-label={`${hub.ritmoCount(p.ritmo_count)}: see who gave one`}><Flame size={12} strokeWidth={0} fill="var(--brand)" aria-hidden="true" />{p.ritmo_count}</button>
             : own ? <span className="caption">No ritmos yet</span> : null}
         </div>

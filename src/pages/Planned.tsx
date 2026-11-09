@@ -45,6 +45,7 @@ export default function Planned() {
         <h1 className="display-lg">{s.title}</h1>
         <div className="row wrap"><span className="tag">{s.focus}</span>
           {s.status === 'done' && <StatusLine kind="success">Completed</StatusLine>}
+          {s.status === 'swapped' && <StatusLine kind="info">Swapped: run as an easy run instead</StatusLine>}
           {s.status === 'missed' && <StatusLine kind="warning">Missed</StatusLine>}
         </div>
       </div>

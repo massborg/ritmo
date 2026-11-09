@@ -1,5 +1,6 @@
 // Race-day mode for A races: target splits (even or negative), a warm-up timer, what to eat and when, and after the
 // race a report comparing the actual splits with the plan. The result also flows into PBs and the share card.
+import { forStats } from '../data/quality';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react';
@@ -26,7 +27,7 @@ export default function RaceDay() {
   if (!race) return <Empty title="Race not found" action={<Link to="/calendar" className="btn">Back to calendar</Link>} />;
 
   const U = data.profile.units;
-  const rr = fitness && stage.predictions ? raceReadiness(race, data.activities, fitness.vdot, today) : undefined;
+  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today) : undefined;
   const target = race.goalS ?? rr?.predictedS;
   const plan = target ? targetSplits(race.distanceM, target, strategy) : [];
   const report = result && plan.length ? raceReport(run?.streams ?? result.streams, plan) : undefined;

@@ -74,20 +74,35 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   await page.goto(`${APP}/hub`); await page.waitForTimeout(1200);
   await page.getByRole('radio', { name: 'Your runs' }).or(page.getByRole('button', { name: 'Your runs' })).first().click(); await page.waitForTimeout(800);
   check(await page.getByText('No ritmos yet').isVisible(), 'own post with none: "No ritmos yet"');
-  const btn = page.getByRole('button', { name: /Give a ritmo|Take back your ritmo/ }).first();
+  // No reacting to your own run: no button, and double-tapping its route does nothing
+  const ownCard = page.locator('article.hub-post').first();
+  check(await ownCard.getByRole('button', { name: /Give a ritmo|Take back your ritmo/ }).count() === 0, 'your own post has no ritmo button');
+  const ownRoute = ownCard.locator('.hub-route');
+  if (await ownRoute.count()) { await ownRoute.click(); await page.waitForTimeout(80); await ownRoute.click(); await page.waitForTimeout(700); }
+  check(post.ritmo_count === 0, 'double-tapping your own route does not give a ritmo');
+
+  // Another runner's public post: ritmo on, off, rapid toggling, double-tap
+  const otherId = '00000000-0000-4000-8000-0000000000aa';
+  mock.state.tables.hub_profiles.push({ user_id: otherId, display_name: 'Ana B', visibility: 'everyone', updated_at: new Date().toISOString() });
+  const other = { ...post, id: '00000000-0000-4000-8000-0000000000bb', user_id: otherId, title: 'Ana morning run', ritmo_count: 0, comment_count: 0, created_at: new Date().toISOString() };
+  mock.state.tables.posts.push(other);
+  await page.goto(`${APP}/hub`); await page.waitForTimeout(1000);
+  await page.getByRole('radio', { name: 'Everyone' }).or(page.getByRole('button', { name: 'Everyone' })).first().click(); await page.waitForTimeout(900);
+  const card = page.locator('article.hub-post', { hasText: 'Ana morning run' });
+  const btn = card.getByRole('button', { name: /Give a ritmo|Take back your ritmo/ });
   await btn.click(); await page.waitForTimeout(400);
   check(await btn.getAttribute('aria-pressed') === 'true', 'tap gives a ritmo (aria-pressed)');
   for (let i = 0; i < 5; i++) { await btn.click(); await page.waitForTimeout(120); }
   await page.waitForTimeout(1200);
   const pressed = await btn.getAttribute('aria-pressed') === 'true';
-  check(post.ritmo_count === (pressed ? 1 : 0), `after rapid toggling the stored count matches the button (${post.ritmo_count}, ${pressed ? 'on' : 'off'})`);
+  check(other.ritmo_count === (pressed ? 1 : 0), `after rapid toggling the stored count matches the button (${other.ritmo_count}, ${pressed ? 'on' : 'off'})`);
   if (pressed) { await btn.click(); await page.waitForTimeout(600); }
-  const route = page.locator('.hub-route').first();
+  const route = card.locator('.hub-route');
   await route.click(); await page.waitForTimeout(80); await route.click();
   await page.waitForTimeout(900);
-  check(post.ritmo_count === 1 && await btn.getAttribute('aria-pressed') === 'true', 'double-tapping the route gives a ritmo');
+  check(other.ritmo_count === 1 && await btn.getAttribute('aria-pressed') === 'true', 'double-tapping the route gives a ritmo');
   await page.screenshot({ path: path.join(OUT, 'feed.png') });
-  await page.locator('.ritmo-count').first().click();
+  await card.locator('.ritmo-count').click();
   await page.getByText('1 ritmo', { exact: true }).waitFor();
   await page.getByText('Sam R gave a ritmo').waitFor({ timeout: 5000 }).catch(() => {});
   check(await page.getByText('Sam R gave a ritmo').isVisible(), '"who gave a ritmo" lists the runner');

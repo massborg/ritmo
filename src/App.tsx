@@ -79,8 +79,13 @@ function Prefetch() {
   useEffect(() => {
     if (!ready) return;
     const go = () => {
-      for (const load of [() => import('./pages/Activity'), () => import('./pages/Calendar'), () => import('./pages/Progress'), () => import('./pages/Run'), () => import('./pages/Planned'),
-        () => import('./pages/Profile'), () => import('./pages/Coach'), () => import('./pages/Hub'), () => import('./pages/Goals'), () => import('./pages/DataSources'), () => import('./pages/Race')]) void load().catch(() => undefined);
+      // A page file missing after a new deploy must not reload the app in the background (the runner may be typing):
+      // background fetches fail quietly, and the reload happens only if that page is actually opened
+      const w2 = window as Window & { __ritmoPrefetching?: number };
+      const loads = [() => import('./pages/Activity'), () => import('./pages/Calendar'), () => import('./pages/Progress'), () => import('./pages/Run'), () => import('./pages/Planned'),
+        () => import('./pages/Profile'), () => import('./pages/Coach'), () => import('./pages/Hub'), () => import('./pages/Goals'), () => import('./pages/DataSources'), () => import('./pages/Race')];
+      w2.__ritmoPrefetching = (w2.__ritmoPrefetching ?? 0) + 1;
+      void Promise.allSettled(loads.map((load) => load())).finally(() => { w2.__ritmoPrefetching = Math.max(0, (w2.__ritmoPrefetching ?? 1) - 1); });
     };
     const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
     if (w.requestIdleCallback) w.requestIdleCallback(go); else setTimeout(go, 1500);

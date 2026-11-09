@@ -137,8 +137,11 @@ export function classify(a: Activity, paces: TrainingPaces, zones: Zones | undef
   if (a.movingS >= Math.max(75 * 60, typicalMovingS * 1.45) && a.distanceM >= 14000)
     return { type: 'long', reason: `${Math.round(a.movingS / 60)} minutes, well above your usual run length` };
   if (avgPace <= paces.threshold[1] + 3 && a.movingS >= 15 * 60) return { type: 'threshold', reason: 'Steady running at threshold pace' };
-  if (hrZone === 4 && a.movingS >= 15 * 60) return { type: 'threshold', reason: 'Average heart rate in Z4' };
-  if (avgPace <= paces.marathon[1] + 6 || hrZone === 3) return { type: 'tempo', reason: 'Steady running between marathon and threshold effort' };
+  // Heart rate alone never turns an easy-paced run into tempo or threshold: when max HR is set too low, easy runs
+  // read as Z3. It still counts when the pace is quicker than easy.
+  const easyPaced = avgPace >= paces.easy[0];
+  if (hrZone === 4 && a.movingS >= 15 * 60 && !easyPaced) return { type: 'threshold', reason: 'Average heart rate in Z4' };
+  if (avgPace <= paces.marathon[1] + 6 || (hrZone === 3 && !easyPaced)) return { type: 'tempo', reason: 'Steady running between marathon and threshold effort' };
   if (elevPerKm > 30) return { type: 'hills', reason: `Hilly route with ${Math.round(a.elevGainM ?? 0)} m of climbing` };
   if (a.movingS < 45 * 60 && avgPace >= paces.recovery[0] - 2) return { type: 'recovery', reason: 'Short and gentle' };
   return { type: 'easy', reason: 'Relaxed aerobic running' };
@@ -223,6 +226,8 @@ export interface Analysis {
   score: number;
   scoreReason: string;
   planned?: PlannedSession;
+  /** A quality session run easy instead: it is judged as the easy run it was (planned is then that easy run) */
+  swappedFrom?: PlannedSession;
   plannedVsActual: { label: string; planned: string; actual: string; ok: boolean }[];
   splits: Split[];
   zoneSeconds?: number[];
@@ -249,13 +254,23 @@ export function analyse(opts: {
   pastFeedback: SessionFeedback[];
   units: Units;
   typeOf: (x: Activity) => SessionType;
+  /** Heart-rate zones look set too low (see hrCheck): high heart rate on an easy-paced run is not held against it */
+  hrSuspect?: boolean;
 }): Analysis {
-  const { a, all, paces, zones, typicalMovingS, planned, feedback, pastFeedback, units, typeOf } = opts;
+  const { a, all, paces, zones, typicalMovingS, feedback, pastFeedback, units, typeOf } = opts;
+  let planned = opts.planned;
   if (planned?.type === 'runwalk' || planned?.type === 'timetrial' || a.source === 'manual' || a.isTimeTrial) {
     return simpleAnalysis(a, planned, feedback, units);
   }
   const cls = classify(a, paces, zones, typicalMovingS);
-  const type = cls.type;
+  // One label everywhere: the run's type is the app-wide one (which also knows races and time trials)
+  const type = typeOf(a);
+  // A quality session run easy is judged as an easy run of the planned distance, not against the interval target
+  let swappedFrom: PlannedSession | undefined;
+  if (planned && sessionOutcome(planned.type, type).status === 'swapped') {
+    swappedFrom = planned;
+    planned = { ...planned, type: EASY_FAMILY.includes(type) && type !== 'strides' ? type : 'easy', title: TYPE_LABEL[type], steps: [], paceTarget: { minSPerKm: paces.easy[0], maxSPerKm: paces.easy[1] } };
+  }
   const avgPace = a.movingS / (a.distanceM / 1000);
   const sp = a.streams ? splits(a.streams, units === 'km' ? 1000 : 1609.344) : [];
   const hasHrStream = !!a.streams?.some((p) => p.hr);
@@ -307,7 +322,9 @@ export function analyse(opts: {
   const wentWell: string[] = [];
   const improve: string[] = [];
   if (pat.easyTooHardPct != null) {
-    if (pat.easyTooHardPct > 25) {
+    if (pat.easyTooHardPct > 25 && opts.hrSuspect && avgPace >= paces.easy[0] - 2) {
+      notes.push(`Heart rate read high for an easy pace (${pat.easyTooHardPct}% in Z3 or above), but your heart rate zones look set too low, so this run is judged on pace.`);
+    } else if (pat.easyTooHardPct > 25) {
       score -= 12;
       notes.push(`${pat.easyTooHardPct}% of this run was in Z3 or above, which is too much for an ${type === 'long' ? 'long' : 'easy'} day.`);
       // Only ask for a slower pace if the run was actually faster than easy pace; otherwise heart rate is the issue
@@ -327,10 +344,14 @@ export function analyse(opts: {
     }
   }
   if (pat.fadePct != null) {
-    if (pat.fadePct > 5) {
+    // Even pacing only matters on steady sessions; easing off at the end of an easy, recovery or long run is fine
+    const steady = STEADY_TYPES.includes(type);
+    if (pat.fadePct > 5 && steady) {
       score -= 8;
       notes.push(`The last 20% was ${pat.fadePct}% slower than the rest of the run.`);
       improve.push('Start the first third a little slower so you can hold pace to the finish.');
+    } else if (pat.fadePct > 5) {
+      wentWell.push('A relaxed finish is fine on a run like this.');
     } else if (pat.fadePct < -2) {
       wentWell.push(`You finished ${Math.abs(pat.fadePct)}% faster than you started, a well-judged negative split.`);
     } else if (type !== 'recovery') {
@@ -411,10 +432,11 @@ export function analyse(opts: {
 
   return {
     type,
-    classificationReason: cls.reason,
+    classificationReason: cls.type === type ? cls.reason : type === 'race' ? 'Recognised as a race' : type === 'timetrial' ? 'Marked as a time trial' : cls.reason,
     score,
     scoreReason,
     planned,
+    swappedFrom,
     plannedVsActual: pva,
     splits: sp,
     zoneSeconds: zt,
@@ -485,3 +507,23 @@ function simpleAnalysis(a: Activity, planned: PlannedSession | undefined, feedba
     limitedData: a.source === 'manual' ? 'You logged this run by hand, so there are no splits or heart rate. Ritmo uses your time, distance and how it felt.' : undefined,
   };
 }
+
+/** Sessions with a hard part, and runs with none */
+/** Sessions where even pacing is the goal, so a slower finish counts against them */
+export const STEADY_TYPES: SessionType[] = ['tempo', 'threshold', 'race', 'timetrial'];
+export const QUALITY_TYPES: SessionType[] = ['tempo', 'threshold', 'vo2max', 'speed', 'hills', 'timetrial'];
+export const EASY_FAMILY: SessionType[] = ['easy', 'recovery', 'long', 'runwalk', 'strides'];
+/** How a planned quality session is named in a sentence: "swapped from intervals" */
+export const SESSION_SHORT: Partial<Record<SessionType, string>> = { vo2max: 'intervals', speed: 'intervals', threshold: 'threshold', tempo: 'tempo', hills: 'hills', timetrial: 'time trial', long: 'long run', easy: 'easy run', recovery: 'recovery run' };
+
+/**
+ * What a run did to its planned session. A quality session run with no work intervals at easy effort (the run
+ * classifies as easy, recovery, long, run/walk or strides) is swapped, and is judged as the run it was. An easy day
+ * run as a quality session is still done, but harder than planned.
+ */
+export function sessionOutcome(planned: SessionType, ran: SessionType): { status: 'done' | 'swapped'; harder?: boolean } {
+  if (QUALITY_TYPES.includes(planned) && EASY_FAMILY.includes(ran)) return { status: 'swapped' };
+  if (EASY_FAMILY.includes(planned) && QUALITY_TYPES.includes(ran)) return { status: 'done', harder: true };
+  return { status: 'done' };
+}
+
