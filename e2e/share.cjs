@@ -35,7 +35,7 @@ const pngSize = (buf) => [buf.readUInt32BE(16), buf.readUInt32BE(20)];
   mock.state.tables.feature_flags.push({ user_id: uid, flag: 'share_cards' });
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
   await page.goto(`${APP}/activity/${last.id}`); await page.waitForTimeout(1500);
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await page.getByRole('button', { name: 'Share this run' }).click();
   await page.locator('.share-preview canvas').waitFor();
   const label = await page.locator('[aria-live="polite"]').filter({ hasText: / of \d+$/ }).first().textContent();
   const total = Number(label.match(/of (\d+)/)[1]);

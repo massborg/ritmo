@@ -209,7 +209,7 @@ export default function ActivityPage() {
 
       {an.limitedData && <div className="banner banner-stack" role="note"><StatusLine kind="info">Limited data</StatusLine><p>{an.limitedData}</p></div>}
 
-      <section className="card stack verdict-card" aria-labelledby="verdict">
+      <section className="card stack verdict-card" aria-labelledby="verdict" data-score={an.score}>
         <div className="stack-sm">
           <div className="row wrap" style={{ gap: 8 }}>
             <h2 id="verdict" className="title">{verdict.title}</h2>

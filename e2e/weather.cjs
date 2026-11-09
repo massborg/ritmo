@@ -39,7 +39,7 @@ const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
   const indoor = acts[acts.length - 3]; indoor.streams = Array.from({ length: 50 }, (_, i) => ({ t: i * 20, d: i * 60 })); indoor.start_time = ago(30); indoor.duration_s = 1500;
   const old = acts[acts.length - 4]; old.streams = gps(); // days ago
   for (const t of Object.keys(rows)) mock.state.tables[t].push(...rows[t]);
-  const scoreOf = async () => page.locator('h2#verdict ~ p.caption').first().textContent();
+  const scoreOf = async () => page.locator('.verdict-card').getAttribute('data-score');
 
   // 1. Service unavailable: the recent runs are asked about once, nothing shown, no errors
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
