@@ -9,7 +9,7 @@ import type { Activity } from '../lib/types';
 
 const time = (a: Activity) => new Date(a.startTime).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-export function DayRuns({ runs, unplanned }: { runs: Activity[]; unplanned?: boolean }) {
+export function DayRuns({ runs, unplanned, currentId }: { runs: Activity[]; unplanned?: boolean; currentId?: string }) {
   const { groupOf, typeOf, data } = useApp();
   const U = data.profile.units;
   const groups: RunGroup[] = [];
@@ -17,20 +17,20 @@ export function DayRuns({ runs, unplanned }: { runs: Activity[]; unplanned?: boo
   return (
     <ul className="list">
       {groups.map((g) => g.parts.length === 1 ? (
-        <li key={g.id}><Link to={`/activity/${g.main.id}`} className="list-item row-between">
+        <li key={g.id}><Link to={`/activity/${g.main.id}`} className={`list-item row-between run-link${g.main.id === currentId ? ' is-current' : ''}`} aria-current={g.main.id === currentId ? 'page' : undefined}>
           <span className="stack-sm" style={{ gap: 0 }}><span className="label">{g.main.name}</span><span className="caption">{time(g.main)} · {TYPE_LABEL[typeOf(g.main)]}{unplanned ? ' · unplanned' : ''}</span></span>
           <span className="stat">{dist(g.main.distanceM, U)} · {duration(g.main.movingS)}</span>
         </Link></li>
       ) : (
         <li key={g.id} className="stack-sm" style={{ padding: 'var(--s2) 0' }}>
-          <Link to={`/activity/${g.main.id}`} className="row-between" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link to={`/activity/${g.main.id}`} className="row-between run-link session-head" style={{ textDecoration: 'none', color: 'inherit' }}>
             <span className="stack-sm" style={{ gap: 0 }}><span className="label">{g.main.name}</span><span className="caption">Session of {g.parts.length} parts · {time(g.parts[0])}{unplanned ? ' · unplanned' : ''}</span></span>
             <span className="stat">{dist(g.totalM, U)} · {duration(g.movingS)}</span>
           </Link>
           <ol className="session-parts">
             {g.parts.map((p) => (
-              <li key={p.id}><Link to={`/activity/${p.id}`} className="row-between">
-                <span className="caption"><strong style={{ color: 'var(--ink)' }}>{ROLE_LABEL[g.roles[p.id]]}</strong>{g.roles[p.id] === 'main' ? ` · ${TYPE_LABEL[typeOf(p)]}` : ''}</span>
+              <li key={p.id}><Link to={`/activity/${p.id}`} className={`row-between run-link${p.id === currentId ? ' is-current' : ''}`} aria-current={p.id === currentId ? 'page' : undefined}>
+                <span className="caption"><strong className="run-part-name">{ROLE_LABEL[g.roles[p.id]]}</strong>{p.id === currentId ? <span className="run-here"> · viewing</span> : null}{g.roles[p.id] === 'main' ? ` · ${TYPE_LABEL[typeOf(p)]}` : ''}</span>
                 <span className="caption stat">{dist(p.distanceM, U)} · {duration(p.movingS)}</span>
               </Link></li>
             ))}
