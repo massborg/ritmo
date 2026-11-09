@@ -12,7 +12,8 @@ initErrorTracking();
 captureInstallPrompt();
 
 // A file from an older deploy failed to preload: reload once to get the new version
-window.addEventListener('vite:preloadError', (e) => { if (reloadOnce()) e.preventDefault(); });
+// Background page fetches (App's Prefetch) fail quietly; only a page the runner opens reloads the app once
+window.addEventListener('vite:preloadError', (e) => { if ((window as Window & { __ritmoPrefetching?: number }).__ritmoPrefetching) return; if (reloadOnce()) e.preventDefault(); });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
