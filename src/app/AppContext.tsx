@@ -6,7 +6,7 @@ import { inWeatherWindow, requestWeather } from '../data/weather';
 import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunsInCloud, emptyData, friendlyError,
-  actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushToCloud, saveUserCache,
+  actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushActivities, pushToCloud, saveUserCache,
 } from '../data/store';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge } from '../data/integration';
@@ -301,6 +301,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recovering, setRecovering] = useState(false);
   const [data, setData] = useState<AppData>(emptyData);
   const [ready, setReady] = useState(false);
+  // The account has loaded (not just the copy on this device): imports from Strava and Garmin wait for this
+  const [cloudReady, setCloudReady] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [syncError, setSyncError] = useState<string>();
   const [legacyOffer, setLegacyOffer] = useState<{ runs: number; races: number }>();
@@ -350,6 +352,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentUid.current = userId;
     cloudLoaded.current = false;
+    setCloudReady(false);
     pushState.current = newPushState();
     setLegacyOffer(undefined);
     setSyncError(undefined);
@@ -385,6 +388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         markPulled(pushState.current, cloud.found && cloud.data ? ({ ...emptyData(), ...cloud.data } as AppData) : next);
         if (!cloud.found) pushState.current = newPushState();
         cloudLoaded.current = true;
+        setCloudReady(true);
         // Always a new object, so the save effect runs even when the device copy is reused unchanged
         // (e.g. the app closed before its first save reached the account).
         setData({ ...next });
@@ -882,16 +886,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Garmin pushes each new run to our webhook; here the app collects them and merges them like any other source.
   const syncGarminNow = async () => {
     if (dataRef.current.mode !== 'real' || !dataRef.current.flags?.includes('garmin')) return;
+    // Only once the account has loaded: otherwise loading it would replace the runs added here
+    if (!cloudLoaded.current || !userId) return;
     setGarminSyncing(true);
     try {
       const { runs, clear } = await pullGarminInbox();
+      // Saved to the account before the inbox is cleared, so a run can never be lost in between
+      if (runs.length) await pushActivities(userId, merge(dataRef.current.activities, runs).activities, pushState.current);
       setData((d) => {
         const m = runs.length ? merge(d.activities, runs) : { activities: d.activities };
         const sources = d.sources.filter((x) => x.kind !== 'garmin');
         sources.push({ kind: 'garmin', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.garmin).length });
         return { ...d, activities: m.activities, sources };
       });
-      // Cleared only after the runs are in the app; saving to the account follows the normal autosave
+      // Cleared only after the runs are saved in the account
       await clear();
     } catch (e) {
       setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === 'garmin' ? { ...x, lastError: `Garmin sync failed: ${friendlyError(e)}` } : x)) }));
@@ -916,7 +924,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   syncGarminNowRef.current = syncGarminNow;
   const garminFlag = data.mode === 'real' && !!data.flags?.includes('garmin');
   useEffect(() => {
-    if (!ready || !garminFlag) return;
+    if (!ready || !cloudReady || !garminFlag) return;
     let live = true;
     const run = () => { garminConnected().then((on) => { if (live && on) void syncGarminNowRef.current(); }); };
     run();
@@ -924,7 +932,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const onVisible = () => { if (document.visibilityState === 'visible') run(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { live = false; document.removeEventListener('visibilitychange', onVisible); };
-  }, [ready, garminFlag]);
+  }, [ready, cloudReady, garminFlag]);
 
   // ---- Strava (behind the 'strava' flag) ----
   // The webhook and the first 30-day backfill fill strava_inbox; here the app turns those into runs. A run deleted on
@@ -932,9 +940,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncStravaNow = async () => {
     // Strava is open to every runner (OPEN_TO_ALL), not only accounts with the old flag
     if (dataRef.current.mode !== 'real' || !(OPEN_TO_ALL.has('strava') || dataRef.current.flags?.includes('strava'))) return;
+    // Only once the account has loaded: otherwise loading it would replace the runs added here (this lost runs)
+    if (!cloudLoaded.current || !userId) return;
     setStravaSyncing(true);
     try {
       const { runs, deleted, clear } = await pullStravaInbox();
+      // Saved to the account before the inbox is cleared, so a run can never be lost in between
+      if (runs.length) await pushActivities(userId, merge(dataRef.current.activities, runs).activities, pushState.current);
       const gone = new Set(deleted);
       const dropIds = dataRef.current.activities.filter((a) => isStravaRun(a) && a.sourceIds.strava && gone.has(a.sourceIds.strava)).map((a) => a.id);
       if (dropIds.length) await deleteRunsInCloud(dropIds);
@@ -970,14 +982,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const stravaFlag = data.mode === 'real' && (OPEN_TO_ALL.has('strava') || !!data.flags?.includes('strava'));
   useEffect(() => {
-    if (!ready || !stravaFlag) return;
+    if (!ready || !cloudReady || !stravaFlag) return;
     let live = true;
     const run = () => { stravaConnected().then((on) => { if (live && on) void syncStravaNowRef.current(); }); };
     run();
     const onVisible = () => { if (document.visibilityState === 'visible') run(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { live = false; document.removeEventListener('visibilitychange', onVisible); };
-  }, [ready, stravaFlag]);
+  }, [ready, cloudReady, stravaFlag]);
 
   // ---- Apple Health / Health Connect (phone app only) ----
   const syncHealthNow = async (justConnected = false) => {

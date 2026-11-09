@@ -265,22 +265,10 @@ export function markPulled(ps: PushState, d: AppData) {
   ps.feedbackJson = JSON.stringify(d.feedback);
 }
 
-export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promise<void> {
-  if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt && !d.profile.consents && !d.profile.setupStep) return;
-  const profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
-  if (profileJson !== ps.profileJson) {
-    const r = await supabase.from('profiles').upsert({ user_id: uid, data: JSON.parse(profileJson), updated_at: new Date().toISOString() });
-    if (r.error) throw r.error;
-    ps.profileJson = profileJson;
-  }
-  const newMsgs = d.coach.filter((m) => !ps.coach.has(m.id));
-  if (newMsgs.length) {
-    const r = await supabase.from('coach_messages').upsert(newMsgs.map((m) => ({ id: m.id, user_id: uid, data: m, created_at: m.at })));
-    if (r.error) throw r.error;
-    newMsgs.forEach((m) => ps.coach.add(m.id));
-  }
-  if (d.mode !== 'real') return; // sample data is regenerated on the device and never uploaded
-  const changed = d.activities.filter((a) => ps.activities.get(a.id) !== actPrint(a));
+/** Save runs that changed since the last save (or were never saved) to the account. */
+export async function pushActivities(uid: string, acts: Activity[], ps: PushState): Promise<void> {
+  if (!supabase) return;
+  const changed = acts.filter((a) => ps.activities.get(a.id) !== actPrint(a));
   // Only columns this device actually has are written: runs loaded as summaries never erase their detail or
   // summary in the account. Rows in one request must share the same columns, so they are grouped by columns.
   const groups = new Map<string, { a: Activity; row: Row }[]>();
@@ -298,6 +286,24 @@ export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promi
       chunk.forEach((x) => ps.activities.set(x.a.id, actPrint(x.a)));
     }
   }
+}
+
+export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promise<void> {
+  if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt && !d.profile.consents && !d.profile.setupStep) return;
+  const profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
+  if (profileJson !== ps.profileJson) {
+    const r = await supabase.from('profiles').upsert({ user_id: uid, data: JSON.parse(profileJson), updated_at: new Date().toISOString() });
+    if (r.error) throw r.error;
+    ps.profileJson = profileJson;
+  }
+  const newMsgs = d.coach.filter((m) => !ps.coach.has(m.id));
+  if (newMsgs.length) {
+    const r = await supabase.from('coach_messages').upsert(newMsgs.map((m) => ({ id: m.id, user_id: uid, data: m, created_at: m.at })));
+    if (r.error) throw r.error;
+    newMsgs.forEach((m) => ps.coach.add(m.id));
+  }
+  if (d.mode !== 'real') return; // sample data is regenerated on the device and never uploaded
+  await pushActivities(uid, d.activities, ps);
   const racesJson = JSON.stringify(d.races);
   if (racesJson !== ps.racesJson && d.races.length) {
     const r = await supabase.from('races').upsert(d.races.map((x) => ({ id: x.id, user_id: uid, data: x })));
