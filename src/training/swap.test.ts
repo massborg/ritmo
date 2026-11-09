@@ -107,7 +107,7 @@ describe('9 Nov feedback screen: the verdict card', async () => {
     const text = v.checks.map((c) => `${c.label} ${c.detail ?? ''}`).join(' ');
     expect(text).not.toMatch(/start (the first third )?slower/i);
     expect(text).not.toMatch(/Heart rate ran high/);
-    expect(v.title).toMatch(/easy run/i);
+    expect(v.title).toBe('Good easy run');
   });
   it('without the heart rate problem, it is simply a good easy run', () => {
     const okZones = hrZones({ max: 190, rest: 44 } as never);

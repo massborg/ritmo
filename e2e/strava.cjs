@@ -89,7 +89,7 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   check(await page.getByRole('button', { name: 'Post to Hub' }).count() === 0 && await page.getByRole('button', { name: 'Share this run' }).count() === 0, 'no Post to Hub or Share for a Strava run');
   check(await page.getByText(/came from Strava, so it stays private to you/).isVisible(), 'explains why');
   const shots = require('path').join(__dirname, 'out');
-  await page.locator('p.caption', { has: page.locator('a.strava-link') }).evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.locator('a.strava-link').evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-attribution.png') });
   await page.getByText(/came from Strava, so it stays private to you/).evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-private.png') });

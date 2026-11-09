@@ -8,7 +8,7 @@ import { EASY_FAMILY, STEADY_TYPES, TYPE_LABEL, type Analysis } from './analysis
 import type { Report } from './report';
 import { type TrainingPaces, zoneOf } from './fitness';
 
-export interface VerdictCheck { ok: boolean; label: string; detail?: string }
+export interface VerdictCheck { ok: boolean; label: string; detail?: string; /** A warning about the settings, not the run: it does not lower the verdict */ settings?: boolean }
 export interface Verdict { title: string; meaning: string; zone?: number; checks: VerdictCheck[] }
 
 const MEANING: Record<SessionType, string> = {
@@ -71,21 +71,21 @@ export function buildVerdict(o: {
     }
     if (pat.easyTooHardPct != null && pat.easyTooHardPct > 25) {
       checks.push(o.hrSuspect
-        ? { ok: false, label: 'Heart rate reads high', detail: `${pat.easyTooHardPct}% above Z2 at an easy pace. Your heart rate settings are the likely cause: check them below.` }
+        ? { ok: false, settings: true, label: 'Heart rate reads high', detail: `${pat.easyTooHardPct}% above Z2 at an easy pace. Your heart rate settings are the likely cause: check them below.` }
         : { ok: false, label: 'Heart rate ran high', detail: `${pat.easyTooHardPct}% of the time above Z2. Slow down until it settles in Z1–Z2.` });
     }
     // Without heart rate over time, the average still says something
     if (pat.easyTooHardPct == null && a.avgHr && zone) {
       if (zone <= 2) checks.push({ ok: true, label: 'Heart rate in Z1–Z2', detail: `Average ${a.avgHr} bpm` });
       else checks.push(o.hrSuspect
-        ? { ok: false, label: 'Heart rate reads high', detail: `Average ${a.avgHr} bpm (Z${zone}) at an easy pace. Your heart rate settings are the likely cause: check them below.` }
+        ? { ok: false, settings: true, label: 'Heart rate reads high', detail: `Average ${a.avgHr} bpm (Z${zone}) at an easy pace. Your heart rate settings are the likely cause: check them below.` }
         : { ok: false, label: 'Heart rate ran high', detail: `Average ${a.avgHr} bpm (Z${zone}). Slow down until it settles in Z1–Z2.` });
     }
     driftCheck();
     if (pat.hrDriftPct == null && pat.easyTooHardPct != null && pat.easyTooHardPct <= 25) checks.push({ ok: true, label: 'Heart rate mostly Z1–Z2', detail: `${100 - pat.easyTooHardPct}% of the time` });
     distanceCheck();
     if (pat.fadePct != null) checks.push({ ok: true, label: pat.fadePct > 3 ? 'Relaxed finish is fine' : pat.fadePct < -3 ? 'Finished strong' : 'Even pace throughout' });
-    const bad = checks.filter((c) => !c.ok).length;
+    const bad = checks.filter((c) => !c.ok && !c.settings).length;
     const name = TYPE_LABEL[type].toLowerCase();
     const title = bad === 0 ? `Good ${name}` : fast ? `${cap(name)}, a little quick` : bad === 1 ? `${cap(name)}, mostly on track` : `${cap(name)}, worth adjusting`;
     return { title, meaning: MEANING[type], zone, checks: checks.slice(0, 5) };
