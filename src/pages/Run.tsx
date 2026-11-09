@@ -33,7 +33,7 @@ export default function RunPage() {
   const nav = useNavigate();
   const U = data.profile.units;
   const key = `ritmo:run:active:${session?.user.id ?? 'anon'}`;
-  const todays = plan?.sessions.find((s) => s.date === ymd(today) && s.type !== 'rest' && s.status !== 'done');
+  const todays = plan?.sessions.find((s) => s.date === ymd(today) && s.type !== 'rest' && s.status !== 'done' && s.status !== 'swapped');
   // "Quick run" on the Training page: a free run that starts by itself once GPS is ready
   const [params, setParams] = useSearchParams();
   const quick = params.get('quick') === '1';

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { forStats } from '../data/quality';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -71,14 +72,14 @@ export default function RacePage() {
 
   const past = race.date < ymd(today);
   const days = daysUntil(today, race.date);
-  const rr = fitness && stage.predictions ? raceReadiness(race, data.activities, fitness.vdot, today) : undefined;
+  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today) : undefined;
   const target = race.goalS && rr && race.goalS >= rr.predictedS * 0.98 ? race.goalS : rr?.predictedS;
   const pp = target ? pacingPlan(race, target) : [];
 
   // Post-race review: find the race activity on that day
   const result = past ? data.activities.filter((a) => a.startTime.slice(0, 10) === race.date).sort((a, b) => Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM))[0] : undefined;
-  const before = past ? estimateFitness(data.activities.filter((a) => a.startTime.slice(0, 10) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
-  const after = past ? estimateFitness(data.activities, hr, addDay(parseYmd(race.date), 1)) : undefined;
+  const before = past ? estimateFitness(forStats(data.activities).filter((a) => a.startTime.slice(0, 10) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
+  const after = past ? estimateFitness(forStats(data.activities), hr, addDay(parseYmd(race.date), 1)) : undefined;
   const predictedBefore = before ? predictTime(before.vdot, race.distanceM) : undefined;
 
   return (

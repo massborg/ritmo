@@ -1,4 +1,5 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
+import { QUALITY_TYPES, SESSION_SHORT, sessionOutcome } from './analysis';
 import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
 import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 
@@ -73,7 +74,10 @@ export function adaptPlan(opts: {
       ?? (byDate.get(ymd(addDays(parseYmd(s.date), 1))) ?? []).find((a) => !used.has(a.id) && !plan.sessions.some((o) => o.date === a.startTime.slice(0, 10) && o.type !== 'rest'));
     if (pick) {
       used.add(pick.id);
-      s.status = 'done';
+      const ran = typeOf(pick);
+      const outcome = sessionOutcome(s.type, ran);
+      s.status = outcome.status;
+      s.swappedTo = outcome.status === 'swapped' ? ran : undefined;
       s.completedActivityId = pick.id;
     } else if (s.date < t && s.status === 'planned') {
       s.status = 'missed';
@@ -112,6 +116,14 @@ export function adaptPlan(opts: {
       }
       if (notes.length) log(id, 'rebuilt', `You ran ${unplanned.reduce((x, a) => x + a.distanceM, 0) / 1000 > 0 ? (unplanned.reduce((x, a) => x + a.distanceM, 0) / 1000).toFixed(1) : '0'} km on days with no session planned, so this week was heading ${over.toFixed(0)} km over its ${target} km target. Easy runs adjusted: ${notes.join('; ')}. Key sessions stay as planned.`);
     }
+  }
+
+  // 1c) Swapped sessions: a quality session run easy is not added back; say so, and name the next quality session
+  for (const s of plan.sessions.filter((x) => x.status === 'swapped' && daysBetween(parseYmd(x.date), today) <= 3)) {
+    const next = plan.sessions.find((o) => o.date > s.date && o.status === 'planned' && QUALITY_TYPES.includes(o.type));
+    const run = activities.find((a) => a.id === s.completedActivityId);
+    const km = run ? `${(run.distanceM / 1000).toFixed(1)} km ` : '';
+    log(`swapped:${s.id}`, 'easier', `On ${dayLabel(s.date)} you ran an ${km}${(SESSION_SHORT[s.swappedTo ?? 'easy'] ?? 'easy run')} instead of ${s.title.toLowerCase()}. The ${SESSION_SHORT[s.type] ?? 'session'} won't be added back${next ? `: your next quality session is ${dayLabel(next.date)}'s ${next.title.toLowerCase()}.` : '.'}`);
   }
 
   // 2) Missed sessions

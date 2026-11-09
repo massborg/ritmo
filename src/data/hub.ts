@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 export type Visibility = 'everyone' | 'followers' | 'only_me';
 export interface HubProfile { user_id: string; display_name: string; bio?: string | null; club?: string | null; private: boolean }
-export interface PostStats { distanceM: number; movingS: number; paceS: number; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string }
+export interface PostStats { distanceM: number; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string }
 export interface Post {
   id: string; user_id: string; activity_id?: string | null; title: string; body?: string | null; visibility: Visibility;
   show_map: boolean; show_hr: boolean; stats: PostStats; route?: [number, number][] | null; city?: string | null;
@@ -124,3 +124,12 @@ export function shareableRoute(points: { lat?: number; lon?: number; d: number }
   const step = Math.max(1, Math.ceil(kept.length / 150));
   return kept.filter((_, i) => i % step === 0).map((p) => [Math.round(p.lat! * 1e5) / 1e5, Math.round(p.lon! * 1e5) / 1e5]);
 }
+
+/** A default post title from the run's local start: "Monday afternoon run" (the runner's own time zone). */
+export function defaultPostTitle(startIso: string): string {
+  const d = new Date(startIso);
+  const h = d.getHours();
+  const part = h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night';
+  return `${d.toLocaleDateString('en-GB', { weekday: 'long' })} ${part} run`;
+}
+

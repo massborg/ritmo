@@ -138,8 +138,10 @@ function createMock() {
     const filters = [...url.searchParams.entries()].filter(([k]) => !RESERVED.includes(k));
     const owner = (r) => r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id;
     const match = (r) => owner(r) === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
+    // Reads mirror the real row rules: public posts and runner profiles are readable by everyone signed in
+    const readable = (r) => (owner(r) === u.id || (table === 'posts' && r.visibility === 'everyone') || table === 'hub_profiles') && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     if (method === 'GET' || method === 'HEAD') {
-      let out = rows.filter(match);
+      let out = rows.filter(readable);
       const total = out.length;
       const order = url.searchParams.get('order');
       if (order) {

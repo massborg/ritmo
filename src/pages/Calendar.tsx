@@ -91,7 +91,7 @@ export default function Calendar() {
     <Link to={`/session/${s.id}`} className="card card-link stack-sm" style={typeStyle(s.type)}>
       <div className="row-between">
         <span className="label">{s.title}</span>
-        {s.status === 'done' ? <StatusLine kind="success">Done</StatusLine> : s.status === 'missed' ? <StatusLine kind="warning">Missed</StatusLine> : <span className="caption">{s.focus}</span>}
+        {s.status === 'done' ? <StatusLine kind="success">Done</StatusLine> : s.status === 'swapped' ? <StatusLine kind="info">Swapped</StatusLine> : s.status === 'missed' ? <StatusLine kind="warning">Missed</StatusLine> : <span className="caption">{s.focus}</span>}
       </div>
       {s.type !== 'rest' && <span className="caption">{s.distanceM > 0 ? `${dist(s.distanceM, U, 0)} · ` : `${Math.round(s.durationS / 60)} min · `}{localise(s.steps.map((x) => x.label).join(', '), U)}{s.second ? ` · plus ${dist(s.second.distanceM, U)} easy later` : ''}</span>}
     </Link>
