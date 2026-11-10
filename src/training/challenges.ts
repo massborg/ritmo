@@ -125,3 +125,20 @@ export function markCompleted(joined: JoinedChallenge[], runs: RunLike[], now = 
   });
   return changed ? next : undefined;
 }
+
+/** The badge artwork for a challenge (public/brand/badges). Each challenge type has its own medal; anything new
+ *  uses the generic one. */
+export const BADGES = ['distance-100km', 'distance-200km', 'distance-60mi', 'distance-125mi', 'long-runs-4x10', 'weekly-3x4', 'half-distance', 'challenge-generic'] as const;
+export type BadgeId = typeof BADGES[number];
+export function badgeOf(c: Pick<Challenge, 'kind' | 'id'>): BadgeId {
+  if (c.kind === 'distance') {
+    const m = c.id.match(/^dist-(\d+)(km|mi)-/);
+    const id = m ? `distance-${m[1]}${m[2]}` : '';
+    return (BADGES as readonly string[]).includes(id) ? id as BadgeId : 'challenge-generic';
+  }
+  if (c.kind === 'long_runs') return 'long-runs-4x10';
+  if (c.kind === 'weekly_runs') return 'weekly-3x4';
+  if (c.kind === 'one_long') return 'half-distance';
+  return 'challenge-generic';
+}
+export const badgeSrc = (id: BadgeId | 'locked') => `/brand/badges/badge-${id}.svg`;

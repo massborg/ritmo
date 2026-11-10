@@ -976,3 +976,6 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .leader-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='giorno']):not([data-theme='sole']) .hub-route .route-tile { filter: grayscale(1) invert(0.9) brightness(0.9); opacity: 0.6; } }
 .profile-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+/* Challenge medals (public/brand/badges) */
+.badge-img { width: 52px; height: 52px; flex: none; display: block; }
+.badge-img-lg { width: 72px; height: 72px; }

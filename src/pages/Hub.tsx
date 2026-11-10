@@ -16,7 +16,7 @@ import * as hub from '../data/hub';
 import * as clubs from '../data/clubs';
 import type { Comment, HubProfile, Notification, Post } from '../data/hub';
 import type { Club, ClubMember, GroupRun, LeaderRow } from '../data/clubs';
-import { catalogue, localDay, progress, type Challenge, type JoinedChallenge } from '../training/challenges';
+import { badgeOf, badgeSrc, BADGES, catalogue, localDay, progress, type BadgeId, type Challenge, type JoinedChallenge } from '../training/challenges';
 import { BadgeShelf, useChallenges } from '../components/Badges';
 import { ZONE_NAMES } from '../training/fitness';
 import type { SessionType } from '../lib/types';
@@ -310,7 +310,7 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
         </div>
         {p.body && <p>{p.body}</p>}
         {challenge ? (
-          <div className="hub-badge-post"><span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span><span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span>{s.distanceM > 0 && <span className="caption">{dist(s.distanceM, U)} run for it</span>}</span></div>
+          <div className="hub-badge-post">{s.badgeId && (BADGES as readonly string[]).includes(s.badgeId) ? <img className="badge-img badge-img-lg" src={badgeSrc(s.badgeId as BadgeId)} alt="" width={72} height={72} /> : <span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span>}<span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span>{s.distanceM > 0 && <span className="caption">{dist(s.distanceM, U)} run for it</span>}</span></div>
         ) : (
           <div className="hub-stats">
             <div><span className="caption">Distance</span><span className="stat">{dist(s.distanceM, U)}</span></div>
@@ -495,7 +495,7 @@ function ChallengesTab({ canPost }: { canPost: boolean }) {
       await hub.createPost({
         id: crypto.randomUUID(), user_id: session!.user.id, activity_id: null, title: `Completed: ${j.challenge.title}`, body: null, visibility: 'followers',
         show_map: false, show_hr: false, route: null, city: null,
-        stats: { distanceM: p.distanceM, movingS: p.movingS, paceS: p.distanceM ? p.movingS / (p.distanceM / 1000) : 0, type: 'challenge', typeLabel: 'Challenge complete', badges: [j.challenge.title] },
+        stats: { distanceM: p.distanceM, movingS: p.movingS, paceS: p.distanceM ? p.movingS / (p.distanceM / 1000) : 0, type: 'challenge', typeLabel: 'Challenge complete', badges: [j.challenge.title], badgeId: badgeOf(j.challenge) },
       });
       set(joined.map((x) => (x.challenge.id === j.challenge.id ? { ...x, sharedAt: new Date().toISOString() } : x)));
       setMsg('Shared with your followers.');
@@ -512,7 +512,8 @@ function ChallengesTab({ canPost }: { canPost: boolean }) {
           return (
             <article key={j.challenge.id} className="card stack-sm challenge-card" aria-label={j.challenge.title}>
               <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-                <span className="badge-icon" aria-hidden="true">{p.done ? <Trophy size={22} strokeWidth={2} /> : <Award size={22} strokeWidth={2} />}</span>
+                {/* Earned: the challenge's own medal. Still going: the locked medal until it is finished */}
+                <img className="badge-img" src={badgeSrc(p.done ? badgeOf(j.challenge) : 'locked')} alt={p.done ? `${j.challenge.title} badge` : 'Badge not earned yet'} width={52} height={52} />
                 <div className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 0 }}>
                   <div className="row-between" style={{ gap: 8 }}><span className="label">{j.challenge.title}</span><span className={`tag${p.done ? ' tag-accent' : ''}`}>{p.done ? 'Complete' : 'Joined'}</span></div>
                   <span className="caption">{j.challenge.description}</span>
@@ -532,7 +533,7 @@ function ChallengesTab({ canPost }: { canPost: boolean }) {
         <h2 id="ch-join" className="title">Join a challenge</h2>
         {offered.map((c: Challenge) => (
           <article key={c.id} className="card row challenge-card" style={{ gap: 12 }} aria-label={c.title}>
-            <span className="badge-icon" aria-hidden="true"><Award size={22} strokeWidth={2} /></span>
+            <img className="badge-img" src={badgeSrc(badgeOf(c))} alt={`The ${c.title} badge you can earn`} width={52} height={52} />
             <div className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 0 }}><span className="label">{c.title}</span><span className="caption">{c.description}</span></div>
             <button className="btn btn-small" aria-label={`Join ${c.title}`} onClick={() => set([...joined, { challenge: c, joinedAt: new Date().toISOString() }])}>Join</button>
           </article>
