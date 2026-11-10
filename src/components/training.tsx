@@ -13,6 +13,9 @@ import { addDays, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, 
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { useDragMove } from '../lib/useDragMove';
 import { keptPlanToday, type ReadinessScore } from '../training/readiness';
+import { canRestore } from '../training/rebuild';
+import { findDuplicates } from '../data/quality';
+import { relTime } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
 
 const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'var(--success)' } as const;
@@ -332,12 +335,13 @@ export function MonthPlan({ initial }: { initial?: string }) {
   );
 }
 
-const REASON: Record<string, string> = { missed: 'Missed session', harder: 'Harder than planned', easier: 'Easier than planned', illness: 'Illness', 'race-date': 'Race date', moved: 'Moved', rebuilt: 'Plan update', pain: 'Pain logged' };
+const REASON: Record<string, string> = { missed: 'Missed session', harder: 'Harder than planned', easier: 'Easier than planned', illness: 'Illness', 'race-date': 'Race date', moved: 'Moved', rebuilt: 'Plan update', pain: 'Pain logged', paces: 'Paces updated' };
 
 /** Plan changes: collapsed, with the latest change visible. Also the plan itself (phases, races, rebuild). */
 export function PlanChanges() {
-  const { data, plan, today, buildMyPlan } = useApp();
+  const { data, plan, today, rebuildMyPlan, restorePreviousPlan } = useApp();
   const [msg, setMsg] = useState<string>();
+  const [busy, setBusy] = useState(false);
   const nav = useNavigate();
   const t = ymd(today);
   if (!plan) return null;
@@ -350,6 +354,7 @@ export function PlanChanges() {
       <h2 id="changes" className="title">Plan changes</h2>
       <p className="caption">Every change Ritmo makes is explained here.</p>
       {latest && <p><span className="caption">{shortDate(new Date(latest.at))} · {REASON[latest.reason] ?? ''}</span><br />{latest.summary}</p>}
+      {canRestore(data.plan) && <div className="row wrap" style={{ gap: 8 }}><button className="btn btn-small" onClick={restorePreviousPlan}>Restore previous plan</button><span className="caption">Available for 24 hours after a rebuild.</span></div>}
       <details className="plan-more">
         <summary className="label">{changes.length > 1 ? `All changes and your plan (${changes.length})` : 'Your plan'}</summary>
         <ul className="list">
@@ -371,12 +376,71 @@ export function PlanChanges() {
           <p className="caption">{shortDate(parseYmd(plan.startDate))} to {shortDate(parseYmd(plan.endDate))}.</p>
           {races.length > 0 && <p className="caption">Races: {races.map((r) => <Link key={r.id} to={`/race/${r.id}`} className="label" style={{ marginRight: 8 }}>{r.name}</Link>)}</p>}
           <div className="row wrap">
-            <button className="btn btn-small" onClick={() => setMsg(buildMyPlan())}><RefreshCw size={18} strokeWidth={2} aria-hidden="true" />Rebuild plan</button>
+            <button className="btn btn-small" disabled={busy} aria-busy={busy} onClick={() => { setBusy(true); setMsg(undefined); setTimeout(() => { const r = rebuildMyPlan(); setBusy(false); if (r.ok) nav('/?rebuilt=1'); else setMsg(r.message); }, 50); }}><RefreshCw size={18} strokeWidth={2} aria-hidden="true" />{busy ? 'Rebuilding your plan…' : 'Rebuild plan'}</button>
             <button className="btn btn-small btn-ghost" onClick={() => nav('/race/new')}>Add race</button>
           </div>
           {msg && <div role="alert"><StatusLine kind="warning">{msg}</StatusLine></div>}
         </div>
       </details>
     </section>
+  );
+}
+
+/** After a rebuild: what the new plan looks like and what changed against the old one */
+export function RebuildSheet({ onClose }: { onClose: () => void }) {
+  const { data, plan, restorePreviousPlan } = useApp();
+  const U = data.profile.units;
+  const r = data.plan?.rebuild;
+  if (!plan || !r) return null;
+  return (
+    <Sheet open onClose={onClose} title="Your plan is rebuilt"
+      footer={<div className="row" style={{ gap: 8, width: '100%' }}>
+        <button className="btn btn-primary" style={{ flex: 1 }} onClick={onClose}>Done</button>
+        {canRestore(data.plan) && <button className="btn" onClick={() => { restorePreviousPlan(); onClose(); }}>Restore previous plan</button>}
+      </div>}>
+      <div className="stack">
+        <div className="rebuild-stats">
+          <div><span className="stat">{r.weeks}</span><span className="caption">week{r.weeks === 1 ? '' : 's'}</span></div>
+          <div><span className="stat">{toUnit(r.firstWeekKm * 1000, U).toFixed(0)}{r.peakKm > r.firstWeekKm ? `–${toUnit(r.peakKm * 1000, U).toFixed(0)}` : ''}</span><span className="caption">{U} a week</span></div>
+          <div><span className="stat">{r.changed}</span><span className="caption">session{r.changed === 1 ? '' : 's'} changed</span></div>
+        </div>
+        <p>The new plan starts {longDate(parseYmd(r.startDate))}. Past sessions and your runs are unchanged{r.unchanged ? `, and ${r.unchanged} upcoming session${r.unchanged === 1 ? ' stays' : 's stay'} the same` : ''}.</p>
+        {r.notes.map((n) => <StatusLine key={n} kind="info">{n}</StatusLine>)}
+        {r.keyThisWeek.length > 0 && (
+          <div className="stack-sm">
+            <span className="label">Key sessions this week</span>
+            <ul className="list">{r.keyThisWeek.map((k) => <li key={k.date + k.title} className="row-between" style={{ padding: '6px 0' }}><span>{DAY_SHORT[weekday(parseYmd(k.date))]} · {k.title}</span><span className="stat">{dist(k.km * 1000, U)}</span></li>)}</ul>
+          </div>
+        )}
+        <p className="caption">The change is logged in Plan changes. You can restore the previous plan for 24 hours.</p>
+      </div>
+    </Sheet>
+  );
+}
+
+/** A short note on Training when Strava sync failed or is over a day old, or a run looks like it is in twice */
+export function SyncNote() {
+  const { data, today, syncStravaNow, stravaSyncing } = useApp();
+  if (data.mode !== 'real') return null;
+  const st = data.sources.find((x) => x.kind === 'strava' && x.connected);
+  const stale = st && (!st.lastSyncAt || today.getTime() - new Date(st.lastSyncAt).getTime() > 24 * 3600e3);
+  const weekAgo = ymd(addDays(today, -14));
+  const dup = findDuplicates(data.activities).find(([x]) => x.startTime.slice(0, 10) >= weekAgo);
+  if (!st?.lastError && !stale && !dup) return null;
+  return (
+    <div className="stack-sm">
+      {st && (st.lastError || stale) && (
+        <div className="banner row-between wrap" role="status" style={{ gap: 8 }}>
+          <StatusLine kind="warning">{st.lastError ? 'Strava sync failed' : `Strava last synced ${st.lastSyncAt ? relTime(st.lastSyncAt) : 'a while ago'}`}</StatusLine>
+          <button className="btn btn-small" disabled={stravaSyncing} onClick={() => void syncStravaNow(true)}>{stravaSyncing ? 'Syncing…' : 'Sync now'}</button>
+        </div>
+      )}
+      {dup && (
+        <Link to="/profile/data#dups" className="banner row-between" role="note" style={{ gap: 8, textDecoration: 'none', color: 'inherit' }}>
+          <StatusLine kind="info">{`The same run may be in twice on ${DAY_SHORT[weekday(new Date(dup[0].startTime))]} ${new Date(dup[0].startTime).getDate()}: it counts double in your week`}</StatusLine>
+          <span className="label">Check</span>
+        </Link>
+      )}
+    </div>
   );
 }

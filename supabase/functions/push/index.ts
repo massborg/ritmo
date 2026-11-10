@@ -9,6 +9,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { generateKeyPair, sendPush, type KeyPair } from '../_shared/webpush.ts';
+import { catchUpAll } from '../_shared/strava.ts';
 import { eveningMessage, isDue, localNow, morningMessage, type PushMessage, type PushSession, type Reminders } from '../_shared/push-core.ts';
 
 const SUBJECT = 'https://app.ritmorunning.run';
@@ -116,7 +117,13 @@ Deno.serve(async (req) => {
   if (body.action === 'tick') {
     const token = req.headers.get('x-ritmo-cron') ?? '';
     if (!token || token !== cfg.cronToken) return json({ error: 'forbidden' }, 403);
-    try { return json(await tick(db, cfg.vapid, new Date())); } catch (e) { console.error('tick', (e as Error).message); return json({ error: 'server_error' }, 500); }
+    try {
+      const now = new Date();
+      const out: Record<string, unknown> = await tick(db, cfg.vapid, now);
+      // Once an hour, the Strava catch-up behind the webhook (a lost push never loses a run)
+      if (now.getUTCMinutes() < 15) { try { out.strava = await catchUpAll(db); } catch (e) { console.error('strava catch-up', (e as Error).message); } }
+      return json(out);
+    } catch (e) { console.error('tick', (e as Error).message); return json({ error: 'server_error' }, 500); }
   }
 
   const uid = await signedInUser(req);

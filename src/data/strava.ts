@@ -104,6 +104,8 @@ export async function startStravaConnect(): Promise<void> {
 }
 export const finishStravaConnect = (code: string, state: string, scope: string) => call<{ connected: boolean; backfillDays?: number }>({ action: 'finish', code, state, scope });
 export const disconnectStrava = () => call<{ connected: boolean }>({ action: 'disconnect' });
+/** Ask the server to check Strava for recent runs Ritmo has not got yet (behind the webhook); they land in the inbox */
+export const requestStravaSync = () => call<{ queued: number; checkedAt: string }>({ action: 'sync' });
 
 export async function stravaConnected(): Promise<boolean> {
   if (!client) return false;

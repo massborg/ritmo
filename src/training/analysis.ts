@@ -504,7 +504,8 @@ function simpleAnalysis(a: Activity, planned: PlannedSession | undefined, feedba
     wentWell,
     improve,
     nextDays,
-    limitedData: a.source === 'manual' ? 'You logged this run by hand, so there are no splits or heart rate. Ritmo uses your time, distance and how it felt.' : undefined,
+    // Only say what is really missing: a hand-logged run can still have heart rate and rep times
+    limitedData: a.source === 'manual' && !a.streams?.length ? limitedNote(a) : undefined,
   };
 }
 
@@ -527,3 +528,14 @@ export function sessionOutcome(planned: SessionType, ran: SessionType): { status
   return { status: 'done' };
 }
 
+
+/** What is missing from a run logged by hand, in one sentence; undefined when nothing important is missing */
+function limitedNote(a: Activity): string | undefined {
+  const missing: string[] = [];
+  const hasReps = !!a.reps?.some((r) => r.timeS);
+  if (!a.laps?.length && !hasReps) missing.push('splits');
+  if (!a.avgHr) missing.push('heart rate');
+  missing.push('a route');
+  const uses = ['your time', 'distance', ...(a.avgHr ? ['average heart rate'] : []), ...(hasReps ? ['rep times'] : []), 'how it felt'];
+  return `You logged this run by hand, so there ${missing.length === 1 ? 'is' : 'are'} no ${missing.join(missing.length > 2 ? ', ' : ' or ').replace(/, ([^,]*)$/, ' or $1')}. Ritmo uses ${uses.slice(0, -1).join(', ')} and ${uses[uses.length - 1]}.`;
+}

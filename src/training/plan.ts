@@ -108,8 +108,13 @@ export function adaptPlan(opts: {
   // overshoot its target, the remaining easy runs this week are trimmed, and the change is explained.
   const wkStart = ymd(startOfWeek(today));
   const wkEnd = ymd(addDays(startOfWeek(today), 6));
-  const target = plan.weeks?.find((w) => w.start === wkStart)?.targetKm;
-  if (target) {
+  // One weekly target everywhere: the sum of this week's sessions (Training and Coach show the same number).
+  // Straight after a rebuild there are no automatic cuts: the runner just chose this week.
+  const target = Math.round(plan.sessions.filter((s) => s.date >= wkStart && s.date <= wkEnd).reduce((x, s) => x + s.distanceM, 0) / 1000);
+  const frozen = !!plan.noAutoAdjustUntil && t < plan.noAutoAdjustUntil;
+  const afterLongEasy = (profile.training?.dayAfterLong ?? 'easy') === 'easy';
+  const isDayAfterLong = (s: PlannedSession) => plan.sessions.some((o) => o.type === 'long' && o.date === ymd(addDays(parseYmd(s.date), -1)));
+  if (target && !frozen) {
     const doneKm = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkStart && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const todayDone = (byDate.get(t) ?? []).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const rest = plan.sessions.filter((s) => s.date >= t && s.date <= wkEnd && s.status === 'planned' && !(s.date === t && todayDone > 0));
@@ -124,6 +129,8 @@ export function adaptPlan(opts: {
         if (left <= 0.5) break;
         const before = s.distanceM / 1000;
         const after = Math.max(0, Math.round((before - left) * 10) / 10);
+        // "The day after the long run: Easy run" is the runner's own setting: shorten that run, never remove it
+        if (after < 4 && afterLongEasy && isDayAfterLong(s)) { if (before > 4) { const e = easyRun(s.date, 4, s.phase, { paces }); Object.assign(s, { ...e, id: s.id, title: `${s.title} (shortened)` }); notes.push(`${dayLabel(s.date)}: ${before.toFixed(1)} → 4.0 km`); left -= before - 4; } continue; }
         if (after < 4) { Object.assign(s, { ...restDay(s.date, s.phase, 'Rest instead of an easy run, because you have already run extra this week.'), id: s.id }); notes.push(`${dayLabel(s.date)}: ${before.toFixed(1)} km easy → rest`); left -= before; }
         else { const e = easyRun(s.date, after, s.phase, { paces }); Object.assign(s, { ...e, id: s.id, title: `${s.title} (shortened)` }); notes.push(`${dayLabel(s.date)}: ${before.toFixed(1)} → ${after.toFixed(1)} km`); left -= before - after; }
       }
@@ -255,7 +262,10 @@ export function adaptPlan(opts: {
   const comingKm = comingWeek.reduce((x, s) => x + s.distanceM, 0);
   if (avgWeek > 5000 && comingKm > avgWeek * 1.3 && !comingWeek.some((s) => s.type === 'race')) {
     const id = `spike:${ymd(startOfWeek(today))}`;
-    if (!has(id)) {
+    if (frozen && !has(`${id}:advice`)) {
+      // Straight after a rebuild nothing changes on its own: say it, and let the runner decide (update 2, §4)
+      log(`${id}:advice`, 'rebuilt', `The next 7 days are ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km. Jumps above about 30% are linked to higher injury risk. Nothing was changed because you just rebuilt the plan; shorten an easy run from Training if you want to ease in.`);
+    } else if (!frozen && !has(id)) {
       const scale = (avgWeek * 1.2) / comingKm;
       for (const s of comingWeek) if (s.type === 'easy' || s.type === 'long') s.distanceM = Math.round((s.distanceM * scale) / 1000) * 1000;
       log(id, 'rebuilt', `The next 7 days were ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km in your recent big weeks. Jumps above about 30% are linked to higher injury risk, so easy and long runs are trimmed to keep the increase near 20%.`);

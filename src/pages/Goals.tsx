@@ -16,7 +16,7 @@ export default function Goals() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const setup = params.get('setup') === '1';
-  const { data, updateProfile, buildMyPlan, paces, today, aRace } = useApp();
+  const { data, updateProfile, buildMyPlan, rebuildMyPlan, paces, today, aRace } = useApp();
   const p = data.profile;
   const mi = p.units === 'mi';
   const toU = (km: number) => Math.round(mi ? km / MI : km);
@@ -44,6 +44,7 @@ export default function Goals() {
   const [area, setArea] = useState('');
   const [status, setStatus] = useState<Injury['status']>('current');
   const [msg, setMsg] = useState<string>();
+  const [busy, setBusy] = useState(false);
   const set = (patch: Partial<TrainingSettings>) => setT((x) => ({ ...x, ...patch }));
 
   const draft = { ...p, daysAvailable: [...new Set(days.includes(longDay) ? days : [...days, longDay])].sort((a, b) => a - b), longRunDay: longDay, training: t };
@@ -59,6 +60,16 @@ export default function Goals() {
 
   const save = (andRebuild: boolean) => {
     updateProfile({ goal, daysAvailable: draft.daysAvailable, longRunDay: longDay, injuries, onboarded: true, training: t });
+    if (andRebuild && data.plan && !setup) {
+      // Rebuilding: say so, then show what changed on Training. On failure the old plan stays and the reason shows here.
+      setBusy(true); setMsg(undefined);
+      setTimeout(() => {
+        const r = rebuildMyPlan();
+        if (r.ok) nav('/?rebuilt=1');
+        else { setBusy(false); setMsg(r.message); }
+      }, 50);
+      return;
+    }
     if (andRebuild || setup) { setTimeout(() => setMsg(buildMyPlan()), 0); if (setup) nav('/'); }
     else nav(-1);
   };
@@ -110,10 +121,10 @@ export default function Goals() {
         <h2 id="days" className="title">Your week</h2>
         <div className="preset">
           <div className="stack-sm" style={{ flex: 1 }}>
-            <span className="label">Classic week</span>
-            <span className="caption">Threshold on Monday, intervals on Thursday, long run on Saturday, easy days in between.</span>
+            <span className="label">{classic ? 'Preset in use: Classic week' : 'Apply preset: Classic week'}</span>
+            <span className="caption">{classic ? 'Threshold on Monday, intervals on Thursday, long run on Saturday, easy days in between.' : 'Changes your week to threshold on Monday, intervals on Thursday and the long run on Saturday. Your typical week below shows your current settings.'}</span>
           </div>
-          <button type="button" className="btn btn-small" aria-pressed={classic} onClick={useClassic}>{classic ? 'In use' : 'Use it'}</button>
+          <button type="button" className="btn btn-small" aria-pressed={classic} onClick={useClassic}>{classic ? 'In use' : 'Apply'}</button>
         </div>
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Days you could run</legend>
@@ -197,8 +208,9 @@ export default function Goals() {
 
       {msg && <div role="alert"><StatusLine kind="warning">{msg}</StatusLine></div>}
       <div className="row wrap">
-        <button className="btn btn-primary" onClick={() => save(true)} disabled={draft.daysAvailable.length < 2}>{setup ? 'Build my plan' : data.plan ? 'Save and rebuild my plan' : 'Save and build my plan'}</button>
-        {!setup && <button className="btn" onClick={() => save(false)} disabled={draft.daysAvailable.length < 2}>Save only</button>}
+        <button className="btn btn-primary" onClick={() => save(true)} disabled={busy || draft.daysAvailable.length < 2} aria-busy={busy}>{busy ? 'Rebuilding your plan…' : setup ? 'Build my plan' : data.plan ? 'Save and rebuild my plan' : 'Save and build my plan'}</button>
+        {!setup && <button className="btn" onClick={() => save(false)} disabled={busy || draft.daysAvailable.length < 2}>Save only</button>}
+        {busy && <span className="caption" role="status">Rebuilding your plan… Past sessions and this week's runs stay as they are.</span>}
       </div>
     </div>
   );

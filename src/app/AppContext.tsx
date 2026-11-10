@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Lap, LogEntry, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
-import { addDays, daysBetween, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
+import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunsInCloud, emptyData, friendlyError,
   actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushActivities, pushToCloud, saveUserCache,
@@ -16,7 +16,7 @@ import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/av
 import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
-import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, startStravaConnect, stravaConnected } from '../data/strava';
+import { disconnectStrava, finishStravaConnect, isStravaRun, pullStravaInbox, requestStravaSync, startStravaConnect, stravaConnected } from '../data/strava';
 import { estimateFitness, type FitnessEstimate, hrSetup, likelyRace, type HrSetup, hrZones, trainingPaces, type TrainingPaces, hrCheck, type HrCheck } from '../training/fitness';
 import { type LoadDay, loadSeries, type Readiness } from '../training/load';
 import { asReadiness, readinessScore, type ReadinessScore } from '../training/readiness';
@@ -24,6 +24,7 @@ import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { activeNiggle, applyBody, areaLabel, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
+import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
@@ -125,6 +126,9 @@ interface Ctx extends Derived {
   deleteRace: (id: string) => void;
   logFeedback: (f: SessionFeedback) => void;
   buildMyPlan: () => string | undefined;
+  rebuildMyPlan: () => { ok: true } | { ok: false; message: string };
+  restorePreviousPlan: () => void;
+  markRebuildSeen: () => void;
   moveSession: (sessionId: string, toDate: string) => void;
   linkRunToSession: (activityId: string, sessionId: string) => void;
   /** Body: save a check-in (red flags are worked out here, by rules); returns the red flags found */
@@ -169,7 +173,7 @@ interface Ctx extends Derived {
   /** Strava (behind the 'strava' flag): open Strava's consent page; finish after Strava sends the runner back */
   connectStrava: () => Promise<string | undefined>;
   completeStravaConnect: (code: string, state: string, scope: string) => Promise<string | undefined>;
-  syncStravaNow: () => Promise<void>;
+  syncStravaNow: (askStrava?: boolean) => Promise<void>;
   stravaSyncing: boolean;
   signOut: () => Promise<void>;
   finishRecovery: () => void;
@@ -469,6 +473,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Recomputed only when these parts of the data change (not, for example, on every coach message)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const derived = useMemo<Derived>(() => computeDerived(data), [data.activities, data.profile, data.plan, data.feedback, data.races, data.mode, data.flags]);
+  // Training paces change when the fitness estimate changes (a new race, time trial or hard effort). Never silently:
+  // the change and its reason go into Plan changes (update 2, §1.5). The first time, the current paces are just noted.
+  useEffect(() => {
+    const p = derived.paces, f = derived.fitness, plan = data.plan;
+    if (!p || !f || !plan || data.mode !== 'real' || !cloudLoaded.current) return;
+    const shown = plan.pacesShown;
+    const now = { easy: [Math.round(p.easy[0]), Math.round(p.easy[1])] as [number, number], threshold: [Math.round(p.threshold[0]), Math.round(p.threshold[1])] as [number, number], at: new Date().toISOString() };
+    if (shown && Math.abs(shown.easy[0] - now.easy[0]) < 2 && Math.abs(shown.easy[1] - now.easy[1]) < 2 && Math.abs(shown.threshold[0] - now.threshold[0]) < 2) return;
+    const U = data.profile.units;
+    const range = (r: [number, number]) => `${fmtPace(r[0], U, false)}–${fmtPace(r[1], U)}`;
+    setData((d) => {
+      if (!d.plan) return d;
+      const change = shown ? [{ id: `paces:${now.easy.join('-')}:${now.threshold.join('-')}`, at: now.at, reason: 'paces' as const,
+        summary: `Your paces were updated because your fitness estimate changed (now based on ${f.basedOn}). Easy ${range(shown.easy)} → ${range(now.easy)}; threshold ${range(shown.threshold)} → ${range(now.threshold)}.` }] : [];
+      return { ...d, plan: { ...d.plan, pacesShown: now, changes: [...d.plan.changes, ...change.filter((c) => !d.plan!.changes.some((x) => x.id === c.id))] } };
+    });
+  }, [derived.paces?.easy[0], derived.paces?.easy[1], derived.paces?.threshold[0], data.plan?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the plan's change log once adaptations happen
   useEffect(() => {
@@ -572,14 +593,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       detailScore: 0, importedAt: new Date().toISOString(),
     };
     a.detailScore = detailScore(a);
-    const fb: SessionFeedback = { activityId: id, feel: r.feel, rpe: r.rpe, pain: r.pain, notes: r.notes, loggedAt: new Date().toISOString() };
+    // The same run already synced from the watch (same day, similar distance)? The answers go to that run instead
+    // of adding a second copy that would count twice
+    const kept = merge(dataRef.current.activities, [a]).mapped[id] ?? id;
+    const fb: SessionFeedback = { activityId: kept, feel: r.feel, rpe: r.rpe, pain: r.pain, notes: r.notes, loggedAt: new Date().toISOString() };
     setData((d) => {
       const base = d.mode === 'empty' ? { ...d, mode: 'real' as const } : d;
       const m = merge(base.activities, [a]);
       const sources = base.sources.some((s) => s.kind === 'manual') ? base.sources.map((s) => (s.kind === 'manual' ? { ...s, lastSyncAt: new Date().toISOString(), activityCount: s.activityCount + 1 } : s)) : [...base.sources, { kind: 'manual' as SourceKind, connected: true, lastSyncAt: new Date().toISOString(), activityCount: 1 }];
-      return { ...base, activities: m.activities, feedback: [...base.feedback, fb], sources };
+      return { ...base, activities: m.activities, feedback: [...base.feedback.filter((x) => x.activityId !== kept || kept === id), fb], sources };
     });
-    return id;
+    return kept;
   };
 
   const saveRecordedRun = (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }): string => {
@@ -709,6 +733,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const t = ymd(d.mode === 'sample' ? parseYmd(SAMPLE_TODAY) : new Date());
     return d.races.filter((r) => r.date >= t).sort((a, b) => (a.priority === b.priority ? a.date.localeCompare(b.date) : a.priority.localeCompare(b.priority)))[0];
   };
+  /** "Save and rebuild my plan" when a plan exists: the past and (with "Next Monday") this week stay as they are,
+   *  the old plan is kept 24 hours for "Restore previous plan", and the change is logged. On failure the old plan stays. */
+  const rebuildMyPlan = (): { ok: true } | { ok: false; message: string } => {
+    const d = dataRef.current;
+    if (!d.plan || (d.profile.experience === 'new' && !derived.stage.predictions)) {
+      const m = buildMyPlan();
+      return m ? { ok: false, message: m } : { ok: true };
+    }
+    if (!derived.fitness) return { ok: false, message: 'Ritmo needs a few runs with time and distance from the last four months to rebuild the plan. Your current plan is unchanged.' };
+    try {
+      const r = makePlan({ ...d, plan: undefined }, aRaceOf(d));
+      if (r.problem) { setPlanProblem(r.problem); return { ok: false, message: 'Those settings do not fit safely yet. Your current plan is unchanged: choose one of the options below.' }; }
+      if (!r.plan) return { ok: false, message: 'The plan could not be rebuilt. Your current plan is unchanged. Please try again.' };
+      const today = d.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
+      const plan = mergeRebuild({ old: d.plan, fresh: r.plan, today, activities: d.activities, startMode: d.profile.training?.startMode ?? 'today' });
+      setPlanProblem(undefined);
+      setData((x) => ({ ...x, plan }));
+      if (d.mode === 'real') void deleteOtherPlans(plan.id).catch(() => {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: `The plan could not be rebuilt: ${friendlyError(e)} Your current plan is unchanged.` };
+    }
+  };
+  /** Undo a rebuild within 24 hours: the previous plan comes back as it was, and the undo is logged */
+  const restorePreviousPlan = () => setData((d) => {
+    if (!d.plan || !canRestore(d.plan)) return d;
+    const prev = d.plan.previous!.plan;
+    const plan: Plan = { ...prev, changes: [...prev.changes, { id: uid(), at: new Date().toISOString(), reason: 'rebuilt', summary: 'Restored the plan you had before the rebuild.' }] };
+    if (d.mode === 'real') void deleteOtherPlans(plan.id).catch(() => {});
+    return { ...d, plan };
+  });
+  const markRebuildSeen = () => setData((d) => (d.plan?.rebuild && !d.plan.rebuild.seen ? { ...d, plan: { ...d.plan, rebuild: { ...d.plan.rebuild, seen: true } } } : d));
   const finishBuild = (d: AppData): string | undefined => {
     const r = makePlan({ ...d, plan: undefined }, aRaceOf(d));
     if (r.problem) { setPlanProblem(r.problem); return undefined; }
@@ -937,13 +993,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ---- Strava (behind the 'strava' flag) ----
   // The webhook and the first 30-day backfill fill strava_inbox; here the app turns those into runs. A run deleted on
   // Strava is removed here too (Strava's terms), unless the runner has the same run from another source.
-  const syncStravaNow = async () => {
+  const syncStravaNow = async (askStrava = false) => {
     // Strava is open to every runner (OPEN_TO_ALL), not only accounts with the old flag
     if (dataRef.current.mode !== 'real' || !(OPEN_TO_ALL.has('strava') || dataRef.current.flags?.includes('strava'))) return;
     // Only once the account has loaded: otherwise loading it would replace the runs added here (this lost runs)
     if (!cloudLoaded.current || !userId) return;
     setStravaSyncing(true);
     try {
+      // "Sync now", or the last check was over an hour ago: ask Strava directly as well, in case a push was lost
+      const last = dataRef.current.sources.find((x) => x.kind === 'strava')?.lastSyncAt;
+      if (askStrava || !last || Date.now() - new Date(last).getTime() > 3600e3) {
+        try { await requestStravaSync(); } catch (e) { if (askStrava) throw e; }
+      }
       const { runs, deleted, clear } = await pullStravaInbox();
       // Saved to the account before the inbox is cleared, so a run can never be lost in between
       if (runs.length) await pushActivities(userId, merge(dataRef.current.activities, runs).activities, pushState.current);
@@ -954,7 +1015,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const kept = d.activities.filter((a) => !dropIds.includes(a.id));
         const m = runs.length ? merge(kept, runs) : { activities: kept };
         const sources = d.sources.filter((x) => x.kind !== 'strava');
-        sources.push({ kind: 'strava', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.strava).length });
+        sources.push({ kind: 'strava', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.strava).length, lastError: undefined });
         return { ...d, activities: m.activities, sources };
       });
       await clear();
@@ -1077,7 +1138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
