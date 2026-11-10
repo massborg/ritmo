@@ -114,7 +114,17 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   await page.waitForTimeout(3000);
   check(!row('strava-222') && !!row('strava-111'), 'run deleted on Strava removed from the account; others kept');
 
+  // ---- A run that arrived while the app was closed, and a slow account load on reopening (lost runs before) ----
+  mock.state.tables.strava_inbox.push({ id: 100, user_id: uid, activity_id: '444', payload: stravaRun(444, 0, 6.2, 'Strava Evening Run'), received_at: new Date().toISOString() });
+  await page.route('**/rest/v1/activities?select=id%2Ck*', async (route) => { await new Promise((r) => setTimeout(r, 3000)); await route.fallback(); });
+  await page.goto(`${APP}/`); await page.waitForTimeout(9000);
+  check(!!row('strava-444'), 'a run waiting in the inbox is saved even when the account loads slowly');
+  check(mock.state.tables.strava_inbox.filter((r) => r.user_id === uid).length === 0, 'and the inbox is cleared only once it is saved');
+  check(await page.getByText('Strava Evening Run').first().isVisible().catch(() => false) || (await page.locator('main').innerText()).includes('6.2'), 'and it shows in the app');
+  await page.unroute('**/rest/v1/activities?select=id%2Ck*');
+
   // ---- Disconnect ----
+  await page.goto(`${APP}/profile/data`); await stravaRow().waitFor({ timeout: 15000 });
   await tap(stravaRow().getByRole('button', { name: 'Disconnect' }));
   await page.waitForTimeout(1500);
   check(mock.state.strava.calls.includes('disconnect') && !mock.state.strava.connected.has(uid), 'Disconnect revokes access');
