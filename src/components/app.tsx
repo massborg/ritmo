@@ -19,10 +19,10 @@ export function AppHeader({ title, eyebrow, right, back, avatar, large = true }:
   }, []);
   return (
     <>
-      <div className={`appbar${compact ? ' appbar-compact' : ''}`}>
+      <div className={`appbar${compact || !large ? ' appbar-compact' : ''}${!large ? ' appbar-small' : ''}`}>
         <div className="appbar-inner">
           <div className="appbar-side">{back ? <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><ChevronLeft size={26} strokeWidth={2} /></button> : avatar ? <Avatar /> : null}</div>
-          <span className="appbar-title" aria-hidden={!compact}>{title}</span>
+          {large ? <span className="appbar-title" aria-hidden={!compact}>{title}</span> : <h1 className="appbar-title">{title}</h1>}
           <div className="appbar-side appbar-right">{right}</div>
         </div>
       </div>

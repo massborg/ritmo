@@ -54,13 +54,13 @@ const runs = (uid) => [
   const moved = await page.locator('section', { has: page.locator('#session-parts') }).locator('a[aria-current="page"][href="/activity/piece-main"]').waitFor({ timeout: 5000 }).then(() => true, () => false);
   check(moved, 'opening the other run moves the highlight to it');
 
-  await page.goto(`${APP}/activity/piece-strides`); await page.locator('.stat-2x2').waitFor();
-  const labels = await page.locator('.stat-2x2 .caption').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+  await page.goto(`${APP}/activity/piece-strides`); await page.locator('.run-stat-grid').waitFor();
+  const labels = await page.locator('.run-stat-grid .caption').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
   check(labels.length >= 3 && labels[0] === labels[1] && (labels.length < 4 || labels[2] === labels[3]), `the stat labels line up in two rows (${labels.join(', ')})`);
-  const spill = await page.locator('.stat-2x2 .stat').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.parentElement.clientWidth + 1).length);
-  check(spill === 0 && /15:16/.test(await page.locator('.stat-2x2').innerText()), 'a slow pace (15:16/km) fits in its column');
+  const spill = await page.locator('.run-stat-grid .stat').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.parentElement.clientWidth + 1).length);
+  check(spill === 0 && /15:16/.test(await page.locator('.run-stat-grid').innerText()), 'a slow pace (15:16/km) fits in its column');
   const w = await page.locator('.run-weather p').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => [r.top, r.bottom]));
-  check(w.length === 3 && w.every((r, i) => i === 0 || r[0] >= w[i - 1][1] - 0.5), 'the weather lines and the MET Norway credit do not overlap');
+  check(w.length === 2 && w.every((r, i) => i === 0 || r[0] >= w[i - 1][1] - 0.5), 'the weather lines and the MET Norway credit do not overlap');
   const race = page.getByRole('button', { name: 'This was a race' });
   check(await race.evaluate((el) => getComputedStyle(el).borderTopStyle !== 'none' && getComputedStyle(el).borderTopColor !== 'rgba(0, 0, 0, 0)'), '"This was a race" has a visible button outline');
 

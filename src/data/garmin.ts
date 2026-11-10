@@ -22,6 +22,7 @@ export interface GarminSummary {
   movingDurationInSeconds?: number;
   distanceInMeters?: number;
   averageHeartRateInBeatsPerMinute?: number;
+  activeKilocalories?: number;
   maxHeartRateInBeatsPerMinute?: number;
   averageRunCadenceInStepsPerMinute?: number;
   totalElevationGainInMeters?: number;
@@ -89,6 +90,7 @@ export function garminToActivity(summary?: GarminSummary, details?: GarminDetail
     distanceM, durationS, movingS: s.movingDurationInSeconds ?? durationS,
     ...(s.totalElevationGainInMeters != null ? { elevGainM: s.totalElevationGainInMeters } : {}),
     ...(s.averageHeartRateInBeatsPerMinute ? { avgHr: s.averageHeartRateInBeatsPerMinute } : {}),
+    ...(s.activeKilocalories ? { calories: Math.round(s.activeKilocalories) } : {}),
     ...(s.maxHeartRateInBeatsPerMinute ? { maxHr: s.maxHeartRateInBeatsPerMinute } : {}),
     ...(s.averageRunCadenceInStepsPerMinute ? { avgCadence: s.averageRunCadenceInStepsPerMinute } : {}),
     ...(laps ? { laps } : {}), ...(streams ? { streams } : {}),

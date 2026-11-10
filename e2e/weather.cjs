@@ -64,11 +64,11 @@ const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
 
   await page.goto(`${APP}/activity/${hot.id}`); await page.locator('.run-weather').waitFor({ timeout: 8000 });
   const lines = (await page.locator('.run-weather p').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim());
-  check(lines.join(' | ') === 'Weather | 29°C, feels like 33°C · humidity 71% · wind 14 km/h S · partly cloudy | Weather data: MET Norway', `weather block: "${lines.join(' | ')}"`);
+  check(lines.join(' | ') === 'Weather 29°C, feels like 33°C · humidity 71% · wind 14 km/h S · partly cloudy | Weather data: MET Norway', `weather block: "${lines.join(' | ')}"`);
   check(await page.getByRole('link', { name: 'MET Norway' }).getAttribute('href') === 'https://www.met.no/en', 'MET Norway credited and linked');
   check(/^Hot and humid \(feels like 33°C\)/.test(await page.locator('.weather-note').textContent()), 'hot-day note in the feedback');
   await page.locator('section[aria-labelledby="verdict"]').screenshot({ path: path.join(OUT, 'verdict.png') });
-  await page.locator('section.card').filter({ has: page.locator('.run-weather') }).screenshot({ path: path.join(OUT, 'stats.png') });
+  await page.getByLabel('Run summary').screenshot({ path: path.join(OUT, 'stats.png') });
 
   // 3. Looked up once: a fresh visit loads weather from the account and asks nothing new
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store')); await page.reload(); await page.locator('.run-weather').waitFor({ timeout: 15000 });

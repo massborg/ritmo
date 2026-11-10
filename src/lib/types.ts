@@ -42,6 +42,8 @@ export interface Lap {
   durationS: number;
   distanceM: number;
   avgHr?: number;
+  /** The workout step type the watch recorded for this lap, when the file has it */
+  intensity?: 'warmup' | 'active' | 'rest' | 'recovery' | 'cooldown';
 }
 
 export interface Activity {
@@ -58,6 +60,8 @@ export interface Activity {
   avgHr?: number;
   maxHr?: number;
   avgCadence?: number;
+  /** Energy from the watch or service, kcal (shown when the source has it) */
+  calories?: number;
   laps?: Lap[];
   streams?: StreamPoint[];
   isRace?: boolean;

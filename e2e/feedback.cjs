@@ -61,10 +61,10 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   check(/(Easy|Long) run · swapped from intervals/.test(main), 'labelled "… run · swapped from intervals" (the run that was actually run)');
   const summary = page.getByLabel('Run summary');
   const sum = await summary.innerText();
-  check(/Distance/.test(sum) && /Pace/.test(sum) && /Time/.test(sum) && /Avg heart rate/.test(sum), 'four headline stats: distance, pace, time, average heart rate');
-  const grid = await page.locator('.stat-2x2').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-  check(grid === 2, 'the stats sit in a 2 x 2 grid');
-  check(/Cadence 168 spm · Climb 40 m/.test(sum), 'cadence and climb are still shown');
+  check(/Distance/.test(sum) && /Avg pace/.test(sum) && /Total time/.test(sum) && /Avg heart rate/.test(sum), 'headline stats: distance, then avg pace, total time, average heart rate');
+  const grid = await page.locator('.run-stat-grid').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  check(grid === 2, 'the stats sit in a 2-column grid');
+  check(/168 spm\s*Cadence/.test(sum) && /40 m\s*Climb/.test(sum), 'cadence and climb are still shown');
   const verdict = await page.locator('.verdict-card').innerText();
   check(/(easy|long) run/i.test(verdict.split('\n')[0]), `the verdict title is about an easy run ("${verdict.split('\n')[0]}")`);
   check(/Pace in your easy range|Slower than your easy range is fine/.test(verdict), 'the checklist judges pace against the easy range');
@@ -76,7 +76,9 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   check(/won't be added back/.test(racePlan), `the plan line says the intervals won't be added back`);
   const hrCard = page.locator('.settings-check');
   check(await hrCard.isVisible() && /Check your max heart rate/.test(await hrCard.innerText()) && /set to 175, so 144 bpm counts as Z3 \(tempo\)/.test(await hrCard.innerText()), 'the max heart rate card: "set to 175, so 144 bpm counts as Z3 (tempo)"');
-  check(await page.getByRole('button', { name: 'Share this run' }).isVisible(), 'the share button sits in the header');
+  await page.getByRole('button', { name: 'Run options' }).click();
+  check(await page.getByRole('button', { name: /Share this run/ }).isVisible(), 'Share is in the run options menu');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   check(await page.locator('.check-list li').evaluateAll((els) => els.every((e) => e.getBoundingClientRect().right <= 390)), 'checklist fits the 390 px screen');
   // Existing sections are still there
   check(await page.getByRole('heading', { name: 'How did it feel?' }).isVisible(), '"How did it feel?" is still on the page');
