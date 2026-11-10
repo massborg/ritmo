@@ -1,9 +1,10 @@
 // A built-in list of popular running shoes, so runners can find theirs by brand or model instead of typing a name.
 // Names only (no product photos): each model has what it is mostly used for and a typical lifespan, which pre-fill
 // the shoe's settings. Runners can always change both, or add a shoe that is not listed.
-import type { ShoeUse } from '../lib/types';
+import type { Shoe, ShoeUse } from '../lib/types';
+import type { ShoeShape } from '../components/shoe-shapes';
 
-export interface CatalogShoe { id: string; brand: string; model: string; use: ShoeUse; lifeKm: number; note?: string }
+export interface CatalogShoe { id: string; brand: string; model: string; use: ShoeUse; lifeKm: number; note?: string; /** Which generic drawing fits it */ shape: ShoeShape }
 
 const LIFE: Record<ShoeUse, number> = { everyday: 700, long: 800, fast: 450, trail: 700 };
 const RACE = 350; // carbon-plated racing shoes wear out sooner
@@ -27,9 +28,27 @@ const BRANDS: Record<string, Row[]> = {
   Salomon: [['Aero Glide 3', 'everyday'], ['S/Lab Phantasm 2', 'fast', RACE, 'Race'], ['Speedcross 6', 'trail'], ['Sense Ride 5', 'trail'], ['Genesis', 'trail']],
 };
 
+// Shoes whose drawing is not the one their use suggests: light, low racers and trainers, and zero-drop road shoes
+const LIGHT = new Set(['Nike Streakfly 2', 'Brooks Launch 11', 'Saucony Kinvara 15', 'adidas Adizero SL2', 'Mizuno Wave Rebellion Pro 3']);
+const WIDE_TOE = new Set(['Altra Torin 8', 'Altra Experience Flow 2', 'Altra Escalante 4']);
+
+/** The drawing for a shoe from what it is for, when it is not in the list */
+export const shapeForUse = (use: ShoeUse = 'everyday', note?: string): ShoeShape =>
+  use === 'trail' ? 'trail' : note === 'Race' ? 'carbon-racer' : note === 'Stability' ? 'stability' : use === 'fast' ? 'tempo' : use === 'long' ? 'max' : 'daily';
+
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 export const SHOE_CATALOG: CatalogShoe[] = Object.entries(BRANDS).flatMap(([brand, rows]) =>
-  rows.map(([model, use, life, note]) => ({ id: `${slug(brand)}-${slug(model)}`, brand, model, use, lifeKm: life ?? LIFE[use], note })));
+  rows.map(([model, use, life, note]) => {
+    const name = `${brand} ${model}`;
+    const shape: ShoeShape = LIGHT.has(name) ? 'light-racer' : WIDE_TOE.has(name) ? 'wide-toe' : shapeForUse(use, note);
+    return { id: `${slug(brand)}-${slug(model)}`, brand, model, use, lifeKm: life ?? LIFE[use], note, shape };
+  }));
+
+/** The drawing for one of the runner's shoes: its model's, otherwise from what it is used for */
+export function shoeShape(s: Pick<Shoe, 'brand' | 'model' | 'use'>): ShoeShape {
+  const c = s.brand && s.model ? SHOE_CATALOG.find((x) => x.brand === s.brand && x.model === s.model) : undefined;
+  return c?.shape ?? shapeForUse(s.use);
+}
 export const SHOE_BRANDS = Object.keys(BRANDS);
 
 /** Colours for the shoe picture and name. The names are the runner's choice; the swatches are design tokens' kin. */

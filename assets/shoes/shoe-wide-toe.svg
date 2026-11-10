@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Generic wide toe running shoe, lateral view">
+<style>
+.outsole{fill:var(--outsole,#222222)}.midsole{fill:var(--midsole,#FFFFFF);stroke:#857D73;stroke-width:2;stroke-linejoin:round}.upper{fill:var(--upper,#FF00AA)}.accent{fill:var(--accent,#00AAFF)}.detail{fill:none;stroke:var(--detail,#FFFFFF);stroke-opacity:.5;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.seam{fill:none;stroke:var(--accent,#00AAFF);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.ground{fill:none;stroke:var(--outsole,#222222);stroke-width:1;stroke-opacity:.32}
+</style>
+<path class="ground" d="M 8 108 H 232"/>
+<path class="outsole" d="M 18 97 Q 14 103 26 104 Q 88 106 154 104 Q 219 104 226 92 L 224 88 Q 175 100 90 97 Q 35 95 18 97 Z"/>
+<path class="midsole" d="M 19 89 Q 14 96 18 97 Q 60 100 115 99 Q 182 99 225 88 Q 230 83 225 89 Q 170 94 109 94 Q 52 93 19 89 Z"/>
+<path class="upper" d="M 22 89 Q 19 62 27 62 Q 31 54 41 55 Q 57 67 79 68 Q 97 67 112 49 Q 120 42 129 50 Q 141 59 153 66 Q 171 73 204 78 Q 221 78 225 86 Q 227 88 223 89 Q 164 94 112 91 Q 56 89 22 89 Z"/>
+<path class="accent" d="M 24 87 Q 23 79 32 61 Q 40 60 47 70 L 53 87 Z M 53 84 Q 83 67 117 75 Q 133 78 145 74 Q 118 84 101 82 Q 78 79 53 84 Z M 28 60 Q 16 40 28 38 Q 37 38 35 50 L 32 50 Q 33 41 28 42 Q 22 44 32 59 Z"/>
+<path class="detail" d="M 39 63 Q 59 78 87 71 M 111 52 Q 118 45 126 51"/>
+<path class="accent" d="M 125 57.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 137 62.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 149 67.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 161 72.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 173 77.0 l 8 5 l -2 3 l -8 -5 Z"/>
+<path class="detail" d="M 157 77 l 2 -1"/><path class="detail" d="M 167 77 l 2 -1"/><path class="detail" d="M 177 77 l 2 -1"/><path class="detail" d="M 187 77 l 2 -1"/><path class="detail" d="M 197 77 l 2 -1"/>
+<path class="detail" d="M 159 82 Q 191 74 216 86"/>
+</svg>

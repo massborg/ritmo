@@ -810,6 +810,9 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .swatch { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; }
 .swatch.on { box-shadow: 0 0 0 3px var(--surface-raised), 0 0 0 5px var(--ink); }
 .shoe-pic { flex: none; display: block; }
+/* On a dark background a faint light edge keeps black shoes and trail lugs visible */
+:root[data-theme='notte'] .shoe-pic { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.55)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='giorno']):not([data-theme='sole']) .shoe-pic { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.55)); } }
 .shoe-photo { display: block; flex: none; object-fit: cover; border-radius: 10px; background: var(--surface-sunken); }
 .shoe-photo-lg { width: min(100%, 320px); height: auto; aspect-ratio: 8 / 5; }
 .shoe-photo-btn { position: relative; cursor: pointer; }

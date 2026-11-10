@@ -42,6 +42,15 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   const brooks = await sheet.locator('.shoe-result').allInnerTexts();
   check(brooks.length > 3 && brooks.every((x) => /Brooks/.test(x)), `the Brooks filter shows only Brooks (${brooks.length})`);
   await sheet.getByRole('button', { name: 'All', exact: true }).click();
+  // Each model is drawn in the shape that fits it
+  const shapes = await sheet.locator('.shoe-result svg[data-shape]').evaluateAll((els) => els.map((e) => e.getAttribute('data-shape')));
+  check(new Set(shapes).size >= 4, `the list draws different shoe shapes (${[...new Set(shapes)].join(', ')})`);
+  await sheet.getByLabel('Search shoes by brand or model').fill('speedgoat');
+  check(await sheet.locator('.shoe-result svg[data-shape="trail"]').count() === 1, 'a trail shoe is drawn as a trail shoe');
+  await sheet.getByLabel('Search shoes by brand or model').fill('vaporfly');
+  check(await sheet.locator('.shoe-result svg[data-shape="carbon-racer"]').count() === 1, 'a carbon racer is drawn as a carbon racer');
+  await sheet.getByLabel('Search shoes by brand or model').fill('');
+  await page.screenshot({ path: require('path').join(__dirname, 'out', 'shoes-finder.png') }).catch(() => {});
   await sheet.getByLabel('Search shoes by brand or model').fill('vomero plus');
   await first.click();
   const det = page.getByRole('dialog', { name: 'Nike Vomero Plus' });
@@ -49,6 +58,8 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   check(await page.locator('#sh-name').inputValue() === 'Nike Vomero Plus (Black)', 'picking Black names it "Nike Vomero Plus (Black)"');
   check(await det.locator('[aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]', { hasText: 'Long runs' }).count() === 1, 'what they are for is filled in (long runs)');
   check(await page.locator('#sh-ret').inputValue() === '800', 'the retire distance is filled in (800 km)');
+  check(await det.locator('.shoe-hero svg[data-shape="max"] path[fill="#1E1A17"]').count() === 1, 'the picture is a max-cushion shoe in black');
+  await page.screenshot({ path: require('path').join(__dirname, 'out', 'shoes-details.png') }).catch(() => {});
   // A photo of your own pair, stored privately in your own folder
   await det.locator('input[type=file]').setInputFiles(PHOTO); await page.waitForTimeout(1200);
   check(await det.locator('img.shoe-photo').isVisible(), 'your photo replaces the drawing');
