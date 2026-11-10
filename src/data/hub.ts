@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 export type Visibility = 'everyone' | 'followers' | 'only_me';
 export interface HubProfile { user_id: string; display_name: string; bio?: string | null; club?: string | null; private: boolean }
-export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string }
+export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string; /** Challenge posts: which medal to show */ badgeId?: string }
 export interface Post {
   id: string; user_id: string; activity_id?: string | null; title: string; body?: string | null; visibility: Visibility;
   show_map: boolean; show_hr: boolean; stats: PostStats; route?: [number, number][] | null; city?: string | null;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { catalogue, markCompleted, progress, type JoinedChallenge } from './challenges';
+import { badgeOf, badgeSrc, catalogue, markCompleted, progress, type JoinedChallenge } from './challenges';
+import { existsSync } from 'fs';
 
 const at = (y: number, m: number, d: number, h = 7) => new Date(y, m - 1, d, h).toISOString();
 const run = (iso: string, km: number) => ({ startTime: iso, distanceM: km * 1000, movingS: km * 330 });
@@ -66,5 +67,12 @@ describe('challenges', () => {
     const done = markCompleted(joined, [run(at(2026, 11, 2), 50), run(at(2026, 11, 9), 50)], today)!;
     expect(done[0].completedAt).toBeTruthy();
     expect(markCompleted(done, [run(at(2026, 11, 2), 120)], today)).toBeUndefined();
+  });
+
+  it('every challenge has its own badge file', () => {
+    const ids = [...catalogue(today), ...catalogue(today, 'mi')].map(badgeOf);
+    expect(ids).toEqual(expect.arrayContaining(['distance-100km', 'distance-200km', 'distance-60mi', 'distance-125mi', 'long-runs-4x10', 'weekly-3x4', 'half-distance']));
+    for (const id of [...ids, 'challenge-generic' as const, 'locked' as const]) expect(existsSync(`public${badgeSrc(id)}`)).toBe(true);
+    expect(badgeOf({ kind: 'distance', id: 'dist-150km-2026-11' })).toBe('challenge-generic');
   });
 });

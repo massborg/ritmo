@@ -1,8 +1,7 @@
 // Hub challenge badges: joined challenges kept up to date, and the shelf of finished ones (Hub and Profile).
 import { useEffect, useMemo } from 'react';
-import { Trophy } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { markCompleted } from '../training/challenges';
+import { badgeOf, badgeSrc, markCompleted } from '../training/challenges';
 
 /** Joined challenges, kept up to date: a newly finished one gets its completion date. */
 export function useChallenges() {
@@ -24,7 +23,7 @@ export function BadgeShelf({ compact }: { compact?: boolean }) {
     <section className={compact ? 'card stack-sm' : 'stack-sm'} aria-labelledby="ch-badges">
       <h2 id="ch-badges" className={compact ? 'label' : 'title'}>Badges</h2>
       <ul className="badge-shelf">
-        {done.map((j) => <li key={j.challenge.id}><span className="badge-icon" aria-hidden="true"><Trophy size={20} strokeWidth={2} /></span><span className="caption">{j.challenge.title}</span></li>)}
+        {done.map((j) => <li key={j.challenge.id}><img className="badge-img badge-img-lg" src={badgeSrc(badgeOf(j.challenge))} alt="" width={72} height={72} /><span className="caption">{j.challenge.title}</span></li>)}
       </ul>
     </section>
   );
