@@ -35,6 +35,8 @@ const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
 const ClubPage = lazyPage(() => import('./pages/Club'));
+const ProfileShoes = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileShoes })));
+const ProfileBody = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileBody })));
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
 const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
@@ -277,6 +279,8 @@ function Shell() {
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
+              <Route path="/profile/shoes" element={<ProfileShoes />} />
+              <Route path="/profile/body" element={<ProfileBody />} />
               <Route path="/garmin/callback" element={<GarminCallback />} />
               <Route path="/strava/callback" element={<StravaCallback />} />
               <Route path="/profile/privacy" element={<Privacy />} />

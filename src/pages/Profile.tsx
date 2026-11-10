@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, ChevronRight, Database, Volume2, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
+import { Activity as Pulse, Camera, ChevronRight, Database, Footprints, HeartPulse, KeyRound, LogOut, Shield, Target, Thermometer, UserRound, Volume2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
 import { AppHeader, SampleChip } from '../components/app';
@@ -10,23 +10,33 @@ import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/fo
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
-import { Shoes } from '../components/Shoes';
-import { BodySection } from '../components/BodySection';
+import { shoeTotals } from '../training/shoes';
 import { BadgeShelf } from '../components/Badges';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
-  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace, hrIssue, hasFlag } = useApp();
+  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace, hrIssue, hasFlag, typeOf } = useApp();
   const nav = useNavigate();
   const { hash } = useLocation();
   // Links such as /profile#hr (from a run's "Check your max heart rate" card) open at that section
-  useEffect(() => { if (hash) document.getElementById(hash.slice(1))?.closest('section')?.scrollIntoView({ block: 'start' }); }, [hash]);
+  useEffect(() => {
+    if (hash === '#shoes-card') { nav('/profile/shoes', { replace: true }); return; } // old links: Shoes has its own page now
+    if (hash) document.getElementById(hash.slice(1))?.closest('section')?.scrollIntoView({ block: 'start' });
+  }, [hash]); // eslint-disable-line react-hooks/exhaustive-deps
   const p = data.profile;
   const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string }>();
   const [photo, setPhoto] = useState(false);
   const goalText = aRace?.goalS ? `${aRace.name} in ${duration(aRace.goalS)}` : p.goal;
   const hasHr = data.activities.some((a) => a.avgHr);
   const ill = p.illnessUntil && p.illnessUntil >= today.toISOString().slice(0, 10);
+  // One-line summaries for the Training list
+  const shoes = useMemo(() => (p.shoes ?? []).filter((x) => !x.retired), [p.shoes]);
+  const shoeKm = useMemo(() => shoeTotals(data.activities, shoes, typeOf), [data.activities, shoes, typeOf]);
+  const topShoe = [...shoes].sort((a, b) => (shoeKm.get(b.id) ?? 0) - (shoeKm.get(a.id) ?? 0))[0];
+  const kmText = (m?: number) => (p.units === 'mi' ? `${Math.round((m ?? 0) / 1.609344)} mi` : `${Math.round(m ?? 0)} km`);
+  const shoeLine = !shoes.length ? 'Add your shoes to track their distance' : `${shoes.length} pair${shoes.length === 1 ? '' : 's'} in use · ${topShoe.name} ${kmText(shoeKm.get(topShoe.id))}`;
+  const lastNiggle = [...(p.body?.checkins ?? [])].sort((a, b) => b.at.localeCompare(a.at))[0];
+  const bodyLine = lastNiggle ? `Last check-in ${shortDate(new Date(lastNiggle.at))}` : 'No niggles logged · exercises';
 
   return (
     <div className="stack-lg">
@@ -50,23 +60,28 @@ export default function Profile() {
         </div>
       </section>
 
-      <div className="group">
-        <Link to="/goals" className="row-between"><span className="row"><span className="row-icon"><Target size={18} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Goals and availability</span><span className="caption">{goalText || 'Not set'}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
-        <Link to="/profile/data" className="row-between"><span className="row"><span className="row-icon"><Database size={18} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Data sources</span><span className="caption">{data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}{data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}</span></span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
-        <Link to="/profile/privacy" className="row-between"><span className="row"><span className="row-icon"><Shield size={18} strokeWidth={2} aria-hidden="true" /></span><span className="label">Privacy and your data</span></span><ChevronRight size={20} strokeWidth={2} aria-hidden="true" /></Link>
-      </div>
+      <section className="stack-sm" aria-labelledby="training-h">
+        <h2 id="training-h" className="label muted">Training</h2>
+        <div className="group">
+          <Row to="/goals" icon={<Target size={18} strokeWidth={2} />} title="Goals and availability" sub={goalText || 'Not set'} />
+          <Row to="/profile/shoes" icon={<Footprints size={18} strokeWidth={2} />} title="Shoes" sub={shoeLine} />
+          {hasFlag('body') && <Row to="/profile/body" icon={<Pulse size={18} strokeWidth={2} />} title="Body" sub={bodyLine} />}
+          <Row to="/run?settings=1" icon={<Volume2 size={18} strokeWidth={2} />} title="Run settings" sub="Voice, cues, countdown, auto-pause, screen on" />
+          <Row to="/profile#hr" icon={<HeartPulse size={18} strokeWidth={2} />} title="Heart rate and zones" sub={`Max ${p.maxHr ?? hr.max} · resting ${p.restHr ?? hr.rest} bpm`} />
+        </div>
+      </section>
+
+      <BadgeShelf compact />
+
+      <section className="stack-sm" aria-labelledby="data-h">
+        <h2 id="data-h" className="label muted">Data and privacy</h2>
+        <div className="group">
+          <Row to="/profile/data" icon={<Database size={18} strokeWidth={2} />} title="Data sources" sub={`${data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}${data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}`} />
+          <Row to="/profile/privacy" icon={<Shield size={18} strokeWidth={2} />} title="Privacy and your data" />
+        </div>
+      </section>
 
       <PushReminders />
-      {/* Moved from You (brief 6.1): shoes, and Body's niggles and exercises */}
-      <BadgeShelf compact />
-      <Shoes />
-      {hasFlag('body') && <BodySection />}
-
-      <section className="card stack-sm" aria-labelledby="run-settings-h">
-        <div className="row" style={{ gap: 8 }}><Volume2 size={20} strokeWidth={2} aria-hidden="true" /><h2 id="run-settings-h" className="title">Run settings</h2></div>
-        <p className="muted">The voice and speed of spoken cues, which cues you hear, the countdown, auto-pause and keeping the screen on.</p>
-        <Link to="/run?settings=1" className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Open run settings <ChevronRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
-      </section>
       <CalendarFeed />
 
       <section className="card stack" aria-labelledby="ill">
@@ -126,5 +141,18 @@ export default function Profile() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** A row in a Profile list: icon, title, a one-line summary and a chevron. */
+function Row({ to, icon, title, sub }: { to: string; icon: ReactNode; title: string; sub?: string }) {
+  return (
+    <Link to={to} className="row-between">
+      <span className="row" style={{ minWidth: 0 }}>
+        <span className="row-icon" aria-hidden="true">{icon}</span>
+        <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{title}</span>{sub && <span className="caption profile-row-sub">{sub}</span>}</span>
+      </span>
+      <ChevronRight size={20} strokeWidth={2} aria-hidden="true" />
+    </Link>
   );
 }

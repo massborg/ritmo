@@ -975,3 +975,4 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .leader-rank { font: 600 14px/20px var(--font-mono); color: var(--ink-muted); }
 .leader-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='giorno']):not([data-theme='sole']) .hub-route .route-tile { filter: grayscale(1) invert(0.9) brightness(0.9); opacity: 0.6; } }
+.profile-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }

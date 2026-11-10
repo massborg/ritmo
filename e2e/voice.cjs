@@ -72,7 +72,7 @@ const stub = () => {
 
   // One place for the voice: Profile links to Run settings instead of repeating it
   await page.goto(`${APP}/profile`);
-  const link = page.getByRole('link', { name: /Open run settings/ });
+  const link = page.getByRole('link', { name: /^Run settings/ });
   check(await link.waitFor({ timeout: 8000 }).then(() => true, () => false) && await page.getByRole('list', { name: 'Voices' }).count() === 0, 'Profile links to Run settings and does not repeat the voice list');
   await link.click(); await page.waitForURL(/\/run/);
   const card = page.getByRole('dialog', { name: 'Run settings' });

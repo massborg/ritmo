@@ -5,7 +5,7 @@ import { useApp } from '../app/AppContext';
 import { areaLabel, DISCLAIMER, PREHAB, patternAlert, WHEN_LABEL } from '../training/body';
 import { StatusLine } from './ui';
 
-export function BodySection() {
+export function BodySection({ heading = true }: { heading?: boolean } = {}) {
   const { data, today, updateBody, plan } = useApp();
   const b = data.profile.body;
   const checkins = [...(b?.checkins ?? [])].sort((x, y) => y.at.localeCompare(x.at));
@@ -35,7 +35,7 @@ export function BodySection() {
 
   return (
     <section className="card stack" aria-labelledby="body-h">
-      <h2 id="body-h" className="title">Body</h2>
+      <h2 id="body-h" className={heading ? 'title' : 'sr-only'}>Body</h2>
       <p className="caption">{DISCLAIMER} Body check-ins are never shown on the Hub or in share images.</p>
       {alert && <StatusLine kind="warning">{alert}</StatusLine>}
       {!checkins.length ? <p className="muted">No niggles logged. Use "Something hurts" in the + menu if anything comes up.</p> : (

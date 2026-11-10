@@ -99,7 +99,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 
   // Shoes and Body in Profile
   await page.goto(`${APP}/profile`); await page.waitForTimeout(1200);
-  check(await page.locator('#shoes-card').isVisible(), 'Shoes are in Profile');
+  check(await page.getByRole('link', { name: /^Shoes/ }).isVisible(), 'Shoes are in Profile');
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors[0]}` : ''}`);
   await b.close();
   console.log(`\n${passed} passed, ${failed} failed`);
