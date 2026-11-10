@@ -1,5 +1,8 @@
 -- Hub clubs (brief §9.4). Additive only: four new tables, three helper functions and a leaderboard function.
--- Not applied until approved.
+-- Applied 10 Nov 2026 (migration name: hub_clubs). Verified the same day in a rolled-back transaction: the creator
+-- becomes admin; joining as admin, changing your own role, forging counts and members adding group runs are refused;
+-- outsiders can find a club but see no members, group runs, going list or leaderboard; the leaderboard leaves out
+-- Strava runs and members who opted out.
 --
 -- Rules (row-level security):
 -- - Anyone signed in can find a club (name, area, about, member count).
@@ -145,3 +148,4 @@ revoke execute on function public.club_leaderboard(uuid, timestamptz) from anon,
 grant execute on function public.club_leaderboard(uuid, timestamptz) to authenticated;
 revoke execute on function public.is_club_member(uuid, uuid), public.is_club_admin(uuid, uuid), public.group_run_club(uuid) from anon, public;
 grant execute on function public.is_club_member(uuid, uuid), public.is_club_admin(uuid, uuid), public.group_run_club(uuid) to authenticated;
+revoke execute on function public.club_add_creator(), public.club_member_count(), public.group_run_going_count() from anon, public, authenticated;
