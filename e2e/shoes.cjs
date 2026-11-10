@@ -30,7 +30,7 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   await page.goto(`${APP}/`); await page.waitForTimeout(1500);
   for (const name of [/Build my plan/, /Train \d days a week/, /Start my plan/]) { const x = page.getByRole('button', { name }).first(); if (await x.isVisible().catch(() => false)) { await x.click(); await page.waitForTimeout(1200); } }
 
-  await page.goto(`${APP}/profile#shoes-card`); await page.waitForTimeout(1800);
+  await page.goto(`${APP}/profile/shoes`); await page.waitForTimeout(1800);
   await page.locator('#shoes-card').getByRole('button', { name: 'Add shoes' }).click();
   const sheet = page.getByRole('dialog', { name: 'Find your shoes' });
   check(await sheet.isVisible(), 'Add shoes opens "Find your shoes"');

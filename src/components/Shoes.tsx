@@ -10,7 +10,7 @@ import { shortDate, parseYmd, ymd } from '../lib/format';
 import type { Shoe } from '../lib/types';
 import { SHOE_USE, shoeAlert, shoeTotals } from '../training/shoes';
 
-export function Shoes() {
+export function Shoes({ heading = true }: { heading?: boolean } = {}) {
   const { data, updateProfile, typeOf } = useApp();
   const shoes = useMemo(() => data.profile.shoes ?? [], [data.profile.shoes]);
   const totals = useMemo(() => shoeTotals(data.activities, shoes, typeOf), [data.activities, shoes, typeOf]);
@@ -19,7 +19,7 @@ export function Shoes() {
   if (data.mode === 'sample') return null;
   return (
     <section className="card stack" aria-labelledby="shoes" id="shoes-card">
-      <div className="row-between"><h2 id="shoes" className="title">Shoes</h2><button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button></div>
+      <div className="row-between"><h2 id="shoes" className={heading ? 'title' : 'sr-only'}>Shoes</h2><button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button></div>
       {!shoes.length && !adding && <p className="caption">Add your shoes and Ritmo counts the distance, so you know when they are worn out. Most running shoes last 500 to 800 km.</p>}
       {shoes.length > 0 && <p className="caption">Runs are assigned automatically: fast shoes for intervals, tempo runs and races, long-run shoes for long runs, everyday shoes for the rest. Change a run's shoes on its page.</p>}
       <ul className="list">{shoes.map((s) => {

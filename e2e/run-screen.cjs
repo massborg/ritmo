@@ -129,7 +129,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 
   // Profile links here for run settings
   await page.goto(`${APP}/profile`);
-  await page.getByRole('link', { name: /Open run settings/ }).click(); await page.waitForURL(/\/run/); await page.waitForTimeout(800);
+  await page.getByRole('link', { name: /^Run settings/ }).click(); await page.waitForURL(/\/run/); await page.waitForTimeout(800);
   check(await page.getByRole('dialog', { name: 'Run settings' }).isVisible(), "Profile's Run settings link opens the sheet");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors[0]}` : ''}`);
   await b.close();
