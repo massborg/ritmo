@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Generic light racer running shoe, lateral view">
+<style>
+.outsole{fill:var(--outsole,#222222)}.midsole{fill:var(--midsole,#FFFFFF);stroke:#857D73;stroke-width:2;stroke-linejoin:round}.upper{fill:var(--upper,#FF00AA)}.accent{fill:var(--accent,#00AAFF)}.detail{fill:none;stroke:var(--detail,#FFFFFF);stroke-opacity:.5;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.seam{fill:none;stroke:var(--accent,#00AAFF);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.ground{fill:none;stroke:var(--outsole,#222222);stroke-width:1;stroke-opacity:.32}
+</style>
+<path class="ground" d="M 8 108 H 232"/>
+<path class="outsole" d="M 20 97 Q 16 103 28 104 Q 88 106 154 104 Q 217 104 224 92 L 222 88 Q 175 100 90 97 Q 35 95 20 97 Z"/>
+<path class="midsole" d="M 21 91 Q 16 98 20 97 Q 60 100 115 99 Q 182 99 223 88 Q 228 83 223 91 Q 170 96 109 96 Q 52 95 21 91 Z"/>
+<path class="upper" d="M 24 91 Q 21 65 29 65 Q 33 57 43 58 Q 59 70 81 71 Q 99 70 114 52 Q 122 45 131 53 Q 143 62 155 69 Q 173 76 202 84 Q 219 84 223 92 Q 225 90 221 91 Q 164 96 112 93 Q 56 91 24 91 Z"/>
+<path class="accent" d="M 26 89 Q 25 82 34 64 Q 42 63 49 73 L 55 89 Z"/>
+<path class="detail" d="M 41 66 Q 61 81 89 74 M 113 55 Q 120 48 128 54"/>
+<path class="accent" d="M 127 60.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 139 65.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 151 70.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 163 75.0 l 8 5 l -2 3 l -8 -5 Z"/>
+<path class="detail" d="M 157 79 l 2 -1"/><path class="detail" d="M 167 79 l 2 -1"/><path class="detail" d="M 177 79 l 2 -1"/><path class="detail" d="M 187 79 l 2 -1"/><path class="detail" d="M 197 79 l 2 -1"/>
+
+</svg>

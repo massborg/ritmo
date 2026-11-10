@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SHOE_CATALOG, searchShoes, shoeDisplayName } from './shoe-catalog';
+import { SHOE_CATALOG, searchShoes, shoeDisplayName, shoeShape } from './shoe-catalog';
+import { SHOE_SHAPES } from '../components/shoe-shapes';
 
 describe('shoe finder', () => {
   it('finds a shoe by model, by brand and model, and without the version number', () => {
@@ -16,5 +17,30 @@ describe('shoe finder', () => {
     expect(new Set(SHOE_CATALOG.map((s) => s.id)).size).toBe(SHOE_CATALOG.length);
     expect(shoeDisplayName('Nike', 'Vomero Plus', 'Black')).toBe('Nike Vomero Plus (Black)');
     expect(searchShoes('zzzz')).toEqual([]);
+  });
+
+  it('every shoe has a drawing that fits it', () => {
+    const shape = (b: string, m: string) => SHOE_CATALOG.find((s) => s.brand === b && s.model === m)?.shape;
+    expect(shape('Nike', 'Vaporfly 3')).toBe('carbon-racer');
+    expect(shape('HOKA', 'Speedgoat 6')).toBe('trail');
+    expect(shape('HOKA', 'Bondi 9')).toBe('max');
+    expect(shape('ASICS', 'Gel-Kayano 32')).toBe('stability');
+    expect(shape('Saucony', 'Endorphin Speed 4')).toBe('tempo');
+    expect(shape('Saucony', 'Kinvara 15')).toBe('light-racer');
+    expect(shape('Altra', 'Torin 8')).toBe('wide-toe');
+    expect(shape('Brooks', 'Ghost 17')).toBe('daily');
+    for (const s of SHOE_CATALOG) expect(SHOE_SHAPES[s.shape]).toBeTruthy();
+    // All eight drawings are used
+    expect(new Set(SHOE_CATALOG.map((s) => s.shape)).size).toBe(Object.keys(SHOE_SHAPES).length);
+  });
+
+  it('a shoe added by name gets the drawing for what it is used for', () => {
+    expect(shoeShape({ name: 'Old trail pair', use: 'trail' } as never)).toBe('trail');
+    expect(shoeShape({ brand: 'Nike', model: 'Alphafly 3', use: 'everyday' })).toBe('carbon-racer');
+    expect(shoeShape({})).toBe('daily');
+  });
+
+  it('the drawings carry no scripts, links or images', () => {
+    for (const parts of Object.values(SHOE_SHAPES)) for (const [, d] of parts) expect(d).toMatch(/^[MmLlHhVvQqCcZz0-9 .,-]+$/);
   });
 });

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Generic daily running shoe, lateral view">
+<style>
+.outsole{fill:var(--outsole,#222222)}.midsole{fill:var(--midsole,#FFFFFF);stroke:#857D73;stroke-width:2;stroke-linejoin:round}.upper{fill:var(--upper,#FF00AA)}.accent{fill:var(--accent,#00AAFF)}.detail{fill:none;stroke:var(--detail,#FFFFFF);stroke-opacity:.5;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.seam{fill:none;stroke:var(--accent,#00AAFF);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.ground{fill:none;stroke:var(--outsole,#222222);stroke-width:1;stroke-opacity:.32}
+</style>
+<path class="ground" d="M 8 108 H 232"/>
+<path class="outsole" d="M 18 95 Q 14 101 26 102 Q 88 104 154 102 Q 215 102 222 90 L 220 86 Q 175 98 90 95 Q 35 93 18 95 Z"/>
+<path class="midsole" d="M 19 86 Q 14 93 18 95 Q 60 98 115 97 Q 182 97 221 86 Q 226 81 221 86 Q 170 91 109 91 Q 52 90 19 86 Z"/>
+<path class="upper" d="M 22 86 Q 19 58 27 60 Q 31 52 41 53 Q 57 65 79 66 Q 97 65 112 47 Q 120 40 129 48 Q 141 57 153 64 Q 171 71 200 80 Q 217 80 221 88 Q 223 85 219 86 Q 164 91 112 88 Q 56 86 22 86 Z"/>
+<path class="accent" d="M 24 84 Q 23 75 32 59 Q 40 58 47 68 L 53 84 Z M 53 81 Q 83 64 117 72 Q 133 75 145 71 Q 118 81 101 79 Q 78 76 53 81 Z M 28 58 Q 16 38 28 36 Q 37 36 35 48 L 32 48 Q 33 39 28 40 Q 22 42 32 57 Z"/>
+<path class="detail" d="M 39 61 Q 59 76 87 69 M 111 50 Q 118 43 126 49"/>
+<path class="accent" d="M 125 55.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 137 60.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 149 65.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 161 70.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 173 75.0 l 8 5 l -2 3 l -8 -5 Z"/>
+<path class="detail" d="M 157 74 l 2 -1"/><path class="detail" d="M 167 74 l 2 -1"/><path class="detail" d="M 177 74 l 2 -1"/><path class="detail" d="M 187 74 l 2 -1"/><path class="detail" d="M 197 74 l 2 -1"/>
+
+</svg>

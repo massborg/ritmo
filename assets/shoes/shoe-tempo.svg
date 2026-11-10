@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Generic tempo running shoe, lateral view">
+<style>
+.outsole{fill:var(--outsole,#222222)}.midsole{fill:var(--midsole,#FFFFFF);stroke:#857D73;stroke-width:2;stroke-linejoin:round}.upper{fill:var(--upper,#FF00AA)}.accent{fill:var(--accent,#00AAFF)}.detail{fill:none;stroke:var(--detail,#FFFFFF);stroke-opacity:.5;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.seam{fill:none;stroke:var(--accent,#00AAFF);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.ground{fill:none;stroke:var(--outsole,#222222);stroke-width:1;stroke-opacity:.32}
+</style>
+<path class="ground" d="M 8 108 H 232"/>
+<path class="outsole" d="M 18 96 Q 14 102 26 103 Q 88 105 154 103 Q 217 103 224 91 L 222 87 Q 175 99 90 96 Q 35 94 18 96 Z"/>
+<path class="midsole" d="M 19 82 Q 14 89 18 96 Q 60 99 115 98 Q 182 98 223 87 Q 228 82 223 82 Q 170 87 109 87 Q 52 86 19 82 Z"/>
+<path class="upper" d="M 22 82 Q 19 58 27 58 Q 31 50 41 51 Q 57 63 79 64 Q 97 63 112 45 Q 120 38 129 46 Q 141 55 153 62 Q 171 69 202 74 Q 219 74 223 82 Q 225 81 221 82 Q 164 87 112 84 Q 56 82 22 82 Z"/>
+<path class="accent" d="M 24 80 Q 23 75 32 57 Q 40 56 47 66 L 53 80 Z M 53 77 Q 83 60 117 68 Q 133 71 145 67 Q 118 77 101 75 Q 78 72 53 77 Z"/>
+<path class="detail" d="M 39 59 Q 59 74 87 67 M 111 48 Q 118 41 126 47"/>
+<path class="accent" d="M 125 53.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 137 58.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 149 63.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 161 68.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 173 73.0 l 8 5 l -2 3 l -8 -5 Z"/>
+<path class="detail" d="M 157 70 l 2 -1"/><path class="detail" d="M 167 70 l 2 -1"/><path class="detail" d="M 177 70 l 2 -1"/><path class="detail" d="M 187 70 l 2 -1"/><path class="detail" d="M 197 70 l 2 -1"/>
+
+</svg>

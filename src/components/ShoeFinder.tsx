@@ -7,7 +7,8 @@ import { useApp } from '../app/AppContext';
 import { StatusLine } from './ui';
 import { prepareShoePhoto, removeShoePhoto, shoePhotoProblem, uploadShoePhoto, useShoePhoto } from '../data/shoe-photo';
 import { Chips, DateField, Sheet, Stepper } from './inputs';
-import { SHOE_BRANDS, SHOE_COLOURS, searchShoes, shoeDisplayName, type CatalogShoe } from '../training/shoe-catalog';
+import { SHOE_BRANDS, SHOE_COLOURS, searchShoes, shapeForUse, shoeDisplayName, shoeShape, type CatalogShoe } from '../training/shoe-catalog';
+import { SHOE_SHAPES, type ShoePart, type ShoeShape } from './shoe-shapes';
 import { SHOE_USE } from '../training/shoes';
 import { uid, ymd } from '../lib/format';
 import type { Shoe, ShoeUse } from '../lib/types';
@@ -15,32 +16,44 @@ import type { Shoe, ShoeUse } from '../lib/types';
 const USE_OPTIONS = (Object.keys(SHOE_USE) as ShoeUse[]).map((value) => ({ value, label: SHOE_USE[value] }));
 const colourHex = (name?: string) => SHOE_COLOURS.find((c) => c.name === name)?.hex;
 
-/** A side view of a running shoe: upper in the shoe's colour, a light midsole and a dark outsole. */
-export function ShoePicture({ colour, size = 72, label }: { colour?: string; size?: number; label?: string }) {
+/** Blend two #RRGGBB colours: t = 0 is a, 1 is b */
+const mixHex = (a: string, b: string, t: number) => `#${[1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('')}`;
+
+/** Light colours get a darker accent and an outline, so the shoe stands out on a light background */
+const LIGHT_COLOURS = new Set(['White', 'Yellow', 'Pink', 'Grey']);
+
+/**
+ * A side view of a running shoe, drawn in the shape that fits the model (daily trainer, max cushion, carbon racer,
+ * trail...): the upper in the shoe's colour with a matching accent, a light midsole and a dark outsole. Generic
+ * shapes only, never a brand's design.
+ */
+export function ShoePicture({ colour, size = 72, label, shape = 'daily' }: { colour?: string; size?: number; label?: string; shape?: ShoeShape }) {
   const upper = colourHex(colour) ?? colour ?? 'var(--border)';
-  const light = colour === 'White';
+  const light = !colour || LIGHT_COLOURS.has(colour);
+  const hex = colourHex(colour);
+  const accent = colour === 'White' ? '#C9C2B8' : hex ? mixHex(hex, light ? '#000000' : '#FFFFFF', light ? 0.3 : 0.45) : '#A39B91';
+  const line = light ? 'rgb(0 0 0 / 0.28)' : 'rgb(255 255 255 / 0.5)';
+  const paint: Record<ShoePart, React.SVGProps<SVGPathElement>> = {
+    outsole: { fill: '#2B2724' },
+    // The foam stays light and the rubber dark in both themes, like real shoes
+    midsole: { fill: '#FAF8F4', stroke: '#857D73', strokeWidth: 2, strokeLinejoin: 'round' },
+    upper: { fill: upper, ...(colour === 'White' ? { stroke: '#B5ADA3', strokeWidth: 1.5, strokeLinejoin: 'round' as const } : {}) },
+    accent: { fill: accent },
+    detail: { fill: 'none', stroke: line, strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' },
+    seam: { fill: 'none', stroke: accent, strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' },
+  };
   return (
-    <svg className="shoe-pic" width={size} height={size * 0.5} viewBox="0 0 120 60" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
-      {/* upper: heel counter, collar, tongue, laces down to a low toe */}
-      <path d="M9 41 C7 33 7 25 10 19 C12 15 17 14 21 16 C25 18 29 20 33 18 C37 12 42 8 48 8 C52 8 54 11 57 15 L84 27 C94 30 106 32 112 36 C115 38 115 41 112 42 Z"
-        fill={upper} stroke={light ? 'var(--border)' : 'none'} strokeWidth="1.5" strokeLinejoin="round" />
-      {/* side stripe and lace marks */}
-      <path d="M30 34 C46 26 64 26 86 34" stroke={light ? 'var(--border)' : 'rgb(255 255 255 / 0.55)'} strokeWidth="3.5" fill="none" strokeLinecap="round" />
-      <path d="M55 17 L60 21 M62 20 L67 24 M69 23 L74 27" stroke={light ? 'var(--border)' : 'rgb(255 255 255 / 0.5)'} strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M10 19 C9 27 9 34 11 41" stroke={light ? 'var(--border)' : 'rgb(0 0 0 / 0.18)'} strokeWidth="3" fill="none" strokeLinecap="round" />
-      {/* midsole: thicker at the heel, rocking up at the toe */}
-      <path d="M5 40 L113 41 C117 42 117 46 113 47 C108 49 100 50 92 50 L14 51 C8 51 4 47 5 40 Z" fill="var(--surface-raised)" stroke="var(--border)" strokeWidth="1.5" strokeLinejoin="round" />
-      {/* outsole */}
-      <path d="M11 51 L94 50 C102 50 108 49 112 47 C110 52 104 54 96 54 L17 55 C13 55 11 53 11 51 Z" fill="var(--graphite)" />
+    <svg className="shoe-pic" data-shape={shape} width={size} height={size * 0.5} viewBox="4 4 232 116" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      {SHOE_SHAPES[shape].map(([part, d], i) => <path key={i} d={d} {...paint[part]} />)}
     </svg>
   );
 }
 
 /** The runner's own photo when there is one, otherwise the drawing in the shoe's colour */
-export function ShoeImage({ shoe, size = 56 }: { shoe: Pick<Shoe, 'photo' | 'colour' | 'name'>; size?: number }) {
+export function ShoeImage({ shoe, size = 56 }: { shoe: Pick<Shoe, 'photo' | 'colour' | 'name' | 'brand' | 'model' | 'use'>; size?: number }) {
   const url = useShoePhoto(shoe.photo);
   if (shoe.photo && url) return <img className="shoe-photo" src={url} alt={`Your ${shoe.name}`} style={{ width: size, height: size * 0.625 }} />;
-  return <ShoePicture size={size} colour={shoe.colour} />;
+  return <ShoePicture size={size} colour={shoe.colour} shape={shoeShape(shoe)} />;
 }
 
 /** Take or choose a photo of your pair: resized on the device, then stored privately */
@@ -120,7 +133,7 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
               {results.map((s) => (
                 <li key={s.id}>
                   <button type="button" className="shoe-result" onClick={() => choose(s)}>
-                    <ShoePicture size={64} />
+                    <ShoePicture size={64} shape={s.shape} />
                     <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}>
                       <span className="label">{s.model}</span>
                       <span className="caption">{s.brand} · {SHOE_USE[s.use]}{s.note ? ` · ${s.note}` : ''}</span>
@@ -135,7 +148,7 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
         </div>
       ) : (
         <div className="stack">
-          <div className="shoe-hero">{preview ? <img className="shoe-photo shoe-photo-lg" src={preview} alt={`Your ${name || 'shoes'}`} /> : <ShoePicture size={180} colour={colour} label={`${name || 'Shoe'} picture`} />}</div>
+          <div className="shoe-hero">{preview ? <img className="shoe-photo shoe-photo-lg" src={preview} alt={`Your ${name || 'shoes'}`} /> : <ShoePicture size={180} colour={colour} shape={pick?.shape ?? shapeForUse(use)} label={`${name || 'Shoe'} picture`} />}</div>
           <div className="row wrap" style={{ gap: 8 }}>
             <ShoePhotoButton shoeId={shoeId} label={photo ? 'Change photo' : 'Add a photo of your pair'} onDone={(p, url) => { setPhoto(p); setPreview(url); }} />
             {photo && <button type="button" className="btn btn-small btn-ghost" onClick={() => { if (photo) void removeShoePhoto(photo); setPhoto(undefined); setPreview(undefined); }}><Trash2 size={16} strokeWidth={2} aria-hidden="true" />Use the drawing</button>}

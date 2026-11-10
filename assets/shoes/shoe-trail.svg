@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Generic trail running shoe, lateral view">
+<style>
+.outsole{fill:var(--outsole,#222222)}.midsole{fill:var(--midsole,#FFFFFF);stroke:#857D73;stroke-width:2;stroke-linejoin:round}.upper{fill:var(--upper,#FF00AA)}.accent{fill:var(--accent,#00AAFF)}.detail{fill:none;stroke:var(--detail,#FFFFFF);stroke-opacity:.5;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.seam{fill:none;stroke:var(--accent,#00AAFF);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}.ground{fill:none;stroke:var(--outsole,#222222);stroke-width:1;stroke-opacity:.32}
+</style>
+<path class="ground" d="M 8 108 H 232"/>
+<path class="outsole" d="M 15 94 Q 14 100 22 100 L 31 105 L 38 100 L 48 105 L 58 100 L 68 105 L 79 100 L 91 105 L 102 100 L 115 105 L 127 100 L 141 105 L 155 100 L 168 105 L 180 100 L 194 104 L 219 99 Q 229 95 224 90 Q 172 97 110 97 Q 55 97 15 94 Z"/>
+<path class="midsole" d="M 18 84 Q 13 91 17 93 Q 60 96 115 95 Q 182 95 223 84 Q 228 79 223 84 Q 170 89 109 89 Q 52 88 18 84 Z"/>
+<path class="upper" d="M 21 84 Q 18 52 26 52 Q 30 44 40 45 Q 56 57 78 58 Q 96 57 111 39 Q 119 32 128 40 Q 140 49 152 56 Q 170 63 202 77 Q 219 77 223 85 Q 225 83 221 84 Q 164 89 112 86 Q 56 84 21 84 Z"/>
+<path class="accent" d="M 23 82 Q 22 69 31 51 Q 39 50 46 60 L 52 82 Z M 194 79 Q 212 78 222 86 L 222 84 L 200 85 Z M 27 50 Q 15 30 27 28 Q 36 28 34 40 L 31 40 Q 32 31 27 32 Q 21 34 31 49 Z"/>
+<path class="detail" d="M 38 53 Q 58 68 86 61 M 110 42 Q 117 35 125 41"/>
+<path class="accent" d="M 124 47.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 136 52.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 148 57.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 160 62.0 l 8 5 l -2 3 l -8 -5 Z"/><path class="accent" d="M 172 67.0 l 8 5 l -2 3 l -8 -5 Z"/>
+<path class="detail" d="M 157 72 l 2 -1"/><path class="detail" d="M 167 72 l 2 -1"/><path class="detail" d="M 177 72 l 2 -1"/><path class="detail" d="M 187 72 l 2 -1"/><path class="detail" d="M 197 72 l 2 -1"/>
+<path class="seam" d="M 67 73 l 18 -7 l 16 12 M 108 81 l 12 -8 l 11 8"/>
+</svg>
