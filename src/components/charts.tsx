@@ -87,15 +87,25 @@ export function LineChart({ series, labels, height = 180, format = (v: number) =
 }
 
 /** Route over OpenStreetMap tiles (the runner's own runs only). The map can be switched off on this device. */
-export function RouteMap({ points }: { points: { lat?: number; lon?: number }[] }) {
+export function RouteMap({ points, byPace, weather }: { points: { lat?: number; lon?: number; t?: number; d?: number }[]; byPace?: boolean; weather?: string }) {
   const [showMap, setShowMap] = useState(mapsOn);
-  const pts = points.filter((p) => p.lat != null && p.lon != null) as { lat: number; lon: number }[];
+  const pts = points.filter((p) => p.lat != null && p.lon != null) as { lat: number; lon: number; t?: number; d?: number }[];
   const W = 640, H = 400;
   const view = fitView(pts, W, H, 28);
   if (!view) return null;
   const step = Math.max(1, Math.floor(pts.length / 1500));
-  const xy = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p) => view.toView(p.lat, p.lon));
+  const kept = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
+  const xy = kept.map((p) => view.toView(p.lat, p.lon));
   const d = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  // Coloured by pace: each piece's pace over ~150 m, in five bands from the run's own slowest to fastest
+  const pieces = byPace && kept.every((p) => p.t != null && p.d != null) ? (() => {
+    const pace: number[] = kept.map((p, i) => { let j = i; while (j > 0 && p.d! - kept[j].d! < 150) j--; const dd = p.d! - kept[j].d!, dt = p.t! - kept[j].t!; return dd > 20 ? dt / (dd / 1000) : NaN; });
+    const ok = pace.filter(Number.isFinite).sort((x, y) => x - y);
+    if (ok.length < 10) return undefined;
+    const q = [0.2, 0.4, 0.6, 0.8].map((f) => ok[Math.floor(ok.length * f)]);
+    const band = (v: number) => (!Number.isFinite(v) ? 2 : v <= q[0] ? 5 : v <= q[1] ? 4 : v <= q[2] ? 3 : v <= q[3] ? 2 : 1);
+    return xy.slice(1).map((p, i) => ({ a: xy[i], b: p, z: band(pace[i + 1]) }));
+  })() : undefined;
   const a = xy[0], b = xy[xy.length - 1];
   const toggle = () => { setMapsOn(!showMap); setShowMap(!showMap); };
   return (
@@ -106,10 +116,13 @@ export function RouteMap({ points }: { points: { lat?: number; lon?: number }[] 
             <image key={`${t.z}/${t.x}/${t.y}/${t.left}`} href={t.url} x={t.left} y={t.top} width={TILE} height={TILE} preserveAspectRatio="none" className="route-tile" />
           ))}
           <path d={d} fill="none" stroke="#fff" strokeOpacity={showMap ? 0.9 : 0} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
-          <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          {pieces ? pieces.map((g, i) => <line key={i} x1={g.a.x} y1={g.a.y} x2={g.b.x} y2={g.b.y} stroke={`var(--zone-${g.z})`} strokeWidth="5" strokeLinecap="round" />)
+            : <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
           <circle cx={a.x} cy={a.y} r="8" fill="#fff" stroke="var(--brand)" strokeWidth="4"><title>Start</title></circle>
           <circle cx={b.x} cy={b.y} r="8" fill="var(--brand)" stroke="#fff" strokeWidth="3"><title>Finish</title></circle>
         </svg>
+        {weather && <span className="map-chip map-chip-weather">{weather}</span>}
+        {pieces && <span className="map-chip map-chip-legend" aria-label="Route colour: slower to faster"><span className="pace-ramp" aria-hidden="true" />Slower → faster</span>}
         {showMap && (
           <a className="route-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
             style={{ position: 'absolute', right: 0, bottom: 0, padding: '2px 6px', fontSize: 11, lineHeight: 1.4, background: 'rgba(255,255,255,.85)', color: '#333', borderTopLeftRadius: 6, textDecoration: 'none' }}>

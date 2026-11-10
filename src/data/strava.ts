@@ -24,6 +24,7 @@ export interface StravaActivity {
   elapsed_time?: number;
   total_elevation_gain?: number;
   average_heartrate?: number;
+  calories?: number;
   max_heartrate?: number;
   average_cadence?: number; // per leg for runs
   device_name?: string;
@@ -72,6 +73,7 @@ export function stravaToActivity(a: StravaActivity, s: StravaStreams = {}): Acti
     movingS: a.moving_time ?? a.elapsed_time ?? 0,
     ...(a.total_elevation_gain != null ? { elevGainM: Math.round(a.total_elevation_gain) } : {}),
     ...(a.average_heartrate ? { avgHr: Math.round(a.average_heartrate) } : {}),
+    ...(a.calories ? { calories: Math.round(a.calories) } : {}),
     ...(a.max_heartrate ? { maxHr: Math.round(a.max_heartrate) } : {}),
     ...(a.average_cadence ? { avgCadence: Math.round(a.average_cadence * 2) } : {}),
     ...(laps ? { laps } : {}), ...(streams ? { streams } : {}),

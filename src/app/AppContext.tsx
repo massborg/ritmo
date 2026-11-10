@@ -145,6 +145,7 @@ interface Ctx extends Derived {
   mergeRuns: (a: Activity, b: Activity) => Promise<string | undefined>;
   setRunHidden: (id: string, hidden: boolean) => void;
   setRunShoe: (id: string, shoeId: string | undefined) => void;
+  renameRun: (id: string, name: string) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
@@ -800,6 +801,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const patchRun = (id: string, patch: Partial<Activity>) => setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const setRunHidden = (id: string, hidden: boolean) => patchRun(id, { hidden: hidden || undefined });
   const setRunShoe = (id: string, shoeId: string | undefined) => patchRun(id, { shoeId });
+  const renameRun = (id: string, name: string) => { const n = name.trim().slice(0, 120); if (n) patchRun(id, { name: n }); };
   /** Correct a run's time (a mistyped manual entry, e.g. 75 seconds for 75 minutes). Only for runs without a GPS track. */
   const fixRunTime = (run: Activity, seconds: number) => patchRun(run.id, { movingS: seconds, durationS: Math.max(seconds, run.durationS === run.movingS ? seconds : run.durationS) });
   const fixRunDistance = (run: Activity, distanceM: number) => {
@@ -1138,7 +1140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

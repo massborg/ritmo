@@ -1,9 +1,9 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { forStats, implausible } from '../data/quality';
 import { garminAttribution } from '../data/garmin';
 import { isStravaRun, stravaUrl } from '../data/strava';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeftRight, Award, Check, CheckCircle2, HeartPulse, MessageCircle, Share2, TrendingUp, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Award, CalendarClock, Check, CheckCircle2, HeartPulse, MessageCircle, MoreHorizontal, Plus, Share2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
@@ -26,6 +26,16 @@ const ShareSheet = lazy(() => import('../components/ShareSheet').then((m) => ({ 
 import type { Activity, SessionFeedback } from '../lib/types';
 import { isDuplicatePair } from '../data/quality';
 import { shoeForRun } from '../training/shoes';
+import { splitRun } from '../training/intervals';
+import { RunIntervals } from '../components/RunIntervals';
+import { RunCharts } from '../components/RunCharts';
+import { RunShoes } from '../components/RunShoes';
+import { Sheet } from '../components/inputs';
+
+type RunTab = 'overview' | 'intervals' | 'charts' | 'shoes';
+const RUN_TABS: { id: RunTab; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'intervals', label: 'Intervals' }, { id: 'charts', label: 'Charts' }, { id: 'shoes', label: 'Shoes' }];
+const TAB_KEY = 'ritmo:run-tab';
+const savedTab = (): RunTab => { try { const v = sessionStorage.getItem(TAB_KEY); return (RUN_TABS.some((x) => x.id === v) ? v : 'overview') as RunTab; } catch { return 'overview'; } };
 
 const ZONE_WORD = ['recovery', 'easy', 'tempo', 'threshold', 'VO2 max'];
 const zoneOfRun = (bpm: number, z?: { zone: number; min: number; max: number }[]) => (z ? zoneOf(bpm, z) : 1);
@@ -98,11 +108,18 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today, sessionOfRun, renameRun, setRunHidden } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [menu, setMenu] = useState(false);
+  // Update 2, §2: Overview · Intervals · Charts · Shoes; the last tab is remembered for this browser session
+  const [tab, setTabState] = useState<RunTab>(savedTab);
+  const setTab = (t: RunTab) => { setTabState(t); try { sessionStorage.setItem(TAB_KEY, t); } catch { /* */ } };
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
-  if (!a) return <Empty title="Run not found" action={<Link to="/you" className="btn">Back</Link>} />;
+  const iv = useMemo(() => (a ? splitRun(a, data.profile.units) : undefined), [a, data.profile.units]);
+  const [title, setTitle] = useState(a?.name ?? '');
+  useEffect(() => { setTitle(a?.name ?? ''); }, [a?.id, a?.name]);
+  if (!a || !iv) return <Empty title="Run not found" action={<Link to="/you" className="btn">Back</Link>} />;
   const an = analysisFor(a);
   const rep = buildReport({ a, an, planned: an.planned, all: forStats(data.activities), plan, race: aRace, paces, fitnessVdot: fitness?.vdot, units: data.profile.units, typeOf, workPace: an.workPace });
   const verdict = buildVerdict({ a, an, rep, paces, zones: a.avgHr ? zones : undefined, units: data.profile.units, hrSuspect: !!hrIssue });
@@ -113,9 +130,24 @@ export default function ActivityPage() {
   // The max heart rate check (section 8.2): only on runs with heart rate, when the settings look too low
   const showHrCheck = !!hrIssue && !!a.avgHr && data.mode === 'real';
   const canShare = !isStravaRun(a) && hasFlag('share_cards');
-  const source = isStravaRun(a) ? 'Strava' : garminAttribution(a) ?? (a.source === 'sample' ? 'Sample data' : a.source === 'upload' ? 'File upload' : a.source === 'manual' ? 'Logged by hand' : a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'apple_health' ? 'Apple Health' : a.source === 'health_connect' ? 'Health Connect' : a.source === 'coros' ? 'COROS' : a.source);
+  // The watch that recorded it when known ("Garmin Forerunner 965"), otherwise where it came from
+  const watch = a.device ? (/^(garmin|coros|polar|suunto|apple|wahoo|samsung|google)/i.test(a.device) || !/forerunner|fenix|epix|venu|vivoactive|enduro|instinct/i.test(a.device) ? a.device : `Garmin ${a.device}`) : undefined;
+  const source = isStravaRun(a) ? (watch ? `${watch} · via Strava` : 'Strava') : garminAttribution(a) ?? watch ?? (a.source === 'sample' ? 'Sample data' : a.source === 'upload' ? 'File upload' : a.source === 'manual' ? 'Logged by hand' : a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'apple_health' ? 'Apple Health' : a.source === 'health_connect' ? 'Health Connect' : a.source === 'coros' ? 'COROS' : a.source);
   const when = new Date(a.startTime);
+  // The run's real local start time and where it came from (never the time it was imported)
   const dateline = `${when.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${source}`;
+  const session = sessionOfRun(a.id);
+  const d0 = a.startTime.slice(0, 10);
+  const planTag = session?.status === 'swapped' ? { cls: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
+    : session?.status === 'done' ? { cls: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `Matched plan · ${TYPE_LABEL[typeOf(a)]}` }
+    : plan && d0 >= plan.startDate ? { cls: 'extra', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' } : undefined;
+  const nextSession = plan?.sessions.find((x) => x.date > ymd(today) && x.type !== 'rest' && x.status === 'planned');
+  const weatherChip = a.weather ? `${Math.round(a.weather.t)}°C · wind ${Math.round(a.weather.ws)} km/h` : undefined;
+  const tabKeys = (e: KeyboardEvent, i: number) => {
+    const n = e.key === 'ArrowRight' ? (i + 1) % RUN_TABS.length : e.key === 'ArrowLeft' ? (i + RUN_TABS.length - 1) % RUN_TABS.length : -1;
+    if (n >= 0) { e.preventDefault(); setTab(RUN_TABS[n].id); document.getElementById(`run-tab-${RUN_TABS[n].id}`)?.focus(); }
+  };
+  const goFix = (anchor: string) => { setMenu(false); setTab('overview'); setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); };
   const group = groupOf(a.id);
   const role = group?.roles[a.id];
   const U = data.profile.units;
@@ -146,11 +178,43 @@ export default function ActivityPage() {
 
   return (
     <div className="stack-lg">
-      <AppHeader title={a.name} back eyebrow={dateline}
-        right={canShare ? <button className="icon-btn" aria-label="Share this run" onClick={() => setSharing(true)}><Share2 size={22} strokeWidth={2} /></button> : undefined} />
+      <AppHeader title="Run" back large={false}
+        right={<button className="icon-btn" aria-label="Run options" aria-haspopup="dialog" onClick={() => setMenu(true)}><MoreHorizontal size={22} strokeWidth={2} /></button>} />
+      <div className="run-tabs" role="tablist" aria-label="Run">
+        {RUN_TABS.map((t, i) => (
+          <button key={t.id} id={`run-tab-${t.id}`} role="tab" type="button" className="run-tab" aria-selected={tab === t.id} aria-controls={`run-panel-${t.id}`} tabIndex={tab === t.id ? 0 : -1}
+            onClick={() => setTab(t.id)} onKeyDown={(e) => tabKeys(e, i)}>{t.label}</button>
+        ))}
+      </div>
       {loading && <p className="caption" role="status">Loading splits, charts and route…</p>}
-      <div className="stack-sm" style={{ marginTop: 'calc(-1 * var(--s3))' }}>
-        <div className="row wrap"><span className="tag">{labelOf(a)}</span><span className="tag">Focus: {TYPE_FOCUS[an.type]}</span>{stravaUrl(a) && <a className="strava-link caption" href={stravaUrl(a)} target="_blank" rel="noopener noreferrer">View on Strava</a>}</div>
+      {menu && (
+        <Sheet open onClose={() => setMenu(false)} title="Run options">
+          <div className="stack-sm">
+            <button className="btn btn-block" onClick={() => goFix('fix-run')}>Fix this run</button>
+            <button className="btn btn-block" onClick={() => { setRunHidden(a.id, !a.hidden); setMenu(false); }}>{a.hidden ? 'Count in my stats again' : 'Leave out of my stats'}</button>
+            <button className="btn btn-block" onClick={() => goFix('fix-km')}>Correct distance or time</button>
+            {canShare && <button className="btn btn-block" onClick={() => { setMenu(false); setTab('overview'); setSharing(true); }}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share this run</button>}
+          </div>
+        </Sheet>
+      )}
+
+      {tab === 'intervals' && <div role="tabpanel" id="run-panel-intervals" aria-labelledby="run-tab-intervals"><RunIntervals iv={iv} units={U} /></div>}
+      {tab === 'charts' && <div role="tabpanel" id="run-panel-charts" aria-labelledby="run-tab-charts"><RunCharts a={a} reps={iv.reps} units={U} zones={a.avgHr ? zones : undefined} /></div>}
+      {tab === 'shoes' && <div role="tabpanel" id="run-panel-shoes" aria-labelledby="run-tab-shoes"><RunShoes run={a} /></div>}
+
+      {tab === 'overview' && <div role="tabpanel" id="run-panel-overview" aria-labelledby="run-tab-overview" className="stack-lg">
+      {/* The route coloured by pace, with the weather (start and finish privacy applies only to anything shared) */}
+      {a.streams?.some((p) => p.lat != null && p.lon != null) && <RouteMap points={a.streams} byPace weather={weatherChip} />}
+      <div className="stack-sm">
+        <p className="caption row" style={{ gap: 6 }}><CalendarClock size={14} strokeWidth={2} aria-hidden="true" />{dateline}</p>
+        <label className="sr-only" htmlFor="run-title">Run title</label>
+        <input id="run-title" className="run-title-input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => { if (title.trim() && title !== a.name) renameRun(a.id, title); else setTitle(a.name); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+        <div className="row wrap" style={{ gap: 6 }}>
+          {planTag ? <span className={`plan-tag ${planTag.cls}`}>{planTag.icon}{planTag.text}</span> : <span className="tag">{labelOf(a)}</span>}
+          <span className="tag">Focus: {TYPE_FOCUS[an.type]}</span>
+          {stravaUrl(a) && <a className="strava-link caption" href={stravaUrl(a)} target="_blank" rel="noopener noreferrer">View on Strava</a>}
+        </div>
         {data.mode === 'real' && (
           <div className="row wrap" style={{ gap: 8 }}>
             {raceEvidence(a, data.races)
@@ -186,23 +250,19 @@ export default function ActivityPage() {
         </section>
       )}
 
-      <section className="card stack" aria-label="Run summary">
-        <div className="stat-2x2">
-          <div><p className="caption">Distance</p><p className="stat">{dist(a.distanceM, U, 2).split(' ')[0]}<small> {U}</small></p></div>
-          <div><p className="caption">Pace</p><p className="stat">{pace(a.movingS / (a.distanceM / 1000), U).replace(/\/(km|mi)$/, '')}<small>/{U}</small></p></div>
-          <div><p className="caption">Time</p><p className="stat">{duration(a.movingS)}</p></div>
-          {a.avgHr ? <div><p className="caption">Avg heart rate</p><p className="stat">{a.avgHr}<small> bpm</small></p></div>
-            : a.elevGainM != null ? <div><p className="caption">Climb</p><p className="stat">{a.elevGainM}<small> m</small></p></div>
-            : a.avgCadence ? <div><p className="caption">Cadence</p><p className="stat">{a.avgCadence}<small> spm</small></p></div> : null}
+      <section className="stack-sm run-stats-big" aria-label="Run summary">
+        <div><p className="stat-xl">{dist(a.distanceM, U, 2).split(' ')[0]}<small> {U}</small></p><p className="caption">Distance</p></div>
+        <div className="run-stat-grid">
+          <div><span className="stat">{pace(a.movingS / (a.distanceM / 1000), U)}</span><span className="caption">Avg pace</span></div>
+          <div><span className="stat">{duration(a.movingS)}</span><span className="caption">Total time</span></div>
+          {a.avgHr ? <div><span className="stat">{a.avgHr}<small> bpm</small></span><span className="caption">Avg heart rate</span></div> : null}
+          {a.calories ? <div><span className="stat">{a.calories}</span><span className="caption">Calories</span></div> : null}
+          {a.avgCadence ? <div><span className="stat">{a.avgCadence}<small> spm</small></span><span className="caption">Cadence</span></div> : null}
+          {a.elevGainM != null ? <div><span className="stat">{a.elevGainM}<small> m</small></span><span className="caption">Climb</span></div> : null}
         </div>
-        {(() => {
-          const extra = [a.avgHr && a.avgCadence ? `Cadence ${a.avgCadence} spm` : '', a.avgHr && a.elevGainM != null ? `Climb ${a.elevGainM} m` : !a.avgHr && a.elevGainM != null && a.avgCadence ? `Cadence ${a.avgCadence} spm` : ''].filter(Boolean);
-          return extra.length ? <p className="caption mono-caption">{extra.join(' · ')}</p> : null;
-        })()}
         {a.weather && (
           <div className="run-weather">
-            <p className="caption"><strong>Weather</strong></p>
-            <p className="caption">{weatherLine(a.weather, U)}</p>
+            <p className="caption"><strong>Weather</strong> {weatherLine(a.weather, U)}</p>
             <p className="caption" style={{ opacity: 0.75 }}>Weather data: <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer">MET Norway</a></p>
           </div>
         )}
@@ -248,7 +308,7 @@ export default function ActivityPage() {
       )}
 
       {/* Today's run: the same readiness as Training and Coach, including this run */}
-      {plan && a.startTime.slice(0, 10) === ymd(today) && <div className="stack-sm"><h2 className="label">Readiness now</h2><ReadinessStrip r={readinessToday} /></div>}
+      {plan && a.startTime.slice(0, 10) === ymd(today) && <div className="stack-sm"><h2 className="label">Readiness now{nextSession ? <span className="caption"> · next: {nextSession.title}, {new Date(`${nextSession.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</span> : null}</h2><ReadinessStrip r={readinessToday} /></div>}
 
       {showHrCheck && (
         <section className="card stack-sm settings-check" aria-labelledby="hr-check">
@@ -258,8 +318,6 @@ export default function ActivityPage() {
         </section>
       )}
 
-      {/* The route on a map, always visible for runs with GPS (not tucked inside the full analysis) */}
-      {a.streams?.some((p) => p.lat != null && p.lon != null) && <section className="card stack" aria-labelledby="route-h"><h2 id="route-h" className="title">Route</h2><RouteMap points={a.streams} /></section>}
 
       {/* Asked near the top until answered, so it actually gets filled in */}
       {!fb && feelSection}
@@ -375,6 +433,7 @@ export default function ActivityPage() {
       {fb && feelSection}
 
       <FixRun run={a} />
+      </div>}
     </div>
   );
 }

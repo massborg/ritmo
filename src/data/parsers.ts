@@ -165,6 +165,7 @@ export function parseTcx(text: string, fileName: string): Activity | undefined {
     durationS: Number(childText(l, 'TotalTimeSeconds') ?? 0),
     distanceM: Number(childText(l, 'DistanceMeters') ?? 0),
     avgHr: byLocal(l, 'AverageHeartRateBpm')[0] ? Number(childText(byLocal(l, 'AverageHeartRateBpm')[0], 'Value')) : undefined,
+    ...(childText(l, 'Intensity') === 'Resting' ? { intensity: 'rest' as const } : {}),
   }));
   const totalD = laps.reduce((x, l) => x + l.distanceM, 0);
   return summarise({ id: `tcx-${t0.getTime()}`, name: childText(act, 'Notes') ?? fileName.replace(/\.tcx$/i, ''), start: t0, streams: streams.filter((s) => !isNaN(s.t)), laps, distanceM: totalD || undefined, source: 'upload' });
@@ -172,9 +173,9 @@ export function parseTcx(text: string, fileName: string): Activity | undefined {
 
 interface FitRecord { timestamp?: string | Date; elapsed_time?: number; distance?: number; heart_rate?: number; cadence?: number; altitude?: number; enhanced_altitude?: number; position_lat?: number; position_long?: number }
 interface FitData {
-  sessions?: { sport?: string; start_time?: string | Date; total_distance?: number; total_elapsed_time?: number; total_timer_time?: number; avg_heart_rate?: number; max_heart_rate?: number; avg_cadence?: number; total_ascent?: number }[];
+  sessions?: { sport?: string; start_time?: string | Date; total_distance?: number; total_elapsed_time?: number; total_timer_time?: number; avg_heart_rate?: number; max_heart_rate?: number; avg_cadence?: number; total_ascent?: number; total_calories?: number }[];
   records?: FitRecord[];
-  laps?: { start_time?: string | Date; total_elapsed_time?: number; total_distance?: number; avg_heart_rate?: number }[];
+  laps?: { start_time?: string | Date; total_elapsed_time?: number; total_distance?: number; avg_heart_rate?: number; intensity?: string | number }[];
 }
 
 export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Activity | NotARun | undefined> {
@@ -206,10 +207,11 @@ export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Acti
     durationS: l.total_elapsed_time ?? 0,
     distanceM: l.total_distance ?? 0,
     avgHr: l.avg_heart_rate,
+    ...(lapIntensity(l.intensity) ? { intensity: lapIntensity(l.intensity) } : {}),
   }));
   return summarise(
     { id: `fit-${t0.getTime()}`, name: fileName.replace(/\.fit$/i, ''), start: t0, streams, laps, elapsedS: sess?.total_elapsed_time, distanceM: sess?.total_distance, source: 'upload' },
-    sess ? { avgHr: sess.avg_heart_rate ?? undefined, maxHr: sess.max_heart_rate ?? undefined, elevGainM: sess.total_ascent ?? undefined, movingS: Math.round(sess.total_timer_time ?? 0) || undefined } as Partial<Activity> : {},
+    sess ? { avgHr: sess.avg_heart_rate ?? undefined, maxHr: sess.max_heart_rate ?? undefined, elevGainM: sess.total_ascent ?? undefined, calories: sess.total_calories || undefined, movingS: Math.round(sess.total_timer_time ?? 0) || undefined } as Partial<Activity> : {},
   );
 }
 
@@ -303,4 +305,10 @@ export async function parseFiles(files: File[], onProgress: Progress = () => {})
   }
   onProgress(total, total, 'Done');
   return { activities, skipped };
+}
+
+/** FIT lap intensity (a name or the enum number) as a Ritmo workout step type */
+function lapIntensity(v: string | number | undefined): Lap['intensity'] {
+  const map: Record<string, Lap['intensity']> = { active: 'active', '0': 'active', rest: 'rest', '1': 'rest', warmup: 'warmup', '2': 'warmup', cooldown: 'cooldown', '3': 'cooldown', recovery: 'recovery', '4': 'recovery' };
+  return v == null ? undefined : map[String(v).toLowerCase()];
 }
