@@ -303,7 +303,7 @@ export async function askBody(q: string, facts: string[], history: { role: strin
 }
 
 /** Suggested questions that match today's session and what data exists. */
-export function suggestions(s: PlannedSession | undefined, hasRuns: boolean): string[] {
+export function suggestions(s: PlannedSession | undefined, hasRuns: boolean, o: { race?: string; nextQuality?: { day: string; short: string } } = {}): string[] {
   const why = !s ? 'What should I do today?'
     : s.type === 'rest' ? 'Why is today a rest day?'
     : s.type === 'easy' || s.type === 'recovery' ? 'Why is today easy?'
@@ -311,8 +311,9 @@ export function suggestions(s: PlannedSession | undefined, hasRuns: boolean): st
     : s.type === 'runwalk' ? 'Why run/walk instead of running?'
     : s.type === 'race' ? 'How should I pace today?'
     : `Why is today ${s.focus.toLowerCase()}?`;
-  const out = [why, 'Am I on track?'];
+  const out = [why, o.race ? `Am I on track for ${o.race}?` : 'Am I on track?'];
   if (s && s.type !== 'rest') out.push('I only have 30 minutes, what should I do?');
+  if (o.nextQuality) out.push(`Why ${o.nextQuality.short} on ${o.nextQuality.day}?`);
   if (hasRuns) out.push('How did my last run go?');
   out.push(s?.type === 'runwalk' || !s ? 'How fast should I run?' : 'What is threshold pace?');
   return out;

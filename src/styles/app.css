@@ -185,9 +185,8 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 .chat { display: flex; flex-direction: column; gap: var(--s3); }
 .bubble { max-width: 85%; padding: var(--s3) var(--s4); border-radius: 16px; }
 .bubble-coach { background: var(--surface-raised); border: 1px solid var(--card-border); align-self: flex-start; border-bottom-left-radius: 4px; }
-.bubble-runner { background: var(--ink); color: var(--surface); align-self: flex-end; border-bottom-right-radius: 4px; }
-.composer { position: sticky; bottom: calc(68px + env(safe-area-inset-bottom)); background: var(--surface); padding: var(--s3) 0; display: flex; gap: var(--s2); }
-@media (min-width: 820px) { .composer { bottom: 0; } }
+.bubble-runner { background: var(--graphite); color: var(--on-graphite); align-self: flex-end; border-bottom-right-radius: 4px; }
+.composer { display: flex; gap: var(--s2); }
 
 /* ---------- Opening animations (see components/Splash.tsx) ---------- */
 .splash { position: fixed; inset: 0; z-index: 100; background: var(--brand); overflow: hidden; animation: splash-out 300ms ease forwards; }
@@ -742,7 +741,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .rd-strip { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .rd-strip-main { display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: var(--ink); min-height: 44px; }
 .rd-score { font: 500 20px/24px var(--font-mono); }
-.rd-word { font: 700 15px/20px var(--font-body); }
+.rd-word { font: 700 15px/20px var(--font-body); white-space: nowrap; }
 .rd-strip-line { gap: var(--s3); min-height: 24px; }
 .rd-swap { white-space: nowrap; font-weight: 700; min-height: 44px; margin: -10px 0; }
 .rd-bar { position: relative; display: grid; grid-template-columns: 33fr 33fr 34fr; gap: 3px; height: 6px; }
@@ -900,3 +899,18 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 @media (min-width: 600px) { .pred-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .pred-tile { display: flex; flex-direction: column; gap: 2px; padding: var(--s3); }
 .pred-tile .stat { font-size: 20px; }
+
+/* ---------- Coach (brief 5): readiness and this week, chat, composer fixed above the tab bar ---------- */
+.coach-week { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); border-top: 1px solid var(--hairline); padding-top: var(--s3); margin-top: var(--s1); }
+.coach-week > div { display: flex; flex-direction: column; min-width: 0; }
+.coach-week .stat { font-size: 20px; white-space: nowrap; }
+.coach-week .stat small { font-size: 0.65em; color: var(--ink-muted); }
+.coach-week .caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.based-on { cursor: pointer; min-height: 32px; display: flex; align-items: center; color: var(--ink-muted); list-style: none; }
+.based-on::-webkit-details-marker { display: none; }
+.coach-composer { position: fixed; left: 0; right: 0; bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 25; background: var(--surface); padding: var(--s2) var(--s4) var(--s3); display: flex; flex-direction: column; gap: var(--s2); border-top: 1px solid var(--hairline); }
+.coach-composer-space { height: 120px; }
+@media (min-width: 820px) { .coach-composer { position: sticky; bottom: 0; padding-left: 0; padding-right: 0; } .coach-composer-space { display: none; } }
+.suggest-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s4); }
+.suggest-row::-webkit-scrollbar { display: none; }
+.suggest-row .chip { flex: none; white-space: nowrap; }
