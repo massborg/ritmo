@@ -321,8 +321,11 @@ async function run(label, deviceOpts) {
   await step(P('the AI coach is only used with consent, and the usage limit falls back politely'), async () => {
     const coachCalls = () => mock.state.calls.filter((c) => c.includes('/functions/v1/coach')).length;
     assert(coachCalls() === 0, 'AI coach called without consent');
+    // The AI setting lives in the Coach's "Past chats and settings" menu
+    await page.getByRole('button', { name: 'Past chats and settings' }).click();
     await see(page, "Answers come from Ritmo's built-in coach only");
     await page.getByRole('button', { name: 'Use the AI coach' }).click();
+    await page.keyboard.press('Escape');
     mock.state.coachStatus = 429;
     await page.locator('#ask').fill('How was my week?');
     await page.getByRole('button', { name: 'Send' }).click();
@@ -428,7 +431,8 @@ async function run(label, deviceOpts) {
       expectReport: [/1 wellness and monitoring/, /1 cycling/, /1 swimming/, /Could not be read/, 'Download import log'] });
     await see(page, 'Paces measured from your runs');
     await startPlan(page);
-    assert(await page.locator('.avatar-photo img').count() === 1, 'photo not in the top bar');
+    // The photo's private link takes a moment to load after setup
+    assert(await page.locator('.avatar-photo img').first().waitFor({ timeout: 5000 }).then(() => true, () => false) && await page.locator('.avatar-photo img').count() === 1, 'photo not in the top bar');
     await page.goto(`${APP}/you/insights`);
     await see(page, 'Estimated race times');
     if (process.env.DEBUG) { const a = await page.evaluate(() => window.__puts); await page.waitForTimeout(3000); console.log('puts in 3s', (await page.evaluate(() => window.__puts)) - a, 'tsb'); }

@@ -81,7 +81,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 
   // Same score on Coach
   await page.goto(`${APP}/coach`); await page.waitForTimeout(1200);
-  const cs = await page.locator('.rd-strip').first().innerText();
+  const cs = await page.locator('.coach-ready').innerText();
   check(new RegExp(`Readiness\\s+${score}`).test(cs) && /Easy day/.test(cs) && cs.includes(line), 'Coach shows the same score, word and sentence');
 
   // Swap from the strip: suggestion first, nothing changes until tapped
