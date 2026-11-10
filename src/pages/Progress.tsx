@@ -61,7 +61,8 @@ function PeriodBars({ bars, unit, unitWord }: { bars: Bar[]; unit: 'km' | 'mi'; 
   const top = Math.ceil(max / 5) * 5 || 5;
   const W = 320, H = 150, R = 30, plotW = W - R, step = plotW / bars.length, bw = Math.max(3, Math.min(18, step * 0.62));
   const y = (v: number) => H - 18 - (v / top) * (H - 30);
-  const longest = vals.indexOf(max);
+  // The longest bar itself (the scale has a 1 km floor, so short runs never equal `max`)
+  const longest = vals.indexOf(Math.max(...vals, 0));
   const summary = withRuns.length ? `Longest ${unitWord} ${vals[longest].toFixed(1)} ${unit} on ${bars[longest].title}. Average ${avg.toFixed(1)} ${unit} per ${unitWord} with runs.` : 'No runs in this period.';
   return (
     <figure className="pbars">

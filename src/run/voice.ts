@@ -58,10 +58,27 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
 
 export interface SpeakOptions { voiceURI?: string; rate?: number }
 
-/** Speak with the chosen voice (or the best one on the device when none is chosen). */
-export function speak(text: string, o: SpeakOptions = {}): void {
+/** Ask the device for its voices early (the Run screen calls this when it opens), so the first cue already has
+ *  them: on iPhone the list is often empty for a moment, and anything spoken then uses the default voice. */
+export function primeVoices(): void {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.getVoices();
+  void loadVoices();
+}
+
+/** Speak with the chosen voice (or the best one on the device when none is chosen). If the device has not listed
+ *  its voices yet, never fall back to its default voice: unlock speech now (inside the tap) and speak as soon as the
+ *  chosen voice is there. */
+let noVoiceList = false;
+export function speak(text: string, o: SpeakOptions = {}, waited = false): void {
   if (!('speechSynthesis' in window)) return;
   const all = window.speechSynthesis.getVoices();
+  if (!all.length && !waited && !noVoiceList) {
+    try { const unlock = new SpeechSynthesisUtterance(''); unlock.volume = 0; window.speechSynthesis.speak(unlock); } catch { /* */ }
+    // Once listed (or if the device has no voice list at all), speak: better the default voice than silence
+    void loadVoices().then((v) => { if (!v.length) noVoiceList = true; speak(text, o, true); });
+    return;
+  }
   const chosen = (o.voiceURI && all.find((v) => v.voiceURI === o.voiceURI))
     || (() => { const top = rankVoices(all, navigator.language || 'en-GB')[0]; return top && all.find((v) => v.voiceURI === top.uri); })();
   const u = new SpeechSynthesisUtterance(text);

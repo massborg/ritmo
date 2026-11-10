@@ -983,3 +983,8 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .rebuild-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
 .rebuild-stats > div { display: flex; flex-direction: column; background: var(--surface-sunken); border-radius: var(--r-card); padding: var(--s3); }
 .rebuild-stats .stat { font-size: 22px; line-height: 28px; }
+/* Run in progress: Pause, Lap, Finish and Lock stay on screen, just above the tab bar, within thumb reach */
+.run-live .run-controls { position: sticky; bottom: calc(108px + env(safe-area-inset-bottom)); z-index: 6; background: var(--surface); padding: var(--s2) 0; margin: 0 calc(-1 * var(--s4)); padding-inline: var(--s4); box-shadow: 0 -1px 0 var(--hairline); order: 10; }
+.run-live .run-controls .run-pause { grid-column: 1 / -1; }
+.run-live { padding-bottom: var(--s2); }
+@media (min-width: 820px) { .run-live .run-controls { bottom: 0; margin: 0; } }

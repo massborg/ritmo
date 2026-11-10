@@ -17,7 +17,7 @@ import { ZONE_NAMES } from '../training/fitness';
 import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
-import { speak, type SpeakOptions } from '../run/voice';
+import { primeVoices, speak, type SpeakOptions } from '../run/voice';
 import { VoicePicker } from '../components/VoicePicker';
 import type { Lap, PlannedSession } from '../lib/types';
 
@@ -157,6 +157,8 @@ export default function RunPage() {
     return () => window.clearInterval(id);
   });
 
+  // Load the device's voices as soon as the screen opens, so "5" at the start already uses the chosen voice
+  useEffect(() => { primeVoices(); }, []);
   const begin = () => {
     // A later day's session started today is moved to today first (when the plan allows it), so the run links to it
     if (sessionPlan && sessionPlan.date !== t0 && plan && moveTargets(sessionPlan, today).includes(t0)) moveSession(sessionPlan.id, t0);
@@ -247,8 +249,8 @@ export default function RunPage() {
       )}
       <RouteLine track={t} />
       <div className="run-controls">
-        <button className="btn btn-block" onClick={lap} disabled={locked}><Flag size={20} strokeWidth={2} aria-hidden="true" />Lap {t.laps.length + 1}</button>
         <button className="btn btn-primary btn-block run-pause" onClick={togglePause} disabled={locked}>{t.paused ? <><Play size={22} strokeWidth={2} aria-hidden="true" />Resume</> : <><Pause size={22} strokeWidth={2} aria-hidden="true" />Pause</>}</button>
+        <button className="btn btn-block" onClick={lap} disabled={locked}><Flag size={20} strokeWidth={2} aria-hidden="true" />Lap {t.laps.length + 1}</button>
         <button className={`btn btn-block${holding ? ' holding' : ''}`} disabled={locked} onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} aria-label="Hold to finish the run"><Square size={20} strokeWidth={2} aria-hidden="true" />Hold to finish</button>
         <button className="btn btn-ghost btn-block" onClick={() => setLocked((l) => !l)} aria-pressed={locked}>{locked ? <><Unlock size={20} strokeWidth={2} aria-hidden="true" />Unlock</> : <><Lock size={20} strokeWidth={2} aria-hidden="true" />Lock</>}</button>
       </div>
