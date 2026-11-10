@@ -149,23 +149,23 @@ const toS = (t) => t.split(':').map(Number).reduce((a, x) => a * 60 + x, 0);
 
   // ---- How did it feel, niggle ----
   await page.goto(`${APP}/activity/${todayRun.id}`); await page.waitForTimeout(1500);
-  const feel = page.getByRole('radiogroup', { name: /How did it feel/i }).getByRole('radio').nth(3);
-  if (await feel.count()) { await feel.click(); await page.waitForTimeout(2200); }
+  const feelSec = page.locator('section', { has: page.locator('#feel') });
+  if (await feelSec.count()) { await feelSec.getByRole('button', { name: 'Good', exact: true }).click(); await feelSec.getByRole('button', { name: 'Save how it felt' }).click(); await page.waitForTimeout(2500); }
   const fb = mock.state.tables.session_feedback.find((f) => f.user_id === uid && f.activity_id === todayRun.id);
   check(!!fb?.data?.feel, '"How did it feel?" saves', fb?.data?.feel ? `feel ${fb.data.feel}` : 'not saved');
   await page.goto(`${APP}/`); await page.waitForTimeout(1200);
-  await page.getByRole('button', { name: /Add|More|\+/ }).first().click().catch(() => {}); await page.waitForTimeout(400);
-  const hurt = page.getByRole('button', { name: /Something hurts/i }).or(page.getByRole('menuitem', { name: /Something hurts/i })).first();
-  let niggle = false;
-  if (await hurt.count()) {
-    await hurt.click(); await page.waitForTimeout(500);
-    const dlg = page.getByRole('dialog');
-    for (const name of [/Calf/i, /Left/i]) { const x = dlg.getByRole('button', { name }).or(dlg.getByRole('radio', { name })).or(dlg.getByRole('checkbox', { name })).first(); if (await x.count()) await x.click().catch(() => {}); }
-    const lvl = dlg.getByRole('radio', { name: /^3$|3 out of 10|3\/10/ }).first(); if (await lvl.count()) await lvl.click().catch(() => {});
-    const slider = dlg.locator('input[type=range]').first(); if (await slider.count()) await slider.fill('3').catch(() => {});
-    await dlg.getByRole('button', { name: /Save|Log it|Done/ }).first().click().catch(() => {}); await page.waitForTimeout(2000);
-    niggle = (mock.state.tables.profiles.find((r) => r.user_id === uid).data.profile.body?.checkins ?? []).length > 0;
-  }
+  await page.getByRole('button', { name: /^Add a run/ }).click();
+  await page.getByText('Something hurts').click();
+  const tap = (name) => page.getByRole('radio', { name, exact: true }).or(page.getByRole('button', { name, exact: true })).first().click();
+  await tap('Calf'); await tap('Left');
+  await page.locator('#pain').fill('3');
+  await page.getByRole('button', { name: 'After the run' }).click();
+  await tap('Gradually');
+  await page.getByRole('button', { name: 'See what to do' }).click();
+  await page.getByText('What Ritmo changes in your plan').waitFor({ timeout: 5000 }).catch(() => {});
+  await page.getByRole('button', { name: 'Done' }).click().catch(() => {}); await page.waitForTimeout(2500);
+  const profNow = mock.state.tables.profiles.find((r) => r.user_id === uid);
+  const niggle = (profNow.data.profile.body?.checkins ?? []).length > 0;
   check(niggle, 'a niggle can be logged from the + menu (Something hurts)');
 
   // ---- Every main screen × theme × size ----
@@ -173,37 +173,38 @@ const toS = (t) => t.split(':').map(Number).reduce((a, x) => a * 60 + x, 0);
   const sizes = [['390', { width: 390, height: 844 }, true], ['desktop', { width: 1280, height: 860 }, false]];
   const themes = ['giorno', 'notte', 'sole'];
   const sweep = { overflow: [], unlabelled: [], small: [], focus: [] };
+  const st = await ctx.storageState();
+  await page.close();
   for (const [sizeName, vp, mobile] of sizes) {
     const c2 = await b.newContext({ viewport: vp, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 1 });
     await c2.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:maps', 'off'); localStorage.setItem('ritmo:hub:tip', '1'); } catch { /* */ } });
     await c2.addCookies(await ctx.cookies());
-    const st = await ctx.storageState();
     const p2 = await c2.newPage();
     p2.on('pageerror', (e) => errors.push(`${p2.url()}: ${e.message}`));
     await mock.install(c2, SUPA);
     await p2.goto(`${APP}/about`);
     await p2.evaluate((origins) => { for (const o of origins) for (const { name, value } of o.localStorage) localStorage.setItem(name, value); }, st.origins);
     for (const theme of themes) {
-      prof.data.profile.theme = theme;
-      await clearCache(p2);
       for (const [name, url] of screens) {
         await p2.goto(`${APP}${url}`); await p2.waitForTimeout(1300);
+        await p2.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme); await p2.waitForTimeout(150);
         const appliedTheme = await p2.evaluate(() => document.documentElement.dataset.theme ?? 'system');
         const r = await p2.evaluate(() => {
           const vis = (el) => { const s = getComputedStyle(el); const rc = el.getBoundingClientRect(); return s.visibility !== 'hidden' && s.display !== 'none' && rc.width > 0 && rc.height > 0 && !el.closest('[aria-hidden="true"]'); };
           const overflow = document.documentElement.scrollWidth > window.innerWidth + 1;
           const ctrls = [...document.querySelectorAll('button, a[href], [role="button"], [role="tab"], input[type=checkbox], input[type=radio], select')].filter(vis);
           const unlabelled = ctrls.filter((el) => {
-            const name = (el.getAttribute('aria-label') || el.getAttribute('title') || el.innerText || '').trim();
+            const name = (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim() || [...el.querySelectorAll('img[alt]')].map((i) => i.alt).join('').trim();
             const lb = el.getAttribute('aria-labelledby'); const lbl = el.id && document.querySelector(`label[for="${el.id}"]`); const wrap = el.closest('label');
             return !name && !lb && !lbl && !wrap && el.tagName !== 'INPUT' ? true : (el.tagName === 'INPUT' && !lbl && !wrap && !el.getAttribute('aria-label') && !lb);
           }).map((el) => el.outerHTML.slice(0, 90));
           // Tap targets: controls outside running text, smaller than 44 px both ways (WCAG lets inline text links be smaller)
           const small = ctrls.filter((el) => {
             if (el.closest('p, li > span, .caption, td') && el.tagName === 'A') return false;
+            const r0 = el.getBoundingClientRect(); if (r0.width <= 2 || r0.height <= 2 || el.classList.contains('sr-only') || el.classList.contains('skip-link')) return false;
             if (el.tagName === 'INPUT') { const l = el.closest('label'); const rc = (l ?? el).getBoundingClientRect(); return rc.height < 44 && rc.width < 44; }
             const rc = el.getBoundingClientRect(); return rc.height < 44 && rc.width < 44 || rc.height < 24;
-          }).map((el) => `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') || el.innerText || '').trim().slice(0, 30)}" ${Math.round(el.getBoundingClientRect().width)}×${Math.round(el.getBoundingClientRect().height)}`);
+          }).map((el) => `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30)}" ${Math.round(el.getBoundingClientRect().width)}×${Math.round(el.getBoundingClientRect().height)}`);
           return { overflow, unlabelled, small };
         });
         // Keyboard focus: tab to the first few controls and check each shows an outline or ring
@@ -216,7 +217,7 @@ const toS = (t) => t.split(':').map(Number).reduce((a, x) => a * 60 + x, 0);
         const tag = `${name} · ${theme}${appliedTheme !== theme ? `(applied ${appliedTheme})` : ''} · ${sizeName}`;
         if (r.overflow) sweep.overflow.push(tag);
         if (r.unlabelled.length) sweep.unlabelled.push(`${tag}: ${r.unlabelled.slice(0, 3).join(' ; ')}`);
-        if (r.small.length) sweep.small.push(`${tag}: ${r.small.slice(0, 4).join(' ; ')}`);
+        if (r.small.length) sweep.small.push(`${tag}: ${r.small.join(' ; ')}`);
         if (focusBad) sweep.focus.push(`${tag}: ${focusBad} of ${focused}`);
         if (theme !== 'giorno' || sizeName === 'desktop') await p2.screenshot({ path: path.join(OUT, `${sizeName}-${theme}-${name.replace(/\W+/g, '-').toLowerCase()}.png`) });
         else await p2.screenshot({ path: path.join(OUT, `${sizeName}-${theme}-${name.replace(/\W+/g, '-').toLowerCase()}.png`) });

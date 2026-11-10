@@ -42,6 +42,6 @@ fs.mkdirSync(OUT, { recursive: true });
   await page.locator('#ask').fill('Can you move Thursday to Friday?'); await page.getByRole('button', { name: 'Send' }).click(); await page.waitForTimeout(700);
   await shot('4-coach-proposal');
   await page.goto(`${APP}/goals`); await page.getByText('Training style').scrollIntoViewIfNeeded(); await shot('5-training-style');
-  await page.goto(`${APP}/profile`); await page.getByRole('heading', { name: 'Shoes' }).scrollIntoViewIfNeeded(); await page.evaluate(() => window.scrollBy(0, -380)); await shot('6-progress-trends');
+  await page.goto(`${APP}/profile/shoes`); await page.getByRole('heading', { name: 'Shoes' }).first().scrollIntoViewIfNeeded(); await page.evaluate(() => window.scrollBy(0, -380)); await shot('6-progress-trends');
   await b.close();
 })();
