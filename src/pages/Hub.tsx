@@ -1,103 +1,91 @@
-// Ritmo Hub (review #2 §4): runs shared with other runners, one reaction ("Ritmo"), comments, follows and
-// notifications. Behind the "hub" flag and a separate, opt-in sharing consent (off until the runner agrees).
+// Ritmo Hub (brief §9): Feed | Challenges | Clubs.
+// - Feed: runs shared with other runners, one reaction ("Fuego"; stored as `ritmos`), comments, follows and
+//   notifications. Behind a separate, opt-in sharing consent (off until the runner agrees).
+// - Challenges: Ritmo-made, worked out on the device from the runner's own runs; no sharing needed.
+// - Clubs: need the Hub profile (members see each other's names), see ./Club.tsx for a club's own page.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Bell, Flame, MessageCircle, MoreHorizontal, Search, Settings, UserPlus } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Award, Bell, ChevronRight, Flame, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Settings, Share2, Trophy, UserPlus } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { AppHeader } from '../components/app';
+import { AppHeader, ZONE_OF } from '../components/app';
 import { Sheet } from '../components/inputs';
 import { Empty, Segmented, StatusLine } from '../components/ui';
 import { dist, duration, pace as fmtPace } from '../lib/format';
+import { fitView, mapsOn, TILE } from '../lib/maptiles';
 import * as hub from '../data/hub';
+import * as clubs from '../data/clubs';
 import type { Comment, HubProfile, Notification, Post } from '../data/hub';
+import type { Club, ClubMember, GroupRun, LeaderRow } from '../data/clubs';
+import { catalogue, localDay, progress, type Challenge, type JoinedChallenge } from '../training/challenges';
+import { BadgeShelf, useChallenges } from '../components/Badges';
+import { ZONE_NAMES } from '../training/fitness';
+import type { SessionType } from '../lib/types';
 
 export const HUB_CONSENT_VERSION = '2026-11';
+type Section = 'feed' | 'challenges' | 'clubs';
 type Tab = 'following' | 'everyone' | 'mine';
-const initials = (n?: string) => (n ?? '?').split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase();
+export const initials = (n?: string) => (n ?? '?').split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase();
 const ago = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-export default function HubPage() {
-  const { hasFlag, data, session, updateProfile } = useApp();
+/** Whether this runner has a Hub profile and has agreed to share. undefined while loading. */
+export function useHubMe() {
+  const { data, session } = useApp();
   const uid = session?.user.id;
   const consent = data.profile.consents?.hubSharing?.granted;
   const [me, setMe] = useState<HubProfile | null>();
-  const [tab, setTab] = useState<Tab>('following');
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [people, setPeople] = useState<Map<string, HubProfile>>(new Map());
-  const [mine, setMine] = useState<Set<string>>(new Set());
-  const [follows, setFollows] = useState<hub.Follow[]>([]);
-  const [notes, setNotes] = useState<Notification[]>([]);
-  const [sheet, setSheet] = useState<{ kind: 'comments' | 'givers' | 'notes' | 'find' | 'settings'; post?: Post }>();
-  const [err, setErr] = useState<string>();
-  const [loading, setLoading] = useState(true);
+  useEffect(() => { if (uid) hub.myHubProfile(uid).then((p) => setMe(p ?? null)).catch(() => setMe(null)); else setMe(null); }, [uid]);
+  return { me, setMe, ready: !!(consent && me), loading: me === undefined };
+}
 
-  const following = useMemo(() => follows.filter((f) => f.follower_id === uid && f.status === 'accepted').map((f) => f.followee_id), [follows, uid]);
-  const load = useCallback(async () => {
+export default function HubPage() {
+  const { hasFlag, data, session, updateProfile } = useApp();
+  const uid = session?.user.id;
+  const [params, setParams] = useSearchParams();
+  const section = (['feed', 'challenges', 'clubs'].includes(params.get('tab') ?? '') ? params.get('tab') : 'feed') as Section;
+  const setSection = (s: Section) => setParams(s === 'feed' ? {} : { tab: s }, { replace: true });
+  const { me, setMe, ready, loading } = useHubMe();
+  const [notes, setNotes] = useState<Notification[]>([]);
+  const [notePeople, setNotePeople] = useState<Map<string, HubProfile>>(new Map());
+  const [follows, setFollows] = useState<hub.Follow[]>([]);
+  const [sheet, setSheet] = useState<'notes' | 'find' | 'settings'>();
+  const loadSocial = useCallback(async () => {
     if (!uid) return;
-    setLoading(true); setErr(undefined);
     try {
       const [f, n] = await Promise.all([hub.follows(uid), hub.notifications()]);
       setFollows(f); setNotes(n);
-      const fol = f.filter((x) => x.follower_id === uid && x.status === 'accepted').map((x) => x.followee_id);
-      const ps = await hub.feed(uid, tab, fol);
-      setPosts(ps);
-      const ids = [...ps.map((p) => p.user_id), ...n.map((x) => x.actor_id ?? ''), ...f.flatMap((x) => [x.follower_id, x.followee_id])].filter(Boolean);
-      setPeople(await hub.profilesFor(ids));
-      setMine(await hub.myRitmos(uid, ps.map((p) => p.id)));
-    } catch (e) { setErr((e as Error).message); } finally { setLoading(false); }
-  }, [uid, tab]);
-
-  useEffect(() => { if (uid && hasFlag('hub')) hub.myHubProfile(uid).then((p) => setMe(p ?? null)).catch(() => setMe(null)); }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (me && consent) void load(); }, [me, consent, load]);
+      setNotePeople(await hub.profilesFor([...n.map((x) => x.actor_id ?? ''), ...f.flatMap((x) => [x.follower_id, x.followee_id])].filter(Boolean)));
+    } catch { /* the feed shows its own error */ }
+  }, [uid]);
+  useEffect(() => { if (ready) void loadSocial(); }, [ready, loadSocial]);
 
   if (!hasFlag('hub')) return <Empty title="Available with your own data" action={<Link to="/" className="btn">Back to Training</Link>}>The Hub opens once you are using Ritmo with your own runs rather than the sample data.</Empty>;
-  if (me === undefined) return <p className="muted" role="status">Loading…</p>;
-  if (!consent || !me) return <OptIn existing={me ?? undefined} onDone={async (p) => {
+  const unread = notes.filter((n) => !n.read_at).length;
+  const optIn = <OptIn existing={me ?? undefined} onDone={async (p) => {
     await hub.saveHubProfile(p);
     updateProfile({ consents: { ...data.profile.consents, hubSharing: { granted: true, at: new Date().toISOString(), version: HUB_CONSENT_VERSION } } });
     setMe(p);
   }} />;
 
-  const toggle = async (p: Post, on: boolean) => {
-    if (!uid) return;
-    // optimistic, rolled back on error
-    setMine((s) => { const n = new Set(s); if (on) n.add(p.id); else n.delete(p.id); return n; });
-    setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, ritmo_count: Math.max(0, x.ritmo_count + (on ? 1 : -1)) } : x)));
-    try { await hub.setRitmo(uid, p.id, on); } catch {
-      setMine((s) => { const n = new Set(s); if (on) n.delete(p.id); else n.add(p.id); return n; });
-      setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, ritmo_count: Math.max(0, x.ritmo_count + (on ? -1 : 1)) } : x)));
-    }
-  };
-  const unread = notes.filter((n) => !n.read_at).length;
-
   return (
     <div className="stack-lg">
-      <AppHeader avatar title="Ritmo Hub" right={<>
-        <button className="icon-btn" aria-label="Find runners" onClick={() => setSheet({ kind: 'find' })}><Search size={22} strokeWidth={2} /></button>
-        <button className="icon-btn hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} onClick={() => setSheet({ kind: 'notes' })}><Bell size={22} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</button>
-        <button className="icon-btn" aria-label="Hub settings" onClick={() => setSheet({ kind: 'settings' })}><Settings size={22} strokeWidth={2} /></button>
-      </>} />
-      <Segmented<Tab> label="Feed" value={tab} onChange={setTab} options={[{ value: 'following', label: 'Following' }, { value: 'everyone', label: 'Everyone' }, { value: 'mine', label: 'Your runs' }]} />
-      <FirstTimeTip />
-      {err && <StatusLine kind="danger">{err}</StatusLine>}
-      {loading && !posts.length && <p className="muted" role="status">Loading runs…</p>}
-      {!loading && !posts.length && <Empty title={tab === 'mine' ? 'You have not posted a run yet' : 'Nothing here yet'}>{tab === 'mine' ? 'Open any run and choose "Post to Hub".' : tab === 'following' ? 'Find runners to follow with the search button.' : 'Public runs appear here.'}</Empty>}
-      <div className="stack">
-        {posts.map((p) => <PostCard key={p.id} post={p} author={people.get(p.user_id)} mineRitmo={mine.has(p.id)} own={p.user_id === uid}
-          onRitmo={(on) => toggle(p, on)} onComments={() => setSheet({ kind: 'comments', post: p })} onGivers={() => setSheet({ kind: 'givers', post: p })}
-          onDelete={async () => { await hub.deletePost(p.id); setPosts((ps) => ps.filter((x) => x.id !== p.id)); }}
-          onReport={async (why) => { await hub.report(uid!, { post_id: p.id }, why); }}
-          onBlock={async () => { await hub.block(uid!, p.user_id); void load(); }} />)}
-      </div>
+      <AppHeader avatar title="Hub" right={ready ? <>
+        <button className="icon-btn icon-btn-round" aria-label="Find runners" onClick={() => setSheet('find')}><Search size={20} strokeWidth={2} /></button>
+        <button className="icon-btn icon-btn-round hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} onClick={() => setSheet('notes')}><Bell size={20} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</button>
+        <button className="icon-btn icon-btn-round" aria-label="Hub settings" onClick={() => setSheet('settings')}><Settings size={20} strokeWidth={2} /></button>
+      </> : undefined} />
+      <Segmented<Section> label="Hub sections" value={section} onChange={setSection} options={[{ value: 'feed', label: 'Feed' }, { value: 'challenges', label: 'Challenges' }, { value: 'clubs', label: 'Clubs' }]} />
+      {section === 'challenges' ? <ChallengesTab canPost={ready} />
+        : loading ? <p className="muted" role="status">Loading…</p>
+        : !ready ? optIn
+        : section === 'feed' ? <FeedTab follows={follows} onSocial={loadSocial} />
+        : <ClubsTab me={me!} />}
 
-      {sheet?.kind === 'comments' && sheet.post && <CommentsSheet post={sheet.post} people={people} onClose={() => { setSheet(undefined); void load(); }} />}
-      {sheet?.kind === 'givers' && sheet.post && <GiversSheet post={sheet.post} following={following} follows={follows} onClose={() => setSheet(undefined)} />}
-      {sheet?.kind === 'notes' && <NotesSheet notes={notes} people={people} follows={follows} onChange={load} onClose={() => { setSheet(undefined); void hub.markAllRead(uid!).then(load); }} />}
-      {sheet?.kind === 'find' && <FindSheet follows={follows} onChange={load} onClose={() => setSheet(undefined)} />}
-      {sheet?.kind === 'settings' && <SettingsSheet me={me} onSaved={setMe} onClose={() => setSheet(undefined)} onStop={async () => {
+      {sheet === 'notes' && <NotesSheet notes={notes} people={notePeople} follows={follows} onChange={loadSocial} onClose={() => { setSheet(undefined); void hub.markAllRead(uid!).then(loadSocial); }} />}
+      {sheet === 'find' && <FindSheet follows={follows} onChange={loadSocial} onClose={() => setSheet(undefined)} />}
+      {sheet === 'settings' && me && <SettingsSheet me={me} onSaved={setMe} onClose={() => setSheet(undefined)} onStop={async () => {
         await hub.hideAllMyPosts(uid!);
         updateProfile({ consents: { ...data.profile.consents, hubSharing: { granted: false, at: new Date().toISOString(), version: HUB_CONSENT_VERSION } } });
         setSheet(undefined);
@@ -113,27 +101,125 @@ function OptIn({ existing, onDone }: { existing?: HubProfile; onDone: (p: HubPro
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
   return (
-    <div className="stack-lg">
-      <AppHeader avatar title="Ritmo Hub" />
-      <section className="card stack">
-        <h2 className="title">Share your runs on the Hub?</h2>
-        <p>The Hub is where runners share runs and give each other a ritmo. It is off until you turn it on.</p>
-        <ul className="bullets">
-          <li>Nothing is posted automatically. You choose each run and who sees it: everyone, your followers, or only you.</li>
-          <li>Routes leave out the first and last 200 m, so your start and finish are not shown.</li>
-          <li>Other runners see the name below. Never your email, date of birth, health check, pain or how runs felt.</li>
-          <li>You can delete posts any time, and turning sharing off hides them all.</li>
-        </ul>
-        <div className="field"><label htmlFor="hub-name">Your name on the Hub</label><input id="hub-name" className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></div>
-        <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /> Approve new followers before they see my runs</label>
-        {err && <StatusLine kind="danger">{err}</StatusLine>}
-        <button className="btn btn-primary" disabled={!name.trim() || busy} onClick={async () => {
-          setBusy(true); setErr(undefined);
-          try { await onDone({ user_id: session!.user.id, display_name: name.trim(), private: priv, bio: existing?.bio ?? null, club: existing?.club ?? null }); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
-        }}>Yes, share my runs on the Hub</button>
-        <p className="caption">See <Link to="/profile/privacy">how Ritmo handles your data</Link>.</p>
-      </section>
+    <section className="card stack">
+      <h2 className="title">Share your runs on the Hub?</h2>
+      <p>The Hub is where runners share runs, give each other a Fuego and run together in clubs. It is off until you turn it on.</p>
+      <ul className="bullets">
+        <li>Nothing is posted automatically. You choose each run and who sees it: everyone, your followers, or only you.</li>
+        <li>Routes leave out the first and last 200 m, so your start and finish are not shown.</li>
+        <li>Other runners see the name below. Never your email, date of birth, health check, pain or how runs felt.</li>
+        <li>You can delete posts any time, and turning sharing off hides them all.</li>
+      </ul>
+      <div className="field"><label htmlFor="hub-name">Your name on the Hub</label><input id="hub-name" className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></div>
+      <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /> Approve new followers before they see my runs</label>
+      {err && <StatusLine kind="danger">{err}</StatusLine>}
+      <button className="btn btn-primary" disabled={!name.trim() || busy} onClick={async () => {
+        setBusy(true); setErr(undefined);
+        try { await onDone({ user_id: session!.user.id, display_name: name.trim(), private: priv, bio: existing?.bio ?? null, club: existing?.club ?? null }); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+      }}>Yes, share my runs on the Hub</button>
+      <p className="caption">Challenges work without sharing. See <Link to="/profile/privacy">how Ritmo handles your data</Link>.</p>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- Feed
+
+/** Posts with the reaction state, givers and authors, shared by the Hub feed and a club's feed. */
+export function useFeed(load: () => Promise<Post[]>, deps: unknown[]) {
+  const { session } = useApp();
+  const uid = session?.user.id;
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [people, setPeople] = useState<Map<string, HubProfile>>(new Map());
+  const [mine, setMine] = useState<Set<string>>(new Set());
+  const [givers, setGivers] = useState<Map<string, string[]>>(new Map());
+  const [err, setErr] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const reload = useCallback(async () => {
+    if (!uid) return;
+    setLoading(true); setErr(undefined);
+    try {
+      const ps = await load();
+      setPosts(ps);
+      const ids = ps.map((p) => p.id);
+      const [m, g] = await Promise.all([hub.myRitmos(uid, ids), hub.giversFor(ids).catch(() => new Map<string, string[]>())]);
+      setMine(m); setGivers(g);
+      setPeople(await hub.profilesFor([...ps.map((p) => p.user_id), ...[...g.values()].flat()]));
+    } catch (e) { setErr((e as Error).message); } finally { setLoading(false); }
+  }, [uid, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void reload(); }, [reload]);
+  const toggle = async (p: Post, on: boolean) => {
+    if (!uid || p.user_id === uid) return; // no Fuego on your own run
+    const flip = (give: boolean) => {
+      setMine((s) => { const n = new Set(s); if (give) n.add(p.id); else n.delete(p.id); return n; });
+      setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, ritmo_count: Math.max(0, x.ritmo_count + (give ? 1 : -1)) } : x)));
+      setGivers((g) => { const n = new Map(g); const l = (n.get(p.id) ?? []).filter((x) => x !== uid); n.set(p.id, give ? [uid, ...l].slice(0, 3) : l); return n; });
+    };
+    flip(on); // optimistic, rolled back on error
+    try { await hub.setRitmo(uid, p.id, on); } catch { flip(!on); }
+  };
+  return { posts, setPosts, people, mine, givers, toggle, reload, err, loading };
+}
+
+function FeedTab({ follows, onSocial }: { follows: hub.Follow[]; onSocial: () => void }) {
+  const { session } = useApp();
+  const uid = session!.user.id;
+  const [tab, setTab] = useState<Tab>('following');
+  const following = useMemo(() => follows.filter((f) => f.follower_id === uid && f.status === 'accepted').map((f) => f.followee_id), [follows, uid]);
+  const feed = useFeed(() => hub.feed(uid, tab, following), [tab, following.join()]);
+  const [sheet, setSheet] = useState<{ kind: 'comments' | 'givers'; post: Post }>();
+  return (
+    <div className="stack">
+      <div className="row wrap hub-filter" role="group" aria-label="Show runs from">
+        {([['following', 'Following'], ['everyone', 'Everyone'], ['mine', 'Your runs']] as [Tab, string][]).map(([v, l]) => <button key={v} type="button" className="chip" aria-pressed={tab === v} onClick={() => setTab(v)}>{l}</button>)}
+      </div>
+      <YourWeek />
+      <FirstTimeTip />
+      {feed.err && <StatusLine kind="danger">{feed.err}</StatusLine>}
+      {feed.loading && !feed.posts.length && <p className="muted" role="status">Loading runs…</p>}
+      {!feed.loading && !feed.posts.length && <Empty title={tab === 'mine' ? 'You have not posted a run yet' : 'Nothing here yet'}>{tab === 'mine' ? 'Open any run and choose "Post to Hub".' : tab === 'following' ? 'Find runners to follow with the search button.' : 'Public runs appear here.'}</Empty>}
+      <PostList feed={feed} onComments={(p) => setSheet({ kind: 'comments', post: p })} onGivers={(p) => setSheet({ kind: 'givers', post: p })} />
+      {sheet?.kind === 'comments' && <CommentsSheet post={sheet.post} people={feed.people} onClose={() => { setSheet(undefined); void feed.reload(); }} />}
+      {sheet?.kind === 'givers' && <GiversSheet post={sheet.post} follows={follows} onClose={() => { setSheet(undefined); onSocial(); }} />}
     </div>
+  );
+}
+
+export function PostList({ feed, onComments, onGivers }: { feed: ReturnType<typeof useFeed>; onComments: (p: Post) => void; onGivers: (p: Post) => void }) {
+  const { session } = useApp();
+  const uid = session!.user.id;
+  return (
+    <div className="hub-feed">
+      {feed.posts.map((p) => <PostCard key={p.id} post={p} author={feed.people.get(p.user_id)} people={feed.people} givers={feed.givers.get(p.id) ?? []} given={feed.mine.has(p.id)} own={p.user_id === uid}
+        onFuego={(on) => feed.toggle(p, on)} onComments={() => onComments(p)} onGivers={() => onGivers(p)}
+        onDelete={async () => { await hub.deletePost(p.id); feed.setPosts((ps) => ps.filter((x) => x.id !== p.id)); }}
+        onReport={async (why) => { await hub.report(uid, { post_id: p.id }, why); }}
+        onBlock={async () => { await hub.block(uid, p.user_id); void feed.reload(); }} />)}
+    </div>
+  );
+}
+
+/** This week's distance, runs and time, with a bar per day (today in orange). Every source counts: only you see it. */
+function YourWeek() {
+  const { data } = useApp();
+  const U = data.profile.units;
+  const now = new Date();
+  const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => localDay(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)));
+  const runs = data.activities.filter((a) => days.includes(localDay(new Date(a.startTime))));
+  const per = days.map((d) => runs.filter((a) => localDay(new Date(a.startTime)) === d).reduce((s, a) => s + a.distanceM, 0));
+  const max = Math.max(...per, 1);
+  const total = runs.reduce((s, a) => s + a.distanceM, 0), time = runs.reduce((s, a) => s + a.movingS, 0);
+  const today = localDay(now);
+  return (
+    <Link to="/you" className="card hub-week" aria-label={`Your week: ${dist(total, U)}, ${runs.length} run${runs.length === 1 ? '' : 's'}, ${duration(Math.round(time))}`}>
+      <div className="stack-sm" style={{ gap: 2 }}>
+        <span className="label">Your week</span>
+        <span className="stat">{dist(total, U)} · {runs.length} run{runs.length === 1 ? '' : 's'} · {duration(Math.round(time))}</span>
+      </div>
+      <div className="hub-week-bars" aria-hidden="true">
+        {per.map((m, i) => <div key={days[i]} className="hub-week-day"><span className={`hub-week-bar${days[i] === today ? ' today' : ''}${m ? '' : ' empty'}`} style={{ height: m ? `${Math.max(12, (m / max) * 100)}%` : undefined }} /><span className="hub-week-letter">{'MTWTFSS'[i]}</span></div>)}
+      </div>
+    </Link>
   );
 }
 
@@ -142,34 +228,40 @@ function FirstTimeTip() {
   if (!show) return null;
   return (
     <div className="card row-between" role="note" style={{ gap: 8 }}>
-      <span className="row" style={{ gap: 8 }}><Flame size={20} strokeWidth={2} color="var(--brand)" aria-hidden="true" /><span>Give a ritmo: Ritmo’s way of saying nice run.</span></span>
+      <span className="row" style={{ gap: 8 }}><Flame size={20} strokeWidth={2} color="var(--brand)" aria-hidden="true" /><span>Give a Fuego: Ritmo’s way of saying nice run.</span></span>
       <button className="btn btn-ghost btn-small" onClick={() => { setShow(false); try { localStorage.setItem('ritmo:hub:tip', '1'); } catch { /* */ } }}>Got it</button>
     </div>
   );
 }
 
-export function RouteThumb({ route, onDoubleTap }: { route: [number, number][]; onDoubleTap?: () => void }) {
+/** The route on a muted map, full width (start and finish already trimmed off when it was posted). */
+export function PostMap({ route, onDoubleTap }: { route: [number, number][]; onDoubleTap?: () => void }) {
   const [flare, setFlare] = useState(false);
   const last = useRef(0);
-  const lats = route.map((p) => p[0]), lons = route.map((p) => p[1]);
-  const [la0, la1, lo0, lo1] = [Math.min(...lats), Math.max(...lats), Math.min(...lons), Math.max(...lons)];
-  const k = Math.cos(((la0 + la1) / 2) * Math.PI / 180);
-  // Same scale both ways, centred in the frame
-  const sx = (lo1 - lo0) * k, sy = la1 - la0;
-  const scale = Math.min(280 / Math.max(sx, 1e-6), 140 / Math.max(sy, 1e-6));
-  const ox = 10 + (280 - sx * scale) / 2, oy = 10 + (140 - sy * scale) / 2;
-  const pts = route.map(([la, lo]) => `${ox + (lo - lo0) * k * scale},${oy + (la1 - la) * scale}`).join(' ');
+  const W = 390, H = 230;
+  const pts = route.map(([lat, lon]) => ({ lat, lon }));
+  const view = fitView(pts, W, H, 28, 16);
   const tap = () => { const now = Date.now(); if (now - last.current < 320) { onDoubleTap?.(); setFlare(true); setTimeout(() => setFlare(false), 400); } last.current = now; };
+  if (!view) return null;
+  const line = pts.map((p) => { const v = view.toView(p.lat, p.lon); return `${v.x.toFixed(1)},${v.y.toFixed(1)}`; }).join(' ');
+  const s = view.toView(pts[0].lat, pts[0].lon);
+  const tiles = mapsOn();
   return (
     <div className="hub-route" onClick={tap} onDoubleClick={(e) => e.preventDefault()}>
-      <svg viewBox="0 0 300 160" role="img" aria-label="Route (start and finish hidden)"><polyline points={pts} fill="none" stroke="var(--brand)" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" /></svg>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label="Route (start and finish hidden)">
+        {tiles && view.tiles.map((t) => <image key={`${t.z}/${t.x}/${t.y}/${t.left}`} href={t.url} x={t.left} y={t.top} width={TILE} height={TILE} preserveAspectRatio="none" className="route-tile" />)}
+        <polyline points={line} fill="none" stroke="var(--surface-raised)" strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+        <polyline points={line} fill="none" stroke="var(--brand)" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={s.x} cy={s.y} r="6" fill="var(--surface-raised)" stroke="var(--ink)" strokeWidth="2.5" />
+      </svg>
+      {tiles && <a className="run-map-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>© OpenStreetMap</a>}
       {flare && <Flame className="hub-flare" size={64} strokeWidth={0} fill="var(--brand)" aria-hidden="true" />}
     </div>
   );
 }
 
-function PostCard({ post: p, author, mineRitmo, own, onRitmo, onComments, onGivers, onDelete, onReport, onBlock }: {
-  post: Post; author?: HubProfile; mineRitmo: boolean; own: boolean; onRitmo: (on: boolean) => void; onComments: () => void; onGivers: () => void;
+function PostCard({ post: p, author, people, givers, given, own, onFuego, onComments, onGivers, onDelete, onReport, onBlock }: {
+  post: Post; author?: HubProfile; people: Map<string, HubProfile>; givers: string[]; given: boolean; own: boolean; onFuego: (on: boolean) => void; onComments: () => void; onGivers: () => void;
   onDelete: () => Promise<void>; onReport: (why: string) => Promise<void>; onBlock: () => Promise<void>;
 }) {
   const { data } = useApp();
@@ -177,55 +269,80 @@ function PostCard({ post: p, author, mineRitmo, own, onRitmo, onComments, onGive
   const [menu, setMenu] = useState(false);
   const [done, setDone] = useState<string>();
   const s = p.stats;
+  const challenge = s.type === 'challenge';
+  const z = s.type ? ZONE_OF[s.type as SessionType] : undefined;
+  const meta = [hub.whenLine(s.startedAt ?? p.created_at), s.device].filter(Boolean).join(' · ');
+  const posted = s.startedAt && s.startedAt.slice(0, 10) !== p.created_at.slice(0, 10) ? `Posted ${ago(p.created_at)}` : undefined;
+  const share = async () => {
+    const text = challenge ? `${p.title} on Ritmo` : `${p.title}: ${dist(s.distanceM, U)} at ${fmtPace(s.paceS, U)} on Ritmo`;
+    try {
+      if (navigator.share) { await navigator.share({ title: p.title, text, url: 'https://app.ritmorunning.run/hub' }); return; }
+      await navigator.clipboard.writeText(`${text} https://app.ritmorunning.run/hub`); setDone('Link copied.');
+    } catch { /* closed the share sheet */ }
+  };
   return (
-    <article className="card stack-sm hub-post" aria-labelledby={`post-${p.id}`}>
-      <div className="row-between">
-        <div className="row" style={{ gap: 10 }}>
-          <span className="hub-avatar" aria-hidden="true">{initials(author?.display_name)}</span>
-          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{author?.display_name ?? 'Runner'}</span><span className="caption">{p.stats.startedAt && p.stats.startedAt.slice(0, 10) !== p.created_at.slice(0, 10) ? `Run on ${new Date(p.stats.startedAt).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · posted ${ago(p.created_at)}` : ago(p.created_at)}{p.city ? ` · ${p.city}` : ''}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span></span>
+    <article className="hub-post" aria-labelledby={`post-${p.id}`}>
+      <div className="hub-post-head">
+        <span className="hub-avatar" aria-hidden="true">{initials(author?.display_name)}</span>
+        <div className="hub-post-who">
+          <span className="label">{author?.display_name ?? 'Runner'}</span>
+          <span className="caption">{meta}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span>
+          {(p.city || posted) && <span className="caption row" style={{ gap: 4 }}>{p.city && <><MapPin size={13} strokeWidth={2} aria-hidden="true" />{p.city}</>}{p.city && posted ? ' · ' : ''}{posted}</span>}
         </div>
         <button className="icon-btn" aria-label="More" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><MoreHorizontal size={20} /></button>
       </div>
       {menu && (
-        <div className="row wrap" style={{ gap: 6 }}>
+        <div className="row wrap hub-post-pad" style={{ gap: 6 }}>
           {own ? <button className="btn btn-small" onClick={() => void onDelete()}>Delete post</button> : <>
             <button className="btn btn-small" onClick={() => { void onReport('Reported from the feed'); setDone('Thanks, the post was reported.'); setMenu(false); }}>Report</button>
             <button className="btn btn-small" onClick={() => { void onBlock(); setMenu(false); }}>Block {author?.display_name ?? 'runner'}</button>
           </>}
         </div>
       )}
-      {done && <StatusLine kind="info">{done}</StatusLine>}
-      <h2 id={`post-${p.id}`} className="title">{p.title}</h2>
-      {p.body && <p>{p.body}</p>}
-      {p.show_map && p.route && p.route.length > 4 && <RouteThumb route={p.route} onDoubleTap={own ? undefined : () => { if (!mineRitmo) onRitmo(true); }} />}
-      <div className="hub-stats">
-        <div><span className="caption">Distance</span><span className="stat">{dist(s.distanceM, U)}</span></div>
-        <div><span className="caption">Time</span><span className="stat">{duration(Math.round(s.movingS))}</span></div>
-        <div><span className="caption">Pace</span><span className="stat">{fmtPace(s.paceS, U)}</span></div>
-        {s.elevGainM != null && <div><span className="caption">Climb</span><span className="stat">{s.elevGainM} m</span></div>}
-        {p.show_hr && s.avgHr && <div><span className="caption">Avg HR</span><span className="stat">{s.avgHr}</span></div>}
-      </div>
-      <div className="row wrap" style={{ gap: 6 }}>
-        {s.typeLabel && <span className="tag">{s.typeLabel}</span>}
-        {s.compliance && <span className="tag tag-accent">{s.compliance}</span>}
-        {(s.badges ?? []).map((b) => <span key={b} className="tag">{b}</span>)}
-      </div>
-      <div className="row-between hub-actions">
-        <div className="row" style={{ gap: 6 }}>
-          {/* No reacting to your own run */}
-          {!own && <button className={`btn btn-small ritmo-btn${mineRitmo ? ' on' : ''}`} aria-pressed={mineRitmo} aria-label={mineRitmo ? 'Take back your ritmo' : 'Give a ritmo'} onClick={() => onRitmo(!mineRitmo)}>
-            <Flame size={18} strokeWidth={2} fill={mineRitmo ? 'var(--brand)' : 'none'} color="var(--brand)" aria-hidden="true" />Ritmo
-          </button>}
-          {p.ritmo_count > 0 ? <button className="ritmo-count" onClick={onGivers} aria-label={`${hub.ritmoCount(p.ritmo_count)}: see who gave one`}><Flame size={12} strokeWidth={0} fill="var(--brand)" aria-hidden="true" />{p.ritmo_count}</button>
-            : own ? <span className="caption">No ritmos yet</span> : null}
+      {done && <div className="hub-post-pad"><StatusLine kind="info">{done}</StatusLine></div>}
+      <div className="hub-post-pad stack-sm">
+        <h2 id={`post-${p.id}`} className="hub-post-title">{p.title}</h2>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {challenge ? <span className="tag tag-accent"><Award size={14} strokeWidth={2} aria-hidden="true" />Challenge complete</span>
+            : s.typeLabel && <span className="zone-chip">{z && <span className={`zone-dot z${z}`} aria-hidden="true" />}{s.typeLabel}{z ? <span className="sr-only">, Z{z} {ZONE_NAMES[z - 1]}</span> : null}</span>}
+          {s.compliance && <span className="tag tag-accent">{s.compliance}</span>}
+          {!challenge && (s.badges ?? []).map((b) => <span key={b} className="tag">{b}</span>)}
         </div>
-        <button className="btn btn-small btn-ghost" onClick={onComments}><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />{p.comment_count || ''}<span className="sr-only">comments</span></button>
+        {p.body && <p>{p.body}</p>}
+        {challenge ? (
+          <div className="hub-badge-post"><span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span><span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span>{s.distanceM > 0 && <span className="caption">{dist(s.distanceM, U)} run for it</span>}</span></div>
+        ) : (
+          <div className="hub-stats">
+            <div><span className="caption">Distance</span><span className="stat">{dist(s.distanceM, U)}</span></div>
+            <div><span className="caption">Pace</span><span className="stat">{fmtPace(s.paceS, U)}</span></div>
+            <div><span className="caption">Time</span><span className="stat">{duration(Math.round(s.movingS))}</span></div>
+            {p.show_hr && s.avgHr ? <div><span className="caption">Avg HR</span><span className="stat">{Math.round(s.avgHr)}</span></div> : null}
+          </div>
+        )}
+      </div>
+      {!challenge && p.show_map && p.route && p.route.length > 4 && <PostMap route={p.route} onDoubleTap={own ? undefined : () => { if (!given) onFuego(true); }} />}
+      <div className="hub-summary hub-post-pad">
+        {p.ritmo_count > 0 ? (
+          <button className="hub-givers" onClick={onGivers} aria-label={`${hub.fuegoCount(p.ritmo_count)}: see who gave one`}>
+            <span className="hub-stack" aria-hidden="true">{givers.slice(0, 3).map((g) => <span key={g} className="hub-avatar hub-avatar-xs">{initials(people.get(g)?.display_name)}</span>)}</span>
+            <span className="ritmo-count">{hub.fuegoCount(p.ritmo_count)}</span>
+          </button>
+        ) : <span className="caption">{own ? 'No Fuego yet' : ''}</span>}
+        {p.comment_count > 0 && <button className="link-btn caption" onClick={onComments}>{p.comment_count} comment{p.comment_count === 1 ? '' : 's'}</button>}
+      </div>
+      <div className={`hub-actions${own ? ' two' : ''}`}>
+        {/* No Fuego on your own run */}
+        {!own && <button className={`hub-action fuego-btn${given ? ' on' : ''}`} aria-pressed={given} aria-label={given ? 'Remove your Fuego' : 'Give a Fuego'} onClick={() => onFuego(!given)}>
+          <Flame size={20} strokeWidth={2} fill={given ? 'var(--brand)' : 'none'} aria-hidden="true" />Fuego
+        </button>}
+        <button className="hub-action" onClick={onComments} aria-label={`Comment${p.comment_count ? `, ${p.comment_count} comments` : ''}`}><MessageCircle size={20} strokeWidth={2} aria-hidden="true" />Comment</button>
+        <button className="hub-action" onClick={() => void share()}><Share2 size={20} strokeWidth={2} aria-hidden="true" />Share</button>
       </div>
     </article>
   );
 }
 
-function CommentsSheet({ post, people, onClose }: { post: Post; people: Map<string, HubProfile>; onClose: () => void }) {
+export function CommentsSheet({ post, people, onClose }: { post: Post; people: Map<string, HubProfile>; onClose: () => void }) {
   const { session } = useApp();
   const uid = session!.user.id;
   const [list, setList] = useState<Comment[]>([]);
@@ -290,11 +407,11 @@ function FollowButton({ other, follows, onChange }: { other: string; follows: hu
     : <button className="btn btn-small btn-primary" onClick={async () => { await hub.follow(uid, other); setState('pending'); onChange?.(); }}><UserPlus size={16} strokeWidth={2} aria-hidden="true" />Follow</button>;
 }
 
-function GiversSheet({ post, follows, onClose }: { post: Post; following: string[]; follows: hub.Follow[]; onClose: () => void }) {
+export function GiversSheet({ post, follows, onClose }: { post: Post; follows: hub.Follow[]; onClose: () => void }) {
   const [givers, setGivers] = useState<HubProfile[]>([]);
   useEffect(() => { hub.ritmoGivers(post.id).then(async (ids) => { const m = await hub.profilesFor(ids); setGivers(ids.map((id) => m.get(id) ?? { user_id: id, display_name: 'Runner', private: true })); }).catch(() => {}); }, [post.id]);
   return (
-    <Sheet open onClose={onClose} title={hub.ritmoCount(post.ritmo_count)}>
+    <Sheet open onClose={onClose} title="Fuego from">
       <p className="caption">{hub.giversLine(givers.map((g) => g.display_name), post.ritmo_count)}</p>
       <ul className="list">{givers.map((g) => <li key={g.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><span className="row" style={{ gap: 8 }}><span className="hub-avatar" aria-hidden="true">{initials(g.display_name)}</span>{g.display_name}</span><FollowButton other={g.user_id} follows={follows} /></li>)}</ul>
     </Sheet>
@@ -304,7 +421,7 @@ function GiversSheet({ post, follows, onClose }: { post: Post; following: string
 function NotesSheet({ notes, people, follows, onChange, onClose }: { notes: Notification[]; people: Map<string, HubProfile>; follows: hub.Follow[]; onChange: () => void; onClose: () => void }) {
   const { session } = useApp();
   const uid = session!.user.id;
-  // Batch: the same kind on the same post becomes one line ("Marco and 5 others gave your run a ritmo")
+  // Batch: the same kind on the same post becomes one line ("Anna and 5 others gave your run a Fuego")
   const groups = new Map<string, Notification[]>();
   for (const n of notes) { const k = n.kind === 'follow_request' ? `${n.kind}:${n.actor_id}` : `${n.kind}:${n.post_id ?? n.actor_id}`; groups.set(k, [...(groups.get(k) ?? []), n]); }
   const name = (id?: string | null) => people.get(id ?? '')?.display_name ?? 'Someone';
@@ -355,6 +472,221 @@ function SettingsSheet({ me, onSaved, onStop, onClose }: { me: HubProfile; onSav
       <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={p.private} onChange={(e) => setP({ ...p, private: e.target.checked })} /> Approve new followers before they see my runs</label>
       {msg && <StatusLine kind="success">{msg}</StatusLine>}
       <button className="btn btn-ghost" onClick={() => void onStop()}>Stop sharing and hide all my posts</button>
+    </Sheet>
+  );
+}
+
+// ---------------------------------------------------------------- Challenges
+
+function ChallengesTab({ canPost }: { canPost: boolean }) {
+  const { data, updateProfile, session } = useApp();
+  const U = data.profile.units;
+  const joined = useChallenges();
+  const today = new Date();
+  // Running ones, and finished ones for two weeks (then they live on as badges)
+  const recent = (j: JoinedChallenge) => (!j.completedAt ? localDay(today) <= j.challenge.end : Date.now() - new Date(j.completedAt).getTime() < 14 * 86400e3);
+  const active = joined.filter(recent);
+  const offered = catalogue(today, U).filter((c) => !joined.some((j) => j.challenge.id === c.id));
+  const [msg, setMsg] = useState<string>();
+  const set = (list: JoinedChallenge[]) => updateProfile({ challenges: list });
+  const share = async (j: JoinedChallenge) => {
+    const p = progress(j.challenge, data.activities, U);
+    try {
+      await hub.createPost({
+        id: crypto.randomUUID(), user_id: session!.user.id, activity_id: null, title: `Completed: ${j.challenge.title}`, body: null, visibility: 'followers',
+        show_map: false, show_hr: false, route: null, city: null,
+        stats: { distanceM: p.distanceM, movingS: p.movingS, paceS: p.distanceM ? p.movingS / (p.distanceM / 1000) : 0, type: 'challenge', typeLabel: 'Challenge complete', badges: [j.challenge.title] },
+      });
+      set(joined.map((x) => (x.challenge.id === j.challenge.id ? { ...x, sharedAt: new Date().toISOString() } : x)));
+      setMsg('Shared with your followers.');
+    } catch (e) { setMsg((e as Error).message); }
+  };
+  return (
+    <div className="stack-lg">
+      <section className="stack" aria-labelledby="ch-yours">
+        <h2 id="ch-yours" className="title">Your challenges</h2>
+        {!active.length && <p className="muted">You have not joined a challenge yet. Pick one below: your runs count automatically, including runs imported from Strava.</p>}
+        {msg && <StatusLine kind="info">{msg}</StatusLine>}
+        {active.map((j) => {
+          const p = progress(j.challenge, data.activities, U);
+          return (
+            <article key={j.challenge.id} className="card stack-sm challenge-card" aria-label={j.challenge.title}>
+              <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+                <span className="badge-icon" aria-hidden="true">{p.done ? <Trophy size={22} strokeWidth={2} /> : <Award size={22} strokeWidth={2} />}</span>
+                <div className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+                  <div className="row-between" style={{ gap: 8 }}><span className="label">{j.challenge.title}</span><span className={`tag${p.done ? ' tag-accent' : ''}`}>{p.done ? 'Complete' : 'Joined'}</span></div>
+                  <span className="caption">{j.challenge.description}</span>
+                </div>
+              </div>
+              <div className="progress" role="progressbar" aria-label={`${j.challenge.title} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.frac * 100)}><span style={{ width: `${p.frac * 100}%` }} /></div>
+              <span className="challenge-line">{p.line}</span>
+              <div className="row wrap" style={{ gap: 6 }}>
+                {p.done && canPost && !j.sharedAt && <button className="btn btn-small btn-primary" onClick={() => void share(j)}>Share to Feed</button>}
+                {!p.done && <button className="btn btn-small btn-ghost" onClick={() => set(joined.filter((x) => x.challenge.id !== j.challenge.id))}>Leave</button>}
+              </div>
+            </article>
+          );
+        })}
+      </section>
+      <section className="stack" aria-labelledby="ch-join">
+        <h2 id="ch-join" className="title">Join a challenge</h2>
+        {offered.map((c: Challenge) => (
+          <article key={c.id} className="card row challenge-card" style={{ gap: 12 }} aria-label={c.title}>
+            <span className="badge-icon" aria-hidden="true"><Award size={22} strokeWidth={2} /></span>
+            <div className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 0 }}><span className="label">{c.title}</span><span className="caption">{c.description}</span></div>
+            <button className="btn btn-small" aria-label={`Join ${c.title}`} onClick={() => set([...joined, { challenge: c, joinedAt: new Date().toISOString() }])}>Join</button>
+          </article>
+        ))}
+      </section>
+      <BadgeShelf />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Clubs
+
+function ClubsTab({ me }: { me: HubProfile }) {
+  const { session } = useApp();
+  const uid = session!.user.id;
+  const [state, setState] = useState<{ mine: ClubMember[]; clubs: Club[]; runs: GroupRun[]; going: Set<string>; board: LeaderRow[] }>();
+  const [missing, setMissing] = useState(false);
+  const [err, setErr] = useState<string>();
+  const [find, setFind] = useState(false);
+  const load = useCallback(async () => {
+    setErr(undefined);
+    try {
+      const mine = await clubs.myMemberships(uid);
+      const list = await clubs.clubsByIds(mine.map((m) => m.club_id));
+      list.sort((a, b) => mine.findIndex((m) => m.club_id === a.id) - mine.findIndex((m) => m.club_id === b.id));
+      const runs = await clubs.groupRuns(list.map((c) => c.id));
+      const going = await clubs.myGoing(uid, runs.map((r) => r.id));
+      const board = list[0] ? await clubs.leaderboard(list[0].id, clubs.periodStart('week')).catch(() => []) : [];
+      setState({ mine, clubs: list, runs, going, board });
+    } catch (e) { if (clubs.notReady(e)) setMissing(true); else setErr((e as Error).message); }
+  }, [uid]);
+  useEffect(() => { void load(); }, [load]);
+  if (missing) return <Empty title="Clubs are almost ready">Clubs open here soon: group runs, who is going and a weekly leaderboard with your club.</Empty>;
+  if (err) return <StatusLine kind="danger">{err}</StatusLine>;
+  if (!state) return <p className="muted" role="status">Loading clubs…</p>;
+  const [main, ...others] = state.clubs;
+  return (
+    <div className="stack-lg">
+      {!main && <Empty title="You are not in a club yet" action={<button className="btn btn-primary" onClick={() => setFind(true)}><Search size={18} strokeWidth={2} aria-hidden="true" />Find a club</button>}>Run with others: see your club's group runs, say you are going and climb the weekly leaderboard.</Empty>}
+      {main && <ClubCard club={main} runs={state.runs.filter((r) => r.club_id === main.id)} going={state.going} board={state.board} uid={uid} me={me} onChange={load} />}
+      {others.length > 0 && (
+        <section className="stack-sm" aria-labelledby="club-others">
+          <h2 id="club-others" className="label">Your other clubs</h2>
+          <ul className="list card">{others.map((c) => <li key={c.id}><Link to={`/hub/club/${c.id}`} className="club-row"><span className="club-logo club-logo-sm" aria-hidden="true">{initials(c.name)}</span><span className="stack-sm" style={{ gap: 0, flex: 1 }}><span className="label">{c.name}</span><span className="caption">{c.member_count} member{c.member_count === 1 ? '' : 's'}{c.area ? ` · ${c.area}` : ''}</span></span><ChevronRight size={18} aria-hidden="true" /></Link></li>)}</ul>
+        </section>
+      )}
+      {main && <button className="btn" onClick={() => setFind(true)}><Search size={18} strokeWidth={2} aria-hidden="true" />Find a club</button>}
+      {find && <FindClubSheet joined={new Set(state.clubs.map((c) => c.id))} onClose={() => setFind(false)} onJoined={() => { setFind(false); void load(); }} />}
+    </div>
+  );
+}
+
+export function GoingButton({ run, going, onChange }: { run: GroupRun; going: boolean; onChange: () => void }) {
+  const { session } = useApp();
+  const [on, setOn] = useState(going);
+  const [n, setN] = useState(run.going_count);
+  useEffect(() => { setOn(going); setN(run.going_count); }, [going, run.going_count]);
+  return (
+    <div className="row" style={{ gap: 8 }}>
+      <span className="caption">{n} going</span>
+      <button className={`btn btn-small${on ? ' btn-graphite' : ''}`} aria-pressed={on} onClick={async () => {
+        const next = !on; setOn(next); setN((x) => x + (next ? 1 : -1));
+        try { await clubs.setGoing(session!.user.id, run.id, next); onChange(); } catch { setOn(!next); setN((x) => x + (next ? -1 : 1)); }
+      }}>{on ? 'Going' : 'Going?'}</button>
+    </div>
+  );
+}
+
+export function GroupRunRow({ run, going, onChange }: { run: GroupRun; going: boolean; onChange: () => void }) {
+  const { data } = useApp();
+  const b = clubs.dateBlock(run.starts_at);
+  return (
+    <div className="group-run">
+      <span className="date-block" aria-hidden="true"><span className="date-block-m">{b.month}</span><span className="date-block-d">{b.day}</span></span>
+      <div className="stack-sm" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+        <span className="label">{run.title}</span>
+        <span className="caption">{b.weekday} {b.time}{run.meeting_point ? ` · ${run.meeting_point}` : ''}</span>
+        {(run.distance_m || run.pace_group) && <span className="caption">{[run.distance_m ? dist(run.distance_m, data.profile.units) : '', run.pace_group ?? ''].filter(Boolean).join(' · ')}</span>}
+      </div>
+      <GoingButton run={run} going={going} onChange={onChange} />
+    </div>
+  );
+}
+
+export function Leaderboard({ rows, uid, top = 3 }: { rows: LeaderRow[]; uid: string; top?: number }) {
+  const { data } = useApp();
+  const U = data.profile.units;
+  const shown = rows.slice(0, top);
+  const meIdx = rows.findIndex((r) => r.user_id === uid);
+  if (!rows.length) return <p className="caption">No runs counted yet. Only members who chose to be on the leaderboard are listed.</p>;
+  const Row = ({ r, i }: { r: LeaderRow; i: number }) => <li className={`leader-row${r.user_id === uid ? ' me' : ''}`}><span className="leader-rank">{i + 1}</span><span className="leader-name">{r.user_id === uid ? 'You' : r.display_name}</span><span className="stat">{dist(r.distance_m, U)}</span></li>;
+  return (
+    <ol className="leaderboard">
+      {shown.map((r, i) => <Row key={r.user_id} r={r} i={i} />)}
+      {meIdx >= top && <Row r={rows[meIdx]} i={meIdx} />}
+    </ol>
+  );
+}
+
+function ClubCard({ club, runs, going, board, uid, onChange }: { club: Club; runs: GroupRun[]; going: Set<string>; board: LeaderRow[]; uid: string; me: HubProfile; onChange: () => void }) {
+  const { data } = useApp();
+  const next = runs[0];
+  return (
+    <article className="card stack club-card" aria-labelledby={`club-${club.id}`}>
+      <Link to={`/hub/club/${club.id}`} className="club-row" aria-label={`Open ${club.name}`}>
+        <span className="club-logo" aria-hidden="true">{initials(club.name)}</span>
+        <span className="stack-sm" style={{ gap: 0, flex: 1 }}><span id={`club-${club.id}`} className="label">{club.name}</span><span className="caption">{club.member_count} member{club.member_count === 1 ? '' : 's'}{club.area ? ` · ${club.area}` : ''}</span></span>
+        <ChevronRight size={18} aria-hidden="true" />
+      </Link>
+      <div className="stack-sm">
+        <span className="caption">Next group run</span>
+        {next ? <GroupRunRow run={next} going={going.has(next.id)} onChange={onChange} /> : <p className="caption">No group run planned yet.</p>}
+      </div>
+      <div className="stack-sm">
+        <span className="caption">This week's leaderboard ({data.profile.units})</span>
+        <Leaderboard rows={board} uid={uid} />
+      </div>
+    </article>
+  );
+}
+
+function FindClubSheet({ joined, onClose, onJoined }: { joined: Set<string>; onClose: () => void; onJoined: () => void }) {
+  const { session } = useApp();
+  const uid = session!.user.id;
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState<Club[]>([]);
+  const [board, setBoard] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: '', area: '', about: '' });
+  const [err, setErr] = useState<string>();
+  useEffect(() => { const id = setTimeout(() => { clubs.findClubs(q).then(setRes).catch((e) => setErr((e as Error).message)); }, 250); return () => clearTimeout(id); }, [q]);
+  return (
+    <Sheet open onClose={onClose} title={creating ? 'Start a club' : 'Find a club'}
+      footer={creating ? <button className="btn btn-primary btn-block" disabled={form.name.trim().length < 2} onClick={async () => {
+        try { await clubs.createClub(uid, form); onJoined(); } catch (e) { setErr((e as Error).message); }
+      }}>Start the club</button> : undefined}>
+      {err && <StatusLine kind="danger">{err}</StatusLine>}
+      {creating ? <>
+        <div className="field"><label htmlFor="club-name">Club name</label><input id="club-name" className="input" maxLength={60} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+        <div className="field"><label htmlFor="club-area">Area (optional)</label><input id="club-area" className="input" maxLength={60} value={form.area} placeholder="Town or neighbourhood" onChange={(e) => setForm({ ...form, area: e.target.value })} /></div>
+        <div className="field"><label htmlFor="club-about">About (optional)</label><textarea id="club-about" className="input" maxLength={500} value={form.about} onChange={(e) => setForm({ ...form, about: e.target.value })} /></div>
+        <p className="caption">You will be the club's admin: you can add group runs and remove members.</p>
+        <button className="link-btn" onClick={() => setCreating(false)}>Back to search</button>
+      </> : <>
+        <input className="input" aria-label="Search clubs by name or area" placeholder="Name or area" value={q} onChange={(e) => setQ(e.target.value)} />
+        <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={board} onChange={(e) => setBoard(e.target.checked)} /> Show my distance on club leaderboards</label>
+        <ul className="list">{res.map((c) => <li key={c.id} className="club-row">
+          <span className="club-logo club-logo-sm" aria-hidden="true">{initials(c.name)}</span>
+          <span className="stack-sm" style={{ gap: 0, flex: 1, minWidth: 0 }}><span className="label">{c.name}</span><span className="caption">{c.member_count} member{c.member_count === 1 ? '' : 's'}{c.area ? ` · ${c.area}` : ''}</span></span>
+          {joined.has(c.id) ? <span className="tag">Joined</span> : <button className="btn btn-small" aria-label={`Join ${c.name}`} onClick={async () => { try { await clubs.join(uid, c.id, board); onJoined(); } catch (e) { setErr((e as Error).message); } }}>Join</button>}
+        </li>)}</ul>
+        {!res.length && <p className="caption">{q ? 'No club matches.' : 'No clubs yet.'}</p>}
+        <button className="btn btn-ghost" onClick={() => setCreating(true)}><Plus size={18} strokeWidth={2} aria-hidden="true" />Start a club</button>
+      </>}
     </Sheet>
   );
 }

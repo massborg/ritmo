@@ -165,6 +165,8 @@ export interface Profile {
   // ---- Athlete setup (Phase 1). Only what the app uses is stored. ----
   dateOfBirth?: string; // YYYY-MM-DD, used for the 18+ rule and age-aware load limits
   consents?: Consents;
+  /** Hub challenges the runner joined (a copy of each, with when it was finished and shared) */
+  challenges?: import('../training/challenges').JoinedChallenge[];
   /** Health check: only the outcome is stored, never the individual answers */
   healthCheck?: { completedAt: string; doctorAdvised: boolean; acknowledgedAt?: string };
   background?: RunningBackground;

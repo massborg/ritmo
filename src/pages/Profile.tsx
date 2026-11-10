@@ -12,6 +12,7 @@ import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
 import { Shoes } from '../components/Shoes';
 import { BodySection } from '../components/BodySection';
+import { BadgeShelf } from '../components/Badges';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
@@ -57,6 +58,7 @@ export default function Profile() {
 
       <PushReminders />
       {/* Moved from You (brief 6.1): shoes, and Body's niggles and exercises */}
+      <BadgeShelf compact />
       <Shoes />
       {hasFlag('body') && <BodySection />}
 

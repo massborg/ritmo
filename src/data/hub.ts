@@ -1,10 +1,10 @@
-// Ritmo Hub: posts, the single "Ritmo" reaction, comments, follows and notifications. Who can see what is
-// enforced by the database (row-level security); these are thin calls on top.
+// Ritmo Hub: posts, the single reaction ("Fuego"; stored as `ritmos` in the database), comments, follows and
+// notifications. Who can see what is enforced by the database (row-level security); these are thin calls on top.
 import { supabase } from './supabase';
 
 export type Visibility = 'everyone' | 'followers' | 'only_me';
 export interface HubProfile { user_id: string; display_name: string; bio?: string | null; club?: string | null; private: boolean }
-export interface PostStats { distanceM: number; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string }
+export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string }
 export interface Post {
   id: string; user_id: string; activity_id?: string | null; title: string; body?: string | null; visibility: Visibility;
   show_map: boolean; show_hr: boolean; stats: PostStats; route?: [number, number][] | null; city?: string | null;
@@ -56,6 +56,14 @@ export async function setRitmo(uid: string, postId: string, on: boolean) {
   if (on) ok(await db().from('ritmos').upsert({ post_id: postId, user_id: uid }));
   else ok(await db().from('ritmos').delete().eq('post_id', postId).eq('user_id', uid));
 }
+/** The first givers of each post (newest first), for the stacked avatars on the card */
+export async function giversFor(postIds: string[]): Promise<Map<string, string[]>> {
+  const m = new Map<string, string[]>();
+  if (!postIds.length) return m;
+  const rows = ok(await db().from('ritmos').select('post_id,user_id').in('post_id', postIds).order('created_at', { ascending: false }).limit(300)) as { post_id: string; user_id: string }[];
+  for (const r of rows) { const l = m.get(r.post_id) ?? []; if (l.length < 3) l.push(r.user_id); m.set(r.post_id, l); }
+  return m;
+}
 export async function ritmoGivers(postId: string): Promise<string[]> {
   return (ok(await db().from('ritmos').select('user_id').eq('post_id', postId).order('created_at', { ascending: false })) as { user_id: string }[]).map((x) => x.user_id);
 }
@@ -94,24 +102,37 @@ const BAD = /\b(fuck\w*|shit\w*|cunt\w*|bitch\w*|bastard\w*|wank\w*|dick\w*|assh
 /** A basic profanity filter for comments: letters replaced with asterisks. */
 export const cleanText = (t: string) => t.replace(BAD, (w) => `${w[0]}${'*'.repeat(w.length - 1)}`);
 
-/** "1 ritmo", "24 ritmos" */
-export const ritmoCount = (n: number) => `${n} ritmo${n === 1 ? '' : 's'}`;
-/** "Marco gave a ritmo", "Marco and Elena gave a ritmo", "Marco, Elena and 22 others gave a ritmo" */
+/** "1 Fuego", "24 Fuego" (no plural s) */
+export const fuegoCount = (n: number) => `${n} Fuego`;
+/** "Marco gave a Fuego", "Marco and Elena gave a Fuego", "Marco, Elena and 22 others gave a Fuego" */
 export function giversLine(names: string[], total: number): string {
   if (!total) return '';
-  if (total === 1) return `${names[0] ?? 'Someone'} gave a ritmo`;
-  if (total === 2 && names.length >= 2) return `${names[0]} and ${names[1]} gave a ritmo`;
-  return `${names.slice(0, 2).join(', ')} and ${total - Math.min(2, names.length)} other${total - Math.min(2, names.length) === 1 ? '' : 's'} gave a ritmo`;
+  if (total === 1) return `${names[0] ?? 'Someone'} gave a Fuego`;
+  if (total === 2 && names.length >= 2) return `${names[0]} and ${names[1]} gave a Fuego`;
+  const rest = total - Math.min(2, names.length);
+  return `${names.slice(0, 2).join(', ')} and ${rest} other${rest === 1 ? '' : 's'} gave a Fuego`;
 }
-/** Batched notification text: "Marco gave your run a ritmo", "Marco and 5 others gave your run a ritmo" */
+/** Batched notification text: "Anna gave your run a Fuego", "Anna and 5 others gave your run a Fuego" */
 export function notificationText(kind: Notification['kind'], actors: string[]): string {
   const who = actors.length === 1 ? actors[0] : `${actors[0]} and ${actors.length - 1} other${actors.length > 2 ? 's' : ''}`;
-  return kind === 'ritmo' ? `${who} gave your run a ritmo`
+  return kind === 'ritmo' ? `${who} gave your run a Fuego`
     : kind === 'comment' ? `${who} commented on your run`
     : kind === 'reply' ? `${who} replied to your comment`
     : kind === 'mention' ? `${who} mentioned you`
     : kind === 'follow' ? `${who} started following you`
     : `${who} asked to follow you`;
+}
+
+/** When a run happened, for the post header: "Today at 06:42", "Yesterday at 18:10", "Mon 9 Nov at 07:05" */
+export function whenLine(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  const t = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const day = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (day(d) === day(now)) return `Today at ${t}`;
+  if (day(d) === day(y)) return `Yesterday at ${t}`;
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })} at ${t}`;
 }
 
 /** The route for a post: start and finish trimmed (200 m each) so a home is not shown, and thinned to ~150 points. */

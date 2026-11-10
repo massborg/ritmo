@@ -1,6 +1,6 @@
 // Review #2 acceptance 10 and 17 (app side; the database rules are verified directly in Supabase): the Hub
 // only shows for flagged accounts and only after a separate opt-in; a run is posted with a chosen visibility;
-// Ritmo toggles on tap and double-tap and the count is right after rapid toggling; the "who gave a ritmo"
+// Fuego toggles on tap and double-tap and the count is right after rapid toggling; the "Fuego from"
 // list works; comment, reply and delete work. Usage: node e2e/hub.cjs (app on :4173)
 const { chromium, devices } = require('playwright');
 const { createMock } = require('./mock-supabase.cjs');
@@ -53,8 +53,8 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   check(!mock.state.tables.profiles.find((p) => p.user_id === uid)?.data?.profile?.consents?.hubSharing, 'sharing is off until the runner agrees');
   await page.locator('#hub-name').fill('Sam R');
   await page.getByRole('button', { name: 'Yes, share my runs on the Hub' }).click();
-  await page.getByText('Give a ritmo: Ritmo’s way of saying nice run.').waitFor();
-  check(true, 'first-time tip teaches the word "ritmo"');
+  await page.getByText('Give a Fuego: Ritmo’s way of saying nice run.').waitFor();
+  check(true, 'first-time tip teaches the word "Fuego"');
   await page.waitForTimeout(1600);
   const consent = mock.state.tables.profiles.find((p) => p.user_id === uid)?.data?.profile?.consents?.hubSharing;
   check(consent?.granted === true && !!consent.at, 'the consent and its date are recorded');
@@ -73,13 +73,13 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   // Ritmo: tap on, off, rapid toggling, double-tap on the route
   await page.goto(`${APP}/hub`); await page.waitForTimeout(1200);
   await page.getByRole('radio', { name: 'Your runs' }).or(page.getByRole('button', { name: 'Your runs' })).first().click(); await page.waitForTimeout(800);
-  check(await page.getByText('No ritmos yet').isVisible(), 'own post with none: "No ritmos yet"');
+  check(await page.getByText('No Fuego yet').isVisible(), 'own post with none: "No Fuego yet"');
   // No reacting to your own run: no button, and double-tapping its route does nothing
   const ownCard = page.locator('article.hub-post').first();
-  check(await ownCard.getByRole('button', { name: /Give a ritmo|Take back your ritmo/ }).count() === 0, 'your own post has no ritmo button');
+  check(await ownCard.getByRole('button', { name: /Give a Fuego|Remove your Fuego/ }).count() === 0, 'your own post has no Fuego button');
   const ownRoute = ownCard.locator('.hub-route');
   if (await ownRoute.count()) { await ownRoute.click(); await page.waitForTimeout(80); await ownRoute.click(); await page.waitForTimeout(700); }
-  check(post.ritmo_count === 0, 'double-tapping your own route does not give a ritmo');
+  check(post.ritmo_count === 0, 'double-tapping your own route does not give a Fuego');
 
   // Another runner's public post: ritmo on, off, rapid toggling, double-tap
   const otherId = '00000000-0000-4000-8000-0000000000aa';
@@ -89,9 +89,9 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   await page.goto(`${APP}/hub`); await page.waitForTimeout(1000);
   await page.getByRole('radio', { name: 'Everyone' }).or(page.getByRole('button', { name: 'Everyone' })).first().click(); await page.waitForTimeout(900);
   const card = page.locator('article.hub-post', { hasText: 'Ana morning run' });
-  const btn = card.getByRole('button', { name: /Give a ritmo|Take back your ritmo/ });
+  const btn = card.getByRole('button', { name: /Give a Fuego|Remove your Fuego/ });
   await btn.click(); await page.waitForTimeout(400);
-  check(await btn.getAttribute('aria-pressed') === 'true', 'tap gives a ritmo (aria-pressed)');
+  check(await btn.getAttribute('aria-pressed') === 'true', 'tap gives a Fuego (aria-pressed)');
   for (let i = 0; i < 5; i++) { await btn.click(); await page.waitForTimeout(120); }
   await page.waitForTimeout(1200);
   const pressed = await btn.getAttribute('aria-pressed') === 'true';
@@ -100,16 +100,19 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   const route = card.locator('.hub-route');
   await route.click(); await page.waitForTimeout(80); await route.click();
   await page.waitForTimeout(900);
-  check(other.ritmo_count === 1 && await btn.getAttribute('aria-pressed') === 'true', 'double-tapping the route gives a ritmo');
+  check(other.ritmo_count === 1 && await btn.getAttribute('aria-pressed') === 'true', 'double-tapping the route gives a Fuego');
   await page.screenshot({ path: path.join(OUT, 'feed.png') });
-  await card.locator('.ritmo-count').click();
-  await page.getByText('1 ritmo', { exact: true }).waitFor();
-  await page.getByText('Sam R gave a ritmo').waitFor({ timeout: 5000 }).catch(() => {});
-  check(await page.getByText('Sam R gave a ritmo').isVisible(), '"who gave a ritmo" lists the runner');
+  check(await card.getByText('1 Fuego', { exact: true }).isVisible(), 'the count reads "1 Fuego"');
+  await card.locator('.hub-givers').click();
+  await page.getByText('Fuego from', { exact: true }).waitFor();
+  check(true, 'the list sheet is titled "Fuego from"');
+  await page.getByText('Sam R gave a Fuego').waitFor({ timeout: 5000 }).catch(() => {});
+  check(await page.getByText('Sam R gave a Fuego').isVisible(), '"Fuego from" lists the runner');
   await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 
   // Comments: add, reply, delete
-  await page.getByRole('button', { name: /comments/ }).first().click();
+  check(await card.getByRole('button', { name: 'Remove your Fuego' }).isVisible(), 'given: the button offers "Remove your Fuego"');
+  await card.getByRole('button', { name: /^Comment/ }).click();
   await page.getByLabel('Write a comment').fill('Great run');
   await page.getByRole('button', { name: 'Send' }).click(); await page.waitForTimeout(600);
   check(await page.getByText('Great run').isVisible(), 'a comment is added');

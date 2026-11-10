@@ -155,10 +155,15 @@ describe('Hub and share privacy', () => {
     expect(r[r.length - 1][0]).toBeLessThanOrEqual(Math.round((35.9 + (4950 - 200) / 111195) * 1e5) / 1e5);
   });
   it('ritmo wording', async () => {
-    const { ritmoCount, giversLine, notificationText } = await import('../data/hub');
-    expect(ritmoCount(1)).toBe('1 ritmo');
-    expect(ritmoCount(24)).toBe('24 ritmos');
-    expect(giversLine(['Marco', 'Elena'], 24)).toBe('Marco, Elena and 22 others gave a ritmo');
-    expect(notificationText('ritmo', ['Marco', 'A', 'B', 'C', 'D', 'E'])).toBe('Marco and 5 others gave your run a ritmo');
+    const { fuegoCount, giversLine, notificationText, whenLine } = await import('../data/hub');
+    expect(fuegoCount(1)).toBe('1 Fuego');
+    expect(fuegoCount(6)).toBe('6 Fuego');
+    expect(giversLine(['Marco', 'Elena'], 24)).toBe('Marco, Elena and 22 others gave a Fuego');
+    expect(notificationText('ritmo', ['Anna'])).toBe('Anna gave your run a Fuego');
+    expect(notificationText('ritmo', ['Marco', 'A', 'B', 'C', 'D', 'E'])).toBe('Marco and 5 others gave your run a Fuego');
+    const now = new Date(2026, 10, 10, 20, 0);
+    expect(whenLine(new Date(2026, 10, 10, 6, 42).toISOString(), now)).toBe('Today at 06:42');
+    expect(whenLine(new Date(2026, 10, 9, 18, 10).toISOString(), now)).toBe('Yesterday at 18:10');
+    expect(whenLine(new Date(2026, 10, 5, 7, 5).toISOString(), now)).toBe('Thu 5 Nov at 07:05');
   });
 });

@@ -34,6 +34,7 @@ const About = lazyPage(() => import('./pages/About'));
 const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
+const ClubPage = lazyPage(() => import('./pages/Club'));
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
 const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
@@ -272,6 +273,7 @@ function Shell() {
               <Route path="/progress" element={<ToYou />} />
               <Route path="/run" element={<RunPage />} />
               <Route path="/hub" element={<HubPage />} />
+              <Route path="/hub/club/:id" element={<ClubPage />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
