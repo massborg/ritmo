@@ -854,3 +854,49 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .run-switch { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); width: 100%; min-height: 44px; border-top: 1px solid var(--hairline); padding-top: var(--s2); text-align: left; }
 .run-switch > span:last-child { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-weight: 700; }
 .run-note { text-align: center; }
+
+/* ---------- You (brief 6): period total, bars, PB tiles, run cards, races ---------- */
+.period-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0; border: 0; background: none; font: 600 17px/22px var(--font-body); color: var(--ink); cursor: pointer; }
+.you-total { align-items: flex-start; gap: 0; }
+.you-big { font: 500 clamp(64px, 20vw, 84px)/1 var(--font-mono); letter-spacing: -0.03em; }
+.you-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); width: 100%; margin-top: var(--s4); }
+.you-stats > div { display: flex; flex-direction: column; }
+.you-stats .stat { font-size: clamp(18px, 5.4vw, 22px); line-height: 1.25; white-space: nowrap; }
+.pbars { margin: 0; }
+.pbars svg { width: 100%; height: auto; display: block; }
+.pbar { fill: var(--ink); }
+.pbar.today { fill: var(--brand); }
+.pbars-grid { stroke: var(--hairline); stroke-width: 1; }
+.pbars-axis { font: 500 10px var(--font-mono); fill: var(--ink-muted); }
+.pbars-avg { stroke: var(--ink-muted); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.pbars-avg-label { font: 600 10px var(--font-body); fill: var(--ink-muted); }
+.pb-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.pb-tile { display: flex; flex-direction: column; gap: 2px; padding: var(--s3); text-decoration: none; color: var(--ink); min-width: 0; }
+.pb-tile .stat { font-size: clamp(16px, 4.8vw, 20px); white-space: nowrap; }
+.tag-new { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 700 11px/16px var(--font-body); }
+.link-row { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; font-weight: 600; color: var(--ink); text-decoration: none; }
+.insights-row { display: flex; align-items: center; gap: var(--s3); }
+.run-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.run-card-link { display: grid; grid-template-columns: 64px minmax(0, 1fr) 18px; gap: var(--s3); align-items: center; padding: var(--s3); border-radius: var(--r-card); background: var(--surface-raised); border: 1px solid var(--card-border); color: var(--ink); text-decoration: none; }
+.run-card-link:hover { background: var(--surface-sunken); }
+.run-thumb { width: 64px; height: 64px; border-radius: 10px; background: var(--surface-sunken); display: block; }
+.run-thumb-icon { display: inline-flex; align-items: center; justify-content: center; }
+.run-card-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.run-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-card-nums { display: flex; flex-wrap: wrap; gap: 4px var(--s4); }
+.run-card-nums .stat { font-size: 15px; white-space: nowrap; }
+.run-card-nums .stat small { font-size: 0.75em; margin-left: 1px; }
+.plan-tag { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 1px 8px; border-radius: 999px; font: 600 12px/18px var(--font-body); background: var(--surface-sunken); color: var(--ink-muted); max-width: 100%; }
+.plan-tag.ok { background: color-mix(in srgb, var(--success) 13%, var(--surface-raised)); color: var(--success); }
+.run-card-device { border-top: 1px solid var(--hairline); padding-top: 4px; margin-top: 2px; }
+.period-opt { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 48px; background: none; border: 0; text-align: left; color: var(--ink); font: inherit; cursor: pointer; }
+.period-opt.on { font-weight: 700; }
+.next-race-card { border: 1.5px solid var(--brand); }
+.you-countdown { font: 500 48px/1 var(--font-mono); }
+.race-vs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+.race-vs > div { display: flex; flex-direction: column; }
+.race-vs .stat { font-size: 22px; }
+.pred-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+@media (min-width: 600px) { .pred-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pred-tile { display: flex; flex-direction: column; gap: 2px; padding: var(--s3); }
+.pred-tile .stat { font-size: 20px; }

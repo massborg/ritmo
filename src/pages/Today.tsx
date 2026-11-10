@@ -211,7 +211,7 @@ export default function Today() {
         const totals = shoeTotals(data.activities, shoes, typeOf);
         const worn = shoes.map((sh) => ({ sh, km: totals.get(sh.id) ?? 0 })).find(({ sh, km }) => shoeAlert(sh, km));
         if (!worn) return null;
-        return <Link to="/you#shoes-card" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
+        return <Link to="/profile#shoes-card" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
       })()}
       {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
       {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}

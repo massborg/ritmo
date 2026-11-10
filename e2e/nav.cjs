@@ -74,9 +74,9 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   }
 
   // A link to a section opens at that section
-  await page.goto(`${APP}/you#shoes-card`); await page.waitForTimeout(1500);
+  await page.goto(`${APP}/profile#shoes-card`); await page.waitForTimeout(1500);
   const top = await page.locator('#shoes-card').evaluate((el) => el.getBoundingClientRect().top).catch(() => null);
-  check(top != null && top >= 0 && top < 300, `/you#shoes-card opens at Shoes (${top == null ? 'missing' : Math.round(top)} px)`);
+  check(top != null && top >= 0 && top < 300, `/profile#shoes-card opens at Shoes (${top == null ? 'missing' : Math.round(top)} px)`);
 
   // Desktop menu: the same five plus Profile, from a fixed list, also while loading
   const desk = await b.newContext({ viewport: { width: 1280, height: 800 }, storageState: await ctx.storageState() });

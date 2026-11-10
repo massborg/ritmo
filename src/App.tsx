@@ -35,6 +35,8 @@ const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
+const InsightsPage = lazyPage(() => import('./pages/Insights'));
+const RecordsPage = lazyPage(() => import('./pages/Records'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** The five main screens, in this order on the phone tab bar and the desktop menu. A fixed list, never built from
@@ -99,7 +101,7 @@ function ToDay() {
 
 function ScrollTop() {
   const { pathname, hash } = useLocation();
-  // A link to a section (/profile#hr, /you#shoes-card) opens at that section once the page has drawn it; anything
+  // A link to a section (/profile#hr, /profile#shoes-card) opens at that section once the page has drawn it; anything
   // else opens at the top
   useEffect(() => {
     if (!hash) { window.scrollTo(0, 0); return; }
@@ -265,6 +267,8 @@ function Shell() {
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/race/:id/day" element={<RaceDay />} />
               <Route path="/you" element={<Progress />} />
+              <Route path="/you/insights" element={<InsightsPage />} />
+              <Route path="/you/records" element={<RecordsPage />} />
               <Route path="/progress" element={<ToYou />} />
               <Route path="/run" element={<RunPage />} />
               <Route path="/hub" element={<HubPage />} />

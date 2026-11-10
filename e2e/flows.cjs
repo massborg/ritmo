@@ -330,8 +330,10 @@ async function run(label, deviceOpts) {
     assert(coachCalls() === 1, 'AI coach not called after consent');
     mock.state.coachStatus = undefined;
   }, page);
-  await step(P('Progress and race pages explain locked predictions'), async () => {
-    await page.goto(`${APP}/progress`);
+  await step(P('You, Insights and race pages explain locked predictions'), async () => {
+    await page.goto(`${APP}/you?tab=races`);
+    await see(page, 'Predictions need a timed effort');
+    await page.goto(`${APP}/you/insights`);
     await see(page, 'Race predictions are based on a timed effort');
     await see(page, 'Fitness, fatigue and form need a few weeks');
     await page.goto(`${APP}/race/new`);
@@ -427,7 +429,7 @@ async function run(label, deviceOpts) {
     await see(page, 'Paces measured from your runs');
     await startPlan(page);
     assert(await page.locator('.avatar-photo img').count() === 1, 'photo not in the top bar');
-    await page.goto(`${APP}/progress`);
+    await page.goto(`${APP}/you/insights`);
     await see(page, 'Estimated race times');
     if (process.env.DEBUG) { const a = await page.evaluate(() => window.__puts); await page.waitForTimeout(3000); console.log('puts in 3s', (await page.evaluate(() => window.__puts)) - a, 'tsb'); }
     await page.waitForTimeout(4000);
