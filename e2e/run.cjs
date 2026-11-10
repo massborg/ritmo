@@ -82,6 +82,12 @@ async function account(mock, ctx, email, flagged) {
   await page.getByRole('button', { name: 'Hide map' }).click();
   check(await page.locator('.run-route image').count() === 0 && await page.getByRole('img', { name: 'Your route so far' }).isVisible(), 'Hide map leaves only the route');
   await page.getByRole('button', { name: 'Show map' }).click();
+  // Pause and finish are on screen while running, above the tab bar (not scrolled away below the map)
+  const vh = page.viewportSize().height;
+  const tabTop = await page.locator('.tabbar').evaluate((el) => el.getBoundingClientRect().top).catch(() => vh);
+  const pb = await page.getByRole('button', { name: 'Pause' }).boundingBox();
+  const fb = await page.getByRole('button', { name: 'Hold to finish the run' }).boundingBox();
+  check(pb && fb && pb.y >= 0 && pb.y + pb.height <= Math.min(vh, tabTop) - 4 && fb.y + fb.height <= Math.min(vh, tabTop) - 4, `Pause and Hold to finish are visible while running, above the tab bar (pause bottom ${Math.round(pb?.y + pb?.height)}, tab bar ${Math.round(tabTop)})`);
   await page.getByRole('button', { name: 'Pause' }).click();
   for (let i = 0; i < 20; i++) await step(2.5, false);
   await page.getByRole('button', { name: 'Resume' }).click();

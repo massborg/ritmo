@@ -20,7 +20,7 @@ const stub = () => {
   ].map(([name, lang, voiceURI]) => ({ name, lang, voiceURI, localService: true, default: false }));
   window.__spoken = [];
   window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; this.rate = 1; } };
-  const synth = { getVoices: () => list, speak: (u) => window.__spoken.push({ text: u.text, voice: u.voice?.voiceURI, rate: u.rate }), cancel() {}, addEventListener() {}, removeEventListener() {} };
+  const synth = { getVoices: () => (window.__voicesHidden ? [] : list), speak: (u) => window.__spoken.push({ text: u.text, voice: u.voice?.voiceURI, rate: u.rate }), cancel() {}, addEventListener() {}, removeEventListener() {} };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => synth });
 };
 
@@ -91,6 +91,15 @@ const stub = () => {
   await page.locator('.run-live').waitFor({ timeout: 8000 });
   const spoken = await page.evaluate(() => window.__spoken);
   check(spoken.length >= 3 && spoken.every((x) => x.voice === 'com.apple.voice.enhanced.en-US.Samantha' && x.rate === 1.1), `the run's cues use the chosen voice and speed (${spoken.map((x) => x.text).join(' | ')})`);
+
+  // iPhone: the voice list is empty for a moment. The first cue must wait for the chosen voice, not use the default one
+  await page.goto(`${APP}/run`); await page.getByRole('tab', { name: 'Free run' }).click().catch(() => {});
+  await page.getByText(/GPS ready/).waitFor({ timeout: 10000 });
+  await page.evaluate(() => { window.__spoken.length = 0; window.__voicesHidden = true; setTimeout(() => { window.__voicesHidden = false; }, 400); });
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.locator('.run-live').waitFor({ timeout: 10000 }); await page.waitForTimeout(1600);
+  const late = await page.evaluate(() => window.__spoken.filter((x) => x.text));
+  check(late.length >= 3 && late.every((x) => x.voice === 'com.apple.voice.enhanced.en-US.Samantha'), `when the phone lists its voices late, no cue is spoken in the default voice (${late.map((x) => `${x.text}:${x.voice ? 'chosen' : 'DEFAULT'}`).join(' | ')})`);
 
   await b.close();
   console.log(`\n${passed} passed, ${failed} failed`);
