@@ -131,3 +131,22 @@ export function Chips<T extends string | number>({ label, value, options, onChan
     </fieldset>
   );
 }
+
+/** A sensible default start time: for today, now minus the run's length (rounded to 5 minutes); otherwise empty */
+export function defaultStart(date: string, durationS?: number): string {
+  if (date !== new Date().toISOString().slice(0, 10)) return '';
+  const d = new Date(Date.now() - (durationS ?? 1800) * 1000);
+  d.setMinutes(Math.floor(d.getMinutes() / 5) * 5);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** "Start time": when the run began, so a run logged by hand later still shows its real time and matches the watch */
+export function StartTimeField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>Start time</label>
+      <input id={id} type="time" className="input" value={value} onChange={(e) => onChange(e.target.value)} />
+      <p className="caption">When you started. If your watch syncs this run later, Ritmo keeps one copy with your answers.</p>
+    </div>
+  );
+}

@@ -47,7 +47,13 @@ export function findDuplicates(acts: Activity[]): [Activity, Activity][] {
       if (isDuplicatePair(sorted[i], sorted[j])) { out.push([sorted[i], sorted[j]]); used.add(sorted[i].id); used.add(sorted[j].id); }
     }
   }
-  return out.reverse();
+  // A run logged by hand and the same run synced from a watch: same day, distances within 15% (a typed estimate)
+  for (const m of sorted.filter((a) => a.source === 'manual' && !used.has(a.id))) {
+    const day = m.startTime.slice(0, 10);
+    const twin = sorted.find((a) => a.source !== 'manual' && a.source !== 'sample' && !used.has(a.id) && a.startTime.slice(0, 10) === day && close(a.distanceM, m.distanceM, 0.15));
+    if (twin) { out.push(twin.startTime < m.startTime ? [twin, m] : [m, twin]); used.add(m.id); used.add(twin.id); }
+  }
+  return out.sort((x, y) => x[0].startTime.localeCompare(y[0].startTime)).reverse();
 }
 
 /** Merges two copies of a run: the more detailed one stays, keeping everything the runner set on either copy. */

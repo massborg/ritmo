@@ -49,8 +49,11 @@ export function buildReport(o: {
   const type = an.type;
   const avgPace = a.movingS / (a.distanceM / 1000);
   const workStep = planned?.steps.find((s) => s.kind === 'work' && s.pace);
-  const target = workStep?.pace ?? (planned?.paceTarget ? [planned.paceTarget.minSPerKm, planned.paceTarget.maxSPerKm] as [number, number] : undefined);
   const reps = workReps(a, o.workPace);
+  // Reps are judged against the planned rep pace only, never the easy-pace band of the whole run (update 2, §1.3).
+  // Strides (reps under a minute with no rep pace in the plan) are shown without a target.
+  const sessionBand = planned?.paceTarget ? [planned.paceTarget.minSPerKm, planned.paceTarget.maxSPerKm] as [number, number] : undefined;
+  const target = workStep?.pace ?? (reps.length ? undefined : sessionBand);
   const tol = 3; // seconds per km either side of the band
   if (target) for (const r of reps) if (r.paceS) r.inTarget = r.paceS >= target[0] - tol && r.paceS <= target[1] + tol;
 

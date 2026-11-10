@@ -28,6 +28,7 @@ export default function Profile() {
   const [photo, setPhoto] = useState(false);
   const goalText = aRace?.goalS ? `${aRace.name} in ${duration(aRace.goalS)}` : p.goal;
   const hasHr = data.activities.some((a) => a.avgHr);
+  const lastSync = data.sources.map((x) => x.lastSyncAt).filter(Boolean).sort().pop();
   const ill = p.illnessUntil && p.illnessUntil >= today.toISOString().slice(0, 10);
   // One-line summaries for the Training list
   const shoes = useMemo(() => (p.shoes ?? []).filter((x) => !x.retired), [p.shoes]);
@@ -76,7 +77,7 @@ export default function Profile() {
       <section className="stack-sm" aria-labelledby="data-h">
         <h2 id="data-h" className="label muted">Data and privacy</h2>
         <div className="group">
-          <Row to="/profile/data" icon={<Database size={18} strokeWidth={2} />} title="Data sources" sub={`${data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}${data.sources[0]?.lastSyncAt ? ` · last import ${relTime(data.sources[0].lastSyncAt)}` : ''}`} />
+          <Row to="/profile/data" icon={<Database size={18} strokeWidth={2} />} title="Data sources" sub={`${data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}${lastSync ? ` · last synced ${relTime(lastSync)}` : ''}`} />
           <Row to="/profile/privacy" icon={<Shield size={18} strokeWidth={2} />} title="Privacy and your data" />
         </div>
       </section>

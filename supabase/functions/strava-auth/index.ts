@@ -2,10 +2,11 @@
 //   { action: 'start' }                        -> { url }  Strava's consent page
 //   { action: 'finish', code, state, scope }   -> { connected: true }  and the last 30 days of runs are fetched
 //   { action: 'disconnect' }                   -> { connected: false } (access revoked at Strava, data removed)
+//   { action: 'sync' }                         -> { queued, checkedAt }  "Sync now": queue any recent run not yet in Ritmo
 // The runner is identified from their own access token. Strava tokens never leave the server.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
-import { accessTokenFor, admin, clientId, configured, deauthorize, expiry, fetchRun, inBackground, isRun, redirectUri, STRAVA, tokenRequest } from '../_shared/strava.ts';
+import { accessTokenFor, admin, catchUp, clientId, configured, deauthorize, expiry, fetchRun, inBackground, isRun, redirectUri, STRAVA, tokenRequest } from '../_shared/strava.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -82,6 +83,15 @@ Deno.serve(async (req) => {
       // Strava limits how many runners a new app can connect until it raises the app's capacity
       if (/\((403|429)\)/.test((e as Error).message)) return json({ error: 'strava_full', message: 'Strava sync is full right now: Strava limits how many runners a new app can connect until it approves more. Your runs are safe; please try again later, or upload your files in the meantime.' }, 503);
       return json({ error: 'connect_failed', message: `Strava could not be connected: ${(e as Error).message}` }, 502);
+    }
+  }
+
+  if (body.action === 'sync') {
+    const { data: c } = await db.from('strava_connections').select('user_id').eq('user_id', uid).maybeSingle();
+    if (!c) return json({ error: 'not_connected', message: 'Strava is not connected.' }, 400);
+    try { return json({ queued: await catchUp(db, uid, 14), checkedAt: new Date().toISOString() }); } catch (e) {
+      if (/\(429\)/.test((e as Error).message)) return json({ error: 'busy', message: 'Strava is busy right now. Ritmo will try again within the hour.' }, 503);
+      return json({ error: 'sync_failed', message: `Strava could not be checked: ${(e as Error).message}` }, 502);
     }
   }
 

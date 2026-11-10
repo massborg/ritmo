@@ -63,3 +63,45 @@ export function inBackground(p: Promise<unknown>): void {
   const rt = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => undefined);
 }
+
+/** Catch-up behind the webhook (update 2, §5): asks Strava for the runner's recent runs and queues any that Ritmo
+ *  has not got yet, so a lost or delayed push never loses a run. Skips runs already imported, already waiting, or
+ *  deleted in Ritmo (they must not come back). Returns how many runs were queued. */
+export async function catchUp(db: SupabaseClient, userId: string, days = 7): Promise<number> {
+  const token = await accessTokenFor(db, userId);
+  if (!token) return 0;
+  const after = Math.floor(Date.now() / 1000) - days * 86400;
+  const r = await fetch(`${STRAVA.api}/athlete/activities?after=${after}&per_page=60`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error(`Strava activity list (${r.status})`);
+  const list = (await r.json() as { id: number; sport_type?: string; type?: string }[]).filter(isRun);
+  if (!list.length) return 0;
+  const ids = list.map((a) => String(a.id));
+  const [{ data: have }, { data: waiting }, { data: gone }] = await Promise.all([
+    db.from('activities').select('source_ids').eq('user_id', userId).in('source_ids->>strava', ids),
+    db.from('strava_inbox').select('activity_id').eq('user_id', userId).in('activity_id', ids),
+    db.from('activity_deletions').select('id').eq('user_id', userId).in('id', ids.map((i) => `strava-${i}`)),
+  ]);
+  const skip = new Set<string>([
+    ...((have ?? []) as { source_ids: { strava?: string } }[]).map((x) => String(x.source_ids?.strava)),
+    ...((waiting ?? []) as { activity_id: string }[]).map((x) => x.activity_id),
+    ...((gone ?? []) as { id: string }[]).map((x) => x.id.replace(/^strava-/, '')),
+  ]);
+  let queued = 0;
+  for (const id of ids.filter((i) => !skip.has(i))) {
+    const run = await fetchRun(token, id);
+    if (run) { await db.from('strava_inbox').upsert({ user_id: userId, activity_id: id, payload: run }, { onConflict: 'user_id,activity_id' }); queued++; }
+  }
+  return queued;
+}
+
+/** The hourly catch-up for every connected runner (called from the scheduler). Strava allows 100 requests per
+ *  15 minutes, so this stops early and carries on next hour if there are many runners. */
+export async function catchUpAll(db: SupabaseClient): Promise<{ runners: number; queued: number }> {
+  const { data } = await db.from('strava_connections').select('user_id').order('updated_at');
+  let queued = 0, runners = 0;
+  for (const c of (data ?? []) as { user_id: string }[]) {
+    if (runners >= 25) break;
+    try { queued += await catchUp(db, c.user_id, 3); runners++; } catch (e) { console.error('strava catch-up', (e as Error).message); if (/\(429\)/.test((e as Error).message)) break; }
+  }
+  return { runners, queued };
+}

@@ -979,3 +979,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 /* Challenge medals (public/brand/badges) */
 .badge-img { width: 52px; height: 52px; flex: none; display: block; }
 .badge-img-lg { width: 72px; height: 72px; }
+/* Update 2: rebuild summary */
+.rebuild-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
+.rebuild-stats > div { display: flex; flex-direction: column; background: var(--surface-sunken); border-radius: var(--r-card); padding: var(--s3); }
+.rebuild-stats .stat { font-size: 22px; line-height: 28px; }

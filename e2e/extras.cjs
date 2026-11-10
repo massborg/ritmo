@@ -60,8 +60,8 @@ const ymd = (d) => d.toISOString().slice(0, 10);
   const row = (id) => mock.state.tables.activities.find((r) => r.id === id);
 
   // ---- Classic week preset and week preview ----
-  await page.goto(`${APP}/goals`); await page.getByText('Classic week').waitFor({ timeout: 15000 });
-  await tap(page.getByRole('button', { name: 'Use it' }));
+  await page.goto(`${APP}/goals`); await page.getByText(/Classic week/).first().waitFor({ timeout: 15000 });
+  await tap(page.getByRole('button', { name: 'Apply', exact: true }));
   await page.waitForTimeout(600);
   const week = await page.locator('.week-preview li').allTextContents();
   check(/^Mon.*Threshold/.test(week[0] ?? '') && /^Thu.*Intervals/.test(week[3] ?? '') && /^Sat.*Long run/.test(week[5] ?? ''), `Classic week preview: ${week.map((w) => w.replace(/\d+/g, '').trim()).join(' | ')}`);

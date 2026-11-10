@@ -6,7 +6,7 @@ import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
 import { Empty, Lanes, StatusLine, ZoneTag } from '../components/ui';
 import { AppHeader, SampleChip, SectionTitle, Tile, WeekStrip, WorkoutGraph } from '../components/app';
-import { CheckInCard, MonthPlan, NextRaceCard, PlanChanges, ReadinessStrip, RestOfWeek, SessionSheet, WeekBar } from '../components/training';
+import { CheckInCard, MonthPlan, NextRaceCard, PlanChanges, ReadinessStrip, RebuildSheet, RestOfWeek, SyncNote, SessionSheet, WeekBar } from '../components/training';
 import { buildReport } from '../training/report';
 import { buildVerdict } from '../training/verdict';
 import { forStats } from '../data/quality';
@@ -69,11 +69,12 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
 const primeSpeech = () => { try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch { /* cues are optional */ } };
 
 export default function Today() {
-  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue } = useApp();
+  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen } = useApp();
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
   const [params] = useSearchParams();
+  const [showRebuild, setShowRebuild] = useState(() => params.get('rebuilt') === '1');
   const [selected, setSelected] = useState(() => { const d = params.get('day'); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : t; });
   const [sheetDay, setSheetDay] = useState<string>();
   const [explaining, setExplaining] = useState(false);
@@ -196,6 +197,7 @@ export default function Today() {
               </div>
             );
           })()}
+          <SyncNote />
           {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} />}
         </div>
       )}
@@ -386,6 +388,7 @@ export default function Today() {
       )}
       </SeeMore>
       <PlanChanges />
+      {showRebuild && <RebuildSheet onClose={() => { setShowRebuild(false); markRebuildSeen(); }} />}
       {data.mode === 'real' && <InstallPrompt />}
       <SessionSheet date={sheetDay} onClose={() => setSheetDay(undefined)} />
       {sheet}

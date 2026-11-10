@@ -46,6 +46,8 @@ export interface MergeResult {
   added: number;
   replaced: number; // an existing run was upgraded with a more detailed version
   duplicates: number; // incoming runs we already had at equal or better detail
+  /** Incoming run id → the id it was merged into, so answers saved with it (how it felt) follow the run */
+  mapped: Record<string, string>;
 }
 
 /** Merge incoming activities into existing ones. Sorted by start time; O(n log n) via a time index. */
@@ -53,6 +55,7 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
   const list = [...existing].sort((a, b) => a.startTime.localeCompare(b.startTime));
   const times = list.map((a) => new Date(a.startTime).getTime());
   let added = 0, replaced = 0, duplicates = 0;
+  const mapped: Record<string, string> = {};
   const findNear = (t: number) => {
     let lo = 0, hi = times.length;
     while (lo < hi) { const m = (lo + hi) >> 1; if (times[m] < t - 180000) lo = m + 1; else hi = m; }
@@ -65,8 +68,10 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
     // A run logged by hand ("I've done this run") has a rough time and distance: the watch file that arrives
     // later for the same day replaces it instead of adding a duplicate
     const day = inc.startTime.slice(0, 10);
+    // …and the other way round: a run logged by hand for a day that already has the synced run joins that run
+    const near = (x: Activity) => x.startTime.slice(0, 10) === day && Math.abs(x.distanceM - inc.distanceM) / Math.max(x.distanceM, inc.distanceM, 1) < 0.15;
     const match = findNear(t).find((i) => isSameRun(list[i], inc))
-      ?? (inc.source !== 'manual' ? list.findIndex((x) => x.source === 'manual' && x.startTime.slice(0, 10) === day && Math.abs(x.distanceM - inc.distanceM) / Math.max(x.distanceM, inc.distanceM, 1) < 0.15) : -1);
+      ?? (inc.source !== 'manual' ? list.findIndex((x) => x.source === 'manual' && near(x)) : list.findIndex((x) => x.source !== 'manual' && x.source !== 'sample' && near(x)));
     if (match === undefined || match < 0) {
       let pos = times.findIndex((x) => x > t);
       if (pos < 0) pos = times.length;
@@ -75,6 +80,7 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       added++;
     } else {
       const cur = list[match];
+      mapped[inc.id] = cur.id;
       const sourceIds = { ...cur.sourceIds, ...inc.sourceIds };
       if (inc.detailScore > cur.detailScore) {
         // What the runner told us stays: the planned session link, reps they entered, race marks
@@ -82,10 +88,10 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
           reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device };
         replaced++;
       } else {
-        list[match] = { ...cur, sourceIds, device: cur.device ?? inc.device };
+        list[match] = { ...cur, sourceIds, device: cur.device ?? inc.device, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId, reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media };
         duplicates++;
       }
     }
   }
-  return { activities: list, added, replaced, duplicates };
+  return { activities: list, added, replaced, duplicates, mapped };
 }

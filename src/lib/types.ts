@@ -299,7 +299,7 @@ export type Phase = 'base' | 'build' | 'peak' | 'taper' | 'recovery' | 'race';
 export interface PlanChange {
   id: string;
   at: string; // ISO
-  reason: 'missed' | 'harder' | 'easier' | 'illness' | 'race-date' | 'moved' | 'rebuilt' | 'pain';
+  reason: 'missed' | 'harder' | 'easier' | 'illness' | 'race-date' | 'moved' | 'rebuilt' | 'pain' | 'paces';
   summary: string; // plain-English explanation shown to the runner
 }
 
@@ -319,6 +319,14 @@ export interface Plan {
   changes: PlanChange[];
   /** Weekly volume targets, so screens can compare planned, done and target */
   weeks?: PlanWeek[];
+  /** After a rebuild: the plan it replaced, kept 24 hours for "Restore previous plan" */
+  previous?: { at: string; plan: Plan };
+  /** After a rebuild: no automatic load adjustments before this date (YYYY-MM-DD) */
+  noAutoAdjustUntil?: string;
+  /** After a rebuild: what changed, for the summary sheet on Training */
+  rebuild?: import('../training/rebuild').RebuildSummary & { seen?: boolean };
+  /** The training paces last shown to the runner (easy range, s/km), to explain when they change */
+  pacesShown?: { easy: [number, number]; threshold: [number, number]; at: string };
 }
 
 export interface SourceStatus {

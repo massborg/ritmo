@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Image as ImageIcon, Watch, PenLine } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { Chips, DurationField, Sheet } from './inputs';
+import { Chips, DurationField, Sheet, StartTimeField, defaultStart } from './inputs';
 import { Segmented, StatusLine } from './ui';
 import { PAIN_AREAS } from './LogRun';
 import { ScreenshotReader } from './ScreenshotReader';
@@ -52,6 +52,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
   const [tab, setTab] = useState<Tab>(candidates.length ? 'watch' : 'manual');
   const [pick, setPick] = useState<string | undefined>(candidates[0]?.id);
   const [durationS, setDurationS] = useState<number | undefined>(session.durationS || undefined);
+  const [time, setTime] = useState(() => defaultStart(session.date, session.durationS));
   const [km, setKm] = useState(session.distanceM ? String(Math.round(session.distanceM / 100) / 10) : '');
   const [avgHr, setAvgHr] = useState('');
   const [rows, setRows] = useState<RepRow[]>(() => repRowsFromPlan(session));
@@ -87,7 +88,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
     if (!total || total < 60) { setErr('Add the total time, or the time of each rep.'); return; }
     if (!kmNum || kmNum <= 0 || kmNum > 100) { setErr('Add the distance in kilometres. A good guess is fine.'); return; }
     const fb = feedbackFor('');
-    const id = logManualRun({ date: session.date, durationS: total, distanceM: kmNum * 1000, feel: fb.feel, rpe, pain: fb.pain, notes: fb.notes, sessionId: session.id, avgHr: Number(avgHr) || undefined, reps, media });
+    const id = logManualRun({ date: session.date, time: time || undefined, durationS: total, distanceM: kmNum * 1000, feel: fb.feel, rpe, pain: fb.pain, notes: fb.notes, sessionId: session.id, avgHr: Number(avgHr) || undefined, reps, media });
     onClose(); nav(`/activity/${id}`);
   };
 
@@ -126,6 +127,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
       {tab === 'manual' && (
         <div className="stack">
           <div className="grid-2">
+            <StartTimeField id="ls-start" value={time} onChange={setTime} />
             <DurationField id="ls-time" label="Total time" value={durationS} onChange={setDurationS} />
             <div className="field"><label htmlFor="ls-km">Distance (km)</label><input id="ls-km" className="input" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} /></div>
           </div>
