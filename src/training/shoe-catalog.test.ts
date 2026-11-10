@@ -43,4 +43,15 @@ describe('shoe finder', () => {
   it('the drawings carry no scripts, links or images', () => {
     for (const parts of Object.values(SHOE_SHAPES)) for (const [, d] of parts) expect(d).toMatch(/^[MmLlHhVvQqCcZz0-9 .,-]+$/);
   });
+
+  it('covers the brands runners use, with current models (about 250)', () => {
+    expect(SHOE_CATALOG.length).toBeGreaterThanOrEqual(240);
+    for (const b of ['Under Armour', 'Topo Athletic', 'Kiprun', 'Karhu', 'Inov-8', 'Skechers', 'Craft', 'Merrell']) expect(SHOE_CATALOG.some((s) => s.brand === b)).toBe(true);
+    expect(searchShoes('topo phantom')[0]?.shape).toBe('wide-toe');
+    expect(searchShoes('kiprun kd900x ld')[0]?.shape).toBe('carbon-racer');
+    expect(searchShoes('speedgoat')[0]?.shape).toBe('trail');
+    // A brand filter shows every model of that brand
+    expect(searchShoes('', 'HOKA', 100).length).toBe(SHOE_CATALOG.filter((s) => s.brand === 'HOKA').length);
+  });
 });
+

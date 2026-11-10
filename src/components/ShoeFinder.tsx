@@ -99,7 +99,7 @@ export function ShoeFinder({ open, onClose, onSave }: { open: boolean; onClose: 
   const [start, setStart] = useState(ymd(new Date()));
   const [startKm, setStartKm] = useState<number | undefined>(0);
   const [retire, setRetire] = useState<number | undefined>(700);
-  const results = useMemo(() => searchShoes(q, brand), [q, brand]);
+  const results = useMemo(() => searchShoes(q, brand, brand ? 100 : 30), [q, brand]);
 
   const reset = () => { setShoeId(uid()); setPhoto(undefined); setPreview(undefined); setStep('find'); setQ(''); setBrand(undefined); setPick(null); setColour(undefined); setName(''); setNamed(false); setUse('everyday'); setStart(ymd(new Date())); setStartKm(0); setRetire(700); };
   // A photo taken but not saved with a shoe is removed again, so nothing is left behind in storage
