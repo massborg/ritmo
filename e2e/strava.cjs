@@ -14,7 +14,10 @@ const tap = async (loc) => { await loc.waitFor({ timeout: 15000 }); await loc.ev
 
 // A Strava run with streams; `km` and `name` are distinctive so we can prove the AI never hears about them
 const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
-  const start = new Date(Date.now() - daysAgo * 86400000); start.setUTCHours(6, 30, 0, 0);
+  // An evening start the sample runner never uses, so no Strava run is merged into one of the fixture's own runs
+  // (same morning, similar distance) on some days of the week; today's run starts two hours ago
+  const start = daysAgo ? new Date(Date.now() - daysAgo * 86400000) : new Date(Date.now() - 2 * 3600000);
+  if (daysAgo) start.setUTCHours(17, 45, 0, 0);
   const n = 60, secs = Math.round(km * 300);
   return {
     activity: { id, name, sport_type: sport, start_date: start.toISOString(), distance: km * 1000, moving_time: secs, elapsed_time: secs + 30, total_elevation_gain: 55, average_heartrate: 151, max_heartrate: 176, average_cadence: 87, device_name: 'Garmin Forerunner 265' },

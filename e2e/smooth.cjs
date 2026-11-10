@@ -51,7 +51,9 @@ const watch = () => {
   };
 
   // 1) Cold: open a run right away, before its page code has arrived (it takes 700 ms)
-  await page.goto(`${APP}/`); await page.locator('a[href^="/activity/"]').first().waitFor({ timeout: 8000 });
+  // Yesterday on Training always lists the fixture's runs (today depends on the day of the week)
+  const y = new Date(Date.now() - 86400000); const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+  await page.goto(`${APP}/?day=${yesterday}`); await page.locator('a[href^="/activity/"]').first().waitFor({ timeout: 8000 });
   let f = await tapAndWatch(page.locator('a[href^="/activity/"]').first(), /\/activity\//);
   check(f.every((x) => !x.loading), `opening a run never shows the loading placeholder (${f.length} frames)`);
   check(f.every((x) => x.chars > 40), `the screen is never blank while the run page loads (fewest characters on screen: ${Math.min(...f.map((x) => x.chars))})`);
