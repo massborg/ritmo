@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, ChevronRight, Database, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
+import { Camera, ChevronRight, Database, Volume2, KeyRound, LogOut, Shield, Target, Thermometer, UserRound } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
 import { AppHeader, SampleChip } from '../components/app';
@@ -10,7 +10,6 @@ import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/fo
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
-import { RunVoiceCard } from '../components/RunVoiceCard';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
@@ -55,7 +54,11 @@ export default function Profile() {
       </div>
 
       <PushReminders />
-      <RunVoiceCard />
+      <section className="card stack-sm" aria-labelledby="run-settings-h">
+        <div className="row" style={{ gap: 8 }}><Volume2 size={20} strokeWidth={2} aria-hidden="true" /><h2 id="run-settings-h" className="title">Run settings</h2></div>
+        <p className="muted">The voice and speed of spoken cues, which cues you hear, the countdown, auto-pause and keeping the screen on.</p>
+        <Link to="/run?settings=1" className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Open run settings <ChevronRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
+      </section>
       <CalendarFeed />
 
       <section className="card stack" aria-labelledby="ill">
