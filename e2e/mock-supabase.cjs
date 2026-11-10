@@ -25,9 +25,9 @@ function jwt(user) {
 
 function createMock() {
   const state = { users: new Map(), tokens: new Map(), tables: {}, emails: [], offline: false, calls: [], files: new Map(), signed: new Map(), rpc: [] };
-  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags', 'hub_profiles', 'posts', 'ritmos', 'comments', 'notifications', 'follows', 'blocks', 'reports', 'strava_inbox'];
+  const TABLES = ['profiles', 'activities', 'races', 'plans', 'session_feedback', 'sources', 'coach_messages', 'activity_deletions', 'feature_flags', 'hub_profiles', 'posts', 'ritmos', 'comments', 'notifications', 'follows', 'blocks', 'reports', 'strava_inbox', 'clubs', 'club_members', 'group_runs', 'group_run_going'];
   TABLES.forEach((t) => (state.tables[t] = []));
-  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'], hub_profiles: ['user_id'], posts: ['id'], ritmos: ['post_id', 'user_id'], comments: ['id'], notifications: ['id'], follows: ['follower_id', 'followee_id'], blocks: ['blocker_id', 'blocked_id'], reports: ['reporter_id', 'created_at'] };
+  const keyOf = { profiles: ['user_id'], activities: ['user_id', 'id'], races: ['user_id', 'id'], plans: ['user_id', 'id'], session_feedback: ['user_id', 'activity_id'], sources: ['user_id', 'kind'], coach_messages: ['user_id', 'id'], activity_deletions: ['user_id', 'id'], feature_flags: ['user_id', 'flag'], hub_profiles: ['user_id'], posts: ['id'], ritmos: ['post_id', 'user_id'], comments: ['id'], notifications: ['id'], follows: ['follower_id', 'followee_id'], blocks: ['blocker_id', 'blocked_id'], reports: ['reporter_id', 'created_at'], clubs: ['id'], club_members: ['club_id', 'user_id'], group_runs: ['id'], group_run_going: ['group_run_id', 'user_id'] };
   let clock = 0;
   const stamp = () => { const t = Math.max(Date.now(), clock + 1); clock = t; return new Date(t).toISOString(); };
 
@@ -104,6 +104,7 @@ function createMock() {
     const op = opval.slice(0, i), val = opval.slice(i + 1);
     const v = getPath(r, col);
     if (op === 'is') return val === 'null' ? v == null : String(v) === val;
+    if (op === 'ilike') return v != null && String(v).toLowerCase().includes(val.replace(/%/g, '').replace(/\*/g, '').toLowerCase());
     if (op === 'in') return val.replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"|"$/g, '')).includes(String(v));
     if (v == null) return false;
     if (op === 'eq') return String(v) === val;
@@ -130,16 +131,38 @@ function createMock() {
   };
   const RESERVED = ['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'];
 
+  // The database's club triggers: the creator becomes admin, member and going counts
+  function clubTriggers(table, r) {
+    const T = state.tables;
+    if (table === 'clubs') T.club_members.push({ club_id: r.id, user_id: r.created_by, role: 'admin', on_leaderboard: true, joined_at: new Date().toISOString() });
+    if (table === 'clubs' || table === 'club_members') for (const c of T.clubs) c.member_count = T.club_members.filter((m) => m.club_id === c.id).length;
+    if (table === 'clubs') { const c = T.clubs.find((x) => x.id === r.id); if (c) c.created_at = c.created_at ?? new Date().toISOString(); }
+    if (table === 'group_runs') { const g = T.group_runs.find((x) => x.id === r.id); if (g) g.going_count = 0; }
+    if (table === 'group_run_going') for (const g of T.group_runs) g.going_count = T.group_run_going.filter((x) => x.group_run_id === g.id).length;
+  }
+  function leaderboardRpc(u, body) {
+    const T = state.tables;
+    if (!T.club_members.some((m) => m.club_id === body.c && m.user_id === u.id)) return [];
+    return T.club_members.filter((m) => m.club_id === body.c && m.on_leaderboard).map((m) => {
+      const acts = T.activities.filter((a) => a.user_id === m.user_id && a.start_time >= body.since && a.source !== 'strava' && a.source !== 'sample');
+      return { user_id: m.user_id, display_name: T.hub_profiles.find((h) => h.user_id === m.user_id)?.display_name ?? 'Runner', distance_m: acts.reduce((s, a) => s + (a.distance_m ?? 0), 0), runs: acts.length };
+    }).sort((a, b) => b.distance_m - a.distance_m);
+  }
+
   function rest(table, method, url, body, req, headers) {
     const u = userFromReq(req);
     if (!u) return { status: 401, body: { code: '42501', message: 'permission denied' } };
     const rows = state.tables[table];
     if (!rows) return { status: 404, body: { message: 'no table' } };
     const filters = [...url.searchParams.entries()].filter(([k]) => !RESERVED.includes(k));
-    const owner = (r) => r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id;
+    const owner = (r) => r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id ?? r.created_by;
+    // Clubs: members see their club's members, group runs and who is going (like the real row rules)
+    const memberOf = (clubId) => state.tables.club_members.some((m) => m.club_id === clubId && m.user_id === u.id);
+    const runClub = (id) => state.tables.group_runs.find((g) => g.id === id)?.club_id;
+    const clubReadable = (r) => table === 'clubs' || (table === 'club_members' && memberOf(r.club_id)) || (table === 'group_runs' && memberOf(r.club_id)) || (table === 'group_run_going' && memberOf(runClub(r.group_run_id)));
     const match = (r) => owner(r) === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     // Reads mirror the real row rules: public posts and runner profiles are readable by everyone signed in
-    const readable = (r) => (owner(r) === u.id || (table === 'posts' && r.visibility === 'everyone') || table === 'hub_profiles') && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
+    const readable = (r) => (owner(r) === u.id || (table === 'posts' && r.visibility === 'everyone') || table === 'hub_profiles' || table === 'ritmos' || clubReadable(r)) && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     if (method === 'GET' || method === 'HEAD') {
       let out = rows.filter(readable);
       const total = out.length;
@@ -163,7 +186,9 @@ function createMock() {
     if (method === 'POST') {
       const list = Array.isArray(body) ? body : [body];
       for (const r of list) {
-        if ((r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id) !== u.id) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
+        if (table === 'group_runs' && !state.tables.club_members.some((m) => m.club_id === r.club_id && m.user_id === u.id && m.role === 'admin')) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
+        if (table === 'club_members' && r.role !== 'member') return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
+        if ((r.user_id ?? r.follower_id ?? r.blocker_id ?? r.reporter_id ?? r.created_by) !== u.id) return { status: 403, body: { code: '42501', message: 'new row violates row-level security policy' } };
         const k = keyOf[table];
         const i = rows.findIndex((x) => k.every((c) => String(x[c]) === String(r[c])));
         const t = table === 'activities' ? { updated_at: stamp() } : {};
@@ -172,6 +197,7 @@ function createMock() {
           const post = state.tables.posts.find((p) => p.id === r.post_id);
           if (post && table === 'ritmos') post.ritmo_count++;
           if (post && table === 'comments') post.comment_count++;
+          clubTriggers(table, r);
         }
       }
       return { status: 201, body: null };
@@ -185,6 +211,8 @@ function createMock() {
         const post = state.tables.posts.find((p) => p.id === rows[i].post_id);
         if (post && table === 'ritmos') post.ritmo_count = Math.max(0, post.ritmo_count - 1);
         if (post && table === 'comments') post.comment_count = Math.max(0, post.comment_count - 1);
+        const gone = rows[i];
+        if (table === 'club_members' || table === 'group_run_going') setTimeout(() => clubTriggers(table, gone), 0);
         if (table === 'activities') {
           const d = state.tables.activity_deletions;
           const j = d.findIndex((x) => x.user_id === u.id && x.id === rows[i].id);
@@ -333,6 +361,7 @@ function createMock() {
       let res;
       if (url.pathname.startsWith('/auth/v1')) res = auth(url.pathname.slice(8), method, url, body, req);
       else if (url.pathname === '/rest/v1/rpc/strava_status') { state.rpc.push('strava_status'); const u = userFromReq(req); res = { status: 200, body: u && state.strava?.connected?.has(u.id) ? [{ connected: true, connected_at: new Date().toISOString(), scope: 'read,activity:read_all' }] : [] }; }
+      else if (url.pathname === '/rest/v1/rpc/club_leaderboard') { const u = userFromReq(req); res = { status: 200, body: u ? leaderboardRpc(u, body || {}) : [] }; }
       else if (url.pathname.startsWith('/rest/v1/rpc/')) { state.rpc.push(url.pathname.slice(12)); res = { status: 204, body: null }; }
       else if (url.pathname.startsWith('/storage/v1')) res = storage(url.pathname.slice(11), method, req, body);
       else if (url.pathname.startsWith('/rest/v1/')) res = rest(url.pathname.slice(9), method, url, body, req, req.headers());

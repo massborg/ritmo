@@ -7,6 +7,7 @@ import { createPost, shareableRoute, type Visibility, defaultPostTitle } from '.
 import { Chips, Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { TYPE_LABEL } from '../training/analysis';
+import { garminAttribution } from '../data/garmin';
 import type { Activity, SessionType } from '../lib/types';
 
 export function PostToHub({ run, type, badges, compliance, onClose }: { run: Activity; type: SessionType; badges: string[]; compliance?: string; onClose: () => void }) {
@@ -25,7 +26,7 @@ export function PostToHub({ run, type, badges, compliance, onClose }: { run: Act
       await createPost({
         id: crypto.randomUUID(), user_id: session!.user.id, activity_id: run.id, title: title.trim(), body: body.trim() || null, visibility: vis,
         show_map: map && !!route, show_hr: hr, route: map ? route : null, city: null,
-        stats: { startedAt: run.startTime, distanceM: run.distanceM, movingS: run.movingS, paceS: run.movingS / (run.distanceM / 1000), elevGainM: run.elevGainM, avgHr: hr ? run.avgHr : undefined, type, typeLabel: TYPE_LABEL[type], badges, compliance },
+        stats: { startedAt: run.startTime, device: postDevice(run), distanceM: run.distanceM, movingS: run.movingS, paceS: run.movingS / (run.distanceM / 1000), elevGainM: run.elevGainM, avgHr: hr ? run.avgHr : undefined, type, typeLabel: TYPE_LABEL[type], badges, compliance },
       });
       setState('done');
     } catch (e) { setErr((e as Error).message); setState('idle'); }
@@ -45,4 +46,9 @@ export function PostToHub({ run, type, badges, compliance, onClose }: { run: Act
       </>}
     </Sheet>
   );
+}
+
+/** What recorded the run, for the post header ("Garmin Forerunner 965", "Ritmo") */
+function postDevice(run: Activity): string | undefined {
+  return garminAttribution(run) ?? run.device ?? (run.source === 'ritmo_gps' ? 'Ritmo' : undefined);
 }
