@@ -294,7 +294,7 @@ export default function RunPage() {
     <div className="run-ready">
       <MapBackdrop pos={pos} />
       <div className="stack run-ready-content">
-        <AppHeader title="Run" avatar right={<Link to="/#month" className="icon-btn" aria-label="Run history"><History size={22} strokeWidth={2} /></Link>} />
+        <AppHeader title="Run" avatar right={<Link to="/you#recent" className="icon-btn" aria-label="Run history"><History size={22} strokeWidth={2} /></Link>} />
         <div className="text-tabs" role="tablist" aria-label="What are you running?">
           <button role="tab" aria-selected={what === 'planned'} className="text-tab" onClick={() => setWhat('planned')}>Ritmo plan</button>
           <button role="tab" aria-selected={what === 'free'} className="text-tab" onClick={() => setWhat('free')}>Free run</button>

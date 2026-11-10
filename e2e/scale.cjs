@@ -71,12 +71,13 @@ async function account(n) {
   });
 
   const t0 = Date.now();
-  await page.goto(`${APP}/progress`);
+  await page.goto(`${APP}/you/insights`);
   await page.getByText(`${(n + 1).toLocaleString('en-GB').replace(/,/g, '')} runs`).or(page.getByText(`${n + 1} runs`)).first().waitFor({ timeout: 30000 });
   const loadMs = Date.now() - t0;
   check(true, `${n}: lifetime shows all ${n + 1} runs (loaded in ${(loadMs / 1000).toFixed(1)} s)`);
   check(streamBytes === 0, `${n}: no streams or laps downloaded for the history (${(bytes / 1024).toFixed(0)} KB of run summaries in ${requests} requests)`);
-  // The newest run's summary is worked out on the server, then its 5K segment becomes the 5K PB
+  // The newest run's summary is worked out on the server, then its 5K segment becomes the 5K PB (on You)
+  await page.goto(`${APP}/you`);
   await page.waitForFunction(() => document.body.innerText.includes('15:51'), null, { timeout: 30000 }).catch(() => {});
   check(await page.getByText('15:51').first().isVisible().catch(() => false), `${n}: the 5K PB (15:51) comes from inside the newest run`);
   const newestDay = new Date(today.getTime() - 3 * 3600000);
@@ -89,7 +90,7 @@ async function account(n) {
   await page.waitForTimeout(2500);
   bytes = 0; requests = 0;
   const t1 = Date.now();
-  await page.goto(`${APP}/progress`);
+  await page.goto(`${APP}/you/insights`);
   await page.getByText(`${n + 1} runs`).first().waitFor({ timeout: 30000 });
   const repeatMs = Date.now() - t1;
   check(bytes < 50 * 1024, `${n}: repeat visit downloads only changes (${(bytes / 1024).toFixed(1)} KB, usable in ${(repeatMs / 1000).toFixed(1)} s)`);

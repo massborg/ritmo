@@ -10,10 +10,12 @@ import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/fo
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
+import { Shoes } from '../components/Shoes';
+import { BodySection } from '../components/BodySection';
 import { CalendarFeed } from '../components/CalendarFeed';
 
 export default function Profile() {
-  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace, hrIssue } = useApp();
+  const { data, updateProfile, session, signOut, reportIllness, clearIllness, hr, zones, fitness, syncError, today, stage, aRace, hrIssue, hasFlag } = useApp();
   const nav = useNavigate();
   const { hash } = useLocation();
   // Links such as /profile#hr (from a run's "Check your max heart rate" card) open at that section
@@ -54,6 +56,10 @@ export default function Profile() {
       </div>
 
       <PushReminders />
+      {/* Moved from You (brief 6.1): shoes, and Body's niggles and exercises */}
+      <Shoes />
+      {hasFlag('body') && <BodySection />}
+
       <section className="card stack-sm" aria-labelledby="run-settings-h">
         <div className="row" style={{ gap: 8 }}><Volume2 size={20} strokeWidth={2} aria-hidden="true" /><h2 id="run-settings-h" className="title">Run settings</h2></div>
         <p className="muted">The voice and speed of spoken cues, which cues you hear, the countdown, auto-pause and keeping the screen on.</p>

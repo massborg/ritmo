@@ -1,288 +1,283 @@
-import { zoneTimeFromHistogram } from '../training/derive';
-import { useEffect, useMemo, useState } from 'react';
-import { fetchHrBands } from '../data/store';
-import { Link } from 'react-router-dom';
-import { Award, Flame, Lock, MessageCircle, Share2 } from 'lucide-react';
+// You (update brief, section 6): Progress and Races.
+// Progress: a week, month, year or all-time view with one big total, runs, average pace and time, a bar chart with
+// the average marked, personal bests, the way into Insights, and the runs themselves as cards with their plan tag.
+// Races: the next race against your goal, adding a race, race predictions and past races.
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowLeftRight, Award, Check, ChevronDown, ChevronRight, Flag, Footprints, Info, Plus, Sparkles, TriangleAlert } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { AppHeader, SampleChip } from '../components/app';
-import { BarChart, LineChart } from '../components/charts';
-import { Empty, Kpi, Segmented, ZoneBar } from '../components/ui';
-import { addDays, daysBetween, dist, duration, MONTHS, MONTHS_LONG, pace, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
-import { easyHardBalance, monthKey, type PB, PB_KIND_LABEL, pbHistory, pbSource, personalBests, racesToReview, runningStory, totalsBy, weekKey } from '../training/insights';
+import { AppHeader, SampleChip, ZONE_OF } from '../components/app';
+import { Empty, Segmented } from '../components/ui';
 import { Sheet } from '../components/inputs';
-import type { Activity } from '../lib/types';
-import { PHASE_LABEL } from '../training/plan';
-import { estimateFitness, predictRace, trainingPaces, zoneOf } from '../training/fitness';
-import { Shoes } from '../components/Shoes';
-import { BodySection } from '../components/BodySection';
-import { zoneTime } from '../training/analysis';
+import { QuickAdd } from '../components/QuickAdd';
+import { addDays, DAY_SHORT, distanceLabel, duration, MONTHS, MONTHS_LONG, pace, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
+import { personalBests, raceReadiness } from '../training/insights';
+import { predictRace } from '../training/fitness';
+import { TYPE_LABEL } from '../training/analysis';
 import { forStats } from '../data/quality';
+import { isStravaRun } from '../data/strava';
+import { garminAttribution } from '../data/garmin';
+import type { Activity } from '../lib/types';
 
-type Period = 'week' | 'month' | 'year';
+type P = 'W' | 'M' | 'Y' | 'A';
+interface Bar { key: string; label: string; m: number; title: string; today: boolean }
 
-export default function Progress() {
-  const { data, today, typeOf, series, zones, hr, updateProfile, stage, plan, fitness, athlete, hasFlag } = useApp();
-  const U = data.profile.units;
-  const acts = useMemo(() => forStats(data.activities), [data.activities]);
-  const [period, setPeriod] = useState<Period>('week');
-  const years = useMemo(() => [...new Set(acts.map((a) => a.startTime.slice(0, 4)))].sort().reverse(), [acts]);
-  const [year, setYear] = useState(String(today.getFullYear()));
-  // Heart-rate bands for the zones chart (last 4 weeks) are not part of the run summaries: fetched here
-  const [bands, setBands] = useState<Map<string, Record<string, number>>>();
-  const since = ymd(addDays(today, -28));
-  useEffect(() => {
-    if (data.mode !== 'real') return;
-    let live = true;
-    fetchHrBands(since).then((b) => { if (live) setBands(b); }).catch(() => { /* the chart shows what it has */ });
-    return () => { live = false; };
-  }, [data.mode, since, acts.length]);
+const dayOf = (a: Activity) => a.startTime.slice(0, 10);
 
-  const story = useMemo(() => runningStory(acts, today), [acts, today]);
-  const pbs = useMemo(() => personalBests(acts, data.races), [acts, data.races]);
-  const toReview = useMemo(() => racesToReview(acts, data.races), [acts, data.races]);
-  const [reviewing, setReviewing] = useState(false);
+/** The bars, title and range for a period starting at `anchor` */
+function periodView(p: P, anchor: Date, acts: Activity[], today: Date): { title: string; from: string; to: string; bars: Bar[]; unitWord: string } {
+  const t = ymd(today);
+  const sumDays = (days: string[]) => days.map((d) => ({ d, m: acts.filter((a) => dayOf(a) === d).reduce((x, a) => x + a.distanceM, 0) }));
+  if (p === 'W') {
+    const ws = startOfWeek(anchor);
+    const days = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
+    return { title: `Week of ${ws.getDate()} ${MONTHS[ws.getMonth()]} ${ws.getFullYear()}`, from: days[0], to: days[6], unitWord: 'day',
+      bars: sumDays(days).map(({ d, m }) => ({ key: d, label: DAY_SHORT[weekday(parseYmd(d))].slice(0, 1), m, title: `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()} ${MONTHS_LONG[parseYmd(d).getMonth()]}`, today: d === t })) };
+  }
+  if (p === 'M') {
+    const y = anchor.getFullYear(), mo = anchor.getMonth(), n = new Date(y, mo + 1, 0).getDate();
+    const days = Array.from({ length: n }, (_, i) => ymd(new Date(y, mo, i + 1)));
+    return { title: `${MONTHS_LONG[mo]} ${y}`, from: days[0], to: days[n - 1], unitWord: 'day',
+      bars: sumDays(days).map(({ d, m }, i) => ({ key: d, label: i === 0 || i === 14 || i === n - 1 ? String(i + 1) : '', m, title: `${i + 1} ${MONTHS_LONG[mo]}`, today: d === t })) };
+  }
+  if (p === 'Y') {
+    const y = anchor.getFullYear();
+    return { title: String(y), from: `${y}-01-01`, to: `${y}-12-31`, unitWord: 'month',
+      bars: Array.from({ length: 12 }, (_, i) => { const k = `${y}-${String(i + 1).padStart(2, '0')}`; return { key: k, label: MONTHS[i].slice(0, 1), m: acts.filter((a) => a.startTime.startsWith(k)).reduce((x, a) => x + a.distanceM, 0), title: `${MONTHS_LONG[i]} ${y}`, today: t.startsWith(k) }; }) };
+  }
+  const years = [...new Set(acts.map((a) => a.startTime.slice(0, 4)))].sort();
+  const first = Number(years[0] ?? today.getFullYear()), last = today.getFullYear();
+  const ys = Array.from({ length: last - first + 1 }, (_, i) => String(first + i));
+  return { title: 'All time', from: `${first}-01-01`, to: `${last}-12-31`, unitWord: 'year',
+    bars: ys.map((y) => ({ key: y, label: ys.length > 8 && Number(y) % 2 ? '' : `'${y.slice(2)}`, m: acts.filter((a) => a.startTime.startsWith(y)).reduce((x, a) => x + a.distanceM, 0), title: y, today: y === String(last) })) };
+}
 
-  // Mileage bars
-  const bars = useMemo(() => {
-    const u = (m: number) => toUnit(m, U);
-    if (period === 'week') {
-      const wk = totalsBy(acts, weekKey);
-      const out = [];
-      const ws = startOfWeek(today);
-      for (let i = 15; i >= 0; i--) {
-        const d = addDays(ws, -7 * i);
-        const ly = startOfWeek(addDays(d, -364));
-        out.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, value: u(wk.get(ymd(d))?.m ?? 0), compare: u(wk.get(ymd(ly))?.m ?? 0), highlight: i === 0, title: `Week of ${ymd(d)}` });
-      }
-      return out;
-    }
-    if (period === 'month') {
-      const mo = totalsBy(acts, monthKey);
-      return Array.from({ length: 12 }, (_, m) => {
-        const k = `${year}-${String(m + 1).padStart(2, '0')}`;
-        const lk = `${Number(year) - 1}-${String(m + 1).padStart(2, '0')}`;
-        return { label: MONTHS[m], value: u(mo.get(k)?.m ?? 0), compare: u(mo.get(lk)?.m ?? 0), highlight: k === ymd(today).slice(0, 7), title: `${MONTHS_LONG[m]} ${year}` };
-      });
-    }
-    return [...story.years].map((y) => ({ label: y.year, value: u(y.m), highlight: y.year === String(today.getFullYear()) }));
-  }, [period, acts, U, today, year, story.years]);
-
-  // Same period last year
-  const ytd = (y: number) => acts.filter((a) => a.startTime.slice(0, 4) === String(y) && a.startTime.slice(5, 10) <= ymd(today).slice(5, 10)).reduce((x, a) => x + a.distanceM, 0);
-  const thisYtd = ytd(today.getFullYear()), lastYtd = ytd(today.getFullYear() - 1);
-
-  // Long runs: longest per month, last 18 months
-  const longRuns = useMemo(() => {
-    const labels: string[] = [], vals: (number | null)[] = [];
-    for (let i = 17; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const k = ymd(d).slice(0, 7);
-      const m = acts.filter((a) => a.startTime.startsWith(k)).reduce((x, a) => Math.max(x, a.distanceM), 0);
-      labels.push(MONTHS[d.getMonth()]);
-      vals.push(m ? toUnit(m, U) : null);
-    }
-    return { labels, vals };
-  }, [acts, today, U]);
-
-  // Zones and balance over last 4 weeks
-  const last28 = acts.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 28; });
-  const zt = last28.reduce((acc, a) => {
-    const z = a.streams?.length ? zoneTime(a.streams, zones) : (a.derived?.hrh ?? bands?.get(a.id)) ? zoneTimeFromHistogram((a.derived?.hrh ?? bands?.get(a.id))!, (hr) => zoneOf(hr, zones)) : undefined;
-    return z ? z.map((v, i) => v + acc[i]) : acc;
-  }, [0, 0, 0, 0, 0]);
-  const balance = easyHardBalance({ activities: acts, typeOf, sessions: (plan?.sessions ?? []).map((x) => ({ ...x, phase: PHASE_LABEL[x.phase].toLowerCase() })), today });
-  const easyPct = balance?.easyPct ?? 0;
-
-  // Training load (last 120 days, weekly samples)
-  const loadSlice = series.slice(-120).filter((_, i, arr) => (arr.length - 1 - i) % 7 === 0);
-
-  // Estimated race times over time: monthly, last 24 months
-  const est = useMemo(() => {
-    const labels: string[] = [], five: (number | null)[] = [], ten: (number | null)[] = [], half: (number | null)[] = [], mar: (number | null)[] = [], tpace: (number | null)[] = [], eff: (number | null)[] = [];
-    for (let i = 23; i >= 0; i -= 1) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
-      const at = d > today ? today : d;
-      const f = estimateFitness(acts, hr, at, data.races);
-      labels.push(`${MONTHS[d.getMonth()]}${d.getMonth() === 0 ? ` ${String(d.getFullYear()).slice(2)}` : ''}`);
-      const pr = (m: number) => (f ? predictRace(f.vdot, m, acts, at).timeS / 60 : null);
-      five.push(pr(5000)); ten.push(pr(10000)); half.push(pr(21097.5)); mar.push(pr(42195));
-      // Threshold pace that month (s per unit), from the fitness estimate
-      tpace.push(f && f.confidence !== 'low' ? ((trainingPaces(f.vdot).threshold[0] + trainingPaces(f.vdot).threshold[1]) / 2) * (U === 'km' ? 1 : 1.609344) : null);
-      // Aerobic efficiency: metres covered per heartbeat on easy runs that month
-      const easyMonth = acts.filter((a) => a.avgHr && a.startTime.slice(0, 7) === ymd(d).slice(0, 7) && ['easy', 'recovery', 'long'].includes(typeOf(a)));
-      eff.push(easyMonth.length >= 2 ? easyMonth.reduce((x, a) => x + a.distanceM / ((a.movingS / 60) * a.avgHr!), 0) / easyMonth.length : null);
-    }
-    return { labels, five, ten, half, mar, tpace, eff };
-  }, [acts, today, hr, data.races, U, typeOf]);
-
-  if (!acts.length) return (
-    <div className="stack-lg">
-      <AppHeader title="You" eyebrow="Progress" avatar right={<SampleChip />} />
-      <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/">Log a run on Today</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
-        Your distance, streaks and personal bests appear here after your first run. Log one by hand, or upload files from a watch.
-      </Empty>
-    </div>
-  );
-  const Locked = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <section className="card stack-sm"><div className="row" style={{ gap: 8 }}><Lock size={18} strokeWidth={2} aria-hidden="true" /><h2 className="title">{title}</h2></div><p className="muted">{children}</p><p className="caption">{stage.next}</p></section>
-  );
-
-  const fmtU = (v: number) => v.toFixed(0);
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-
+/** Bars with rounded caps, today's in orange, a dashed average line, y labels on the right */
+function PeriodBars({ bars, unit, unitWord }: { bars: Bar[]; unit: 'km' | 'mi'; unitWord: string }) {
+  const vals = bars.map((b) => toUnit(b.m, unit));
+  const max = Math.max(1, ...vals);
+  const withRuns = vals.filter((v) => v > 0);
+  const avg = withRuns.length ? withRuns.reduce((x, y) => x + y, 0) / withRuns.length : 0;
+  const top = Math.ceil(max / 5) * 5 || 5;
+  const W = 320, H = 150, R = 30, plotW = W - R, step = plotW / bars.length, bw = Math.max(3, Math.min(18, step * 0.62));
+  const y = (v: number) => H - 18 - (v / top) * (H - 30);
+  const longest = vals.indexOf(max);
+  const summary = withRuns.length ? `Longest ${unitWord} ${vals[longest].toFixed(1)} ${unit} on ${bars[longest].title}. Average ${avg.toFixed(1)} ${unit} per ${unitWord} with runs.` : 'No runs in this period.';
   return (
-    <div className="stack-lg">
-      <AppHeader title="You" eyebrow="Progress" avatar right={<SampleChip />} />
-      <div className="row-between wrap" style={{ gap: 8 }}>
-        <Segmented label="Units" value={U} onChange={(u) => updateProfile({ units: u })} options={[{ value: 'km', label: 'km' }, { value: 'mi', label: 'miles' }]} />
-        <Link to="/coach" className="btn btn-small"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask your coach</Link>
-      </div>
-
-      <section className="card stack" aria-labelledby="mileage">
-        <div className="row-between wrap">
-          <h2 id="mileage" className="title">Mileage</h2>
-          <Segmented<Period> label="Period" value={period} onChange={setPeriod} options={[{ value: 'week', label: 'Weekly' }, { value: 'month', label: 'Monthly' }, { value: 'year', label: 'Yearly' }]} />
-        </div>
-        {period === 'month' && (
-          <div className="row wrap" role="group" aria-label="Year">
-            {years.map((y) => <button key={y} className="chip" aria-pressed={y === year} onClick={() => setYear(y)}>{y}</button>)}
-          </div>
-        )}
-        <BarChart bars={bars} format={(v) => `${v.toFixed(0)} ${U}`} valueLabel={period === 'year' ? `${U} per year` : period === 'month' ? year : 'This year'} compareLabel={period === 'year' ? undefined : period === 'month' ? String(Number(year) - 1) : 'Same week last year'} every={period === 'week' ? 2 : 1} />
-        <div className="grid-3">
-          <Kpi label={`${today.getFullYear()} so far`} value={`${fmtU(toUnit(thisYtd, U))} ${U}`} sub={lastYtd ? `${thisYtd >= lastYtd ? '+' : ''}${Math.round(((thisYtd - lastYtd) / lastYtd) * 100)}% on the same point last year` : undefined} />
-          <Kpi label="Lifetime" value={`${fmtU(toUnit(athlete.totalM, U))} ${U}`} sub={`${athlete.runCount} runs`} />
-          <Kpi label="Biggest year" value={story.biggestYear ? `${fmtU(toUnit(story.biggestYear.m, U))} ${U}` : '–'} sub={story.biggestYear?.year} />
-        </div>
-      </section>
-
-      <div className="grid-2">
-        <section className="card stack" aria-labelledby="consistency">
-          <div className="row" style={{ gap: 8 }}><Flame size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="consistency" className="title">Consistency</h2></div>
-          <div className="grid-3">
-            <Kpi label="Current streak" value={`${story.currentStreakWeeks} wk`} sub="weeks with a run" />
-            <Kpi label="Longest streak" value={`${story.longestStreakWeeks} wk`} />
-            <Kpi label="Active weeks" value={`${story.activeWeeksPct}%`} sub="since you started" />
-          </div>
-        </section>
-        <section className="card stack" aria-labelledby="balance">
-          <h2 id="balance" className="title">Easy and hard balance</h2>
-          <p className="caption">Last 4 weeks, by time</p>
-          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}><span className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{easyPct}%</span><span className="label muted">easy</span></div>
-          <div className="zone-bar" role="img" aria-label={`${easyPct}% easy, ${100 - easyPct}% hard`}><span className="z2" style={{ width: `${easyPct}%` }} /><span className="z4" style={{ width: `${100 - easyPct}%` }} /></div>
-          {balance?.plannedEasyPct != null && <p className="caption">Your plan for these weeks: {balance.plannedEasyPct}% easy.</p>}
-          <p>{balance ? balance.message : 'No runs in the last 4 weeks.'}</p>
-        </section>
-      </div>
-
-      <div className="grid-2">
-        <section className="card stack" aria-labelledby="zones"><h2 id="zones" className="title">Time in each zone</h2><p className="caption">Last 4 weeks, runs with heart rate</p>{zt.some((v) => v > 0) ? <ZoneBar seconds={zt} /> : <p className="muted">{acts.some((a) => a.avgHr) ? 'No heart rate data in the last 4 weeks.' : 'Zones need heart rate from a watch or chest strap. Upload a file from your watch to see them.'}</p>}</section>
-        {stage.predictions && est.tpace.some((x) => x != null) && (
-          <section className="card stack" aria-labelledby="tp"><h2 id="tp" className="title">Threshold pace</h2><p className="caption">Per {U}, last 24 months, from your fitness each month. Lower is faster.</p>
-            <LineChart labels={est.labels} every={4} format={(v) => pace(v, 'km', false)} series={[{ name: 'Threshold pace', values: est.tpace, color: 'var(--brand)' }]} /></section>
-        )}
-        {est.eff.filter((x) => x != null).length >= 3 && (
-          <section className="card stack" aria-labelledby="eff"><h2 id="eff" className="title">Aerobic efficiency</h2><p className="caption">Metres per heartbeat on easy and long runs, by month. Higher means you go further for the same effort.</p>
-            <LineChart labels={est.labels} every={4} format={(v) => v.toFixed(2)} series={[{ name: 'Metres per heartbeat', values: est.eff, color: 'var(--zone-2)' }]} /></section>
-        )}
-      {hasFlag('body') && <BodySection />}
-        <Shoes />
-        <section className="card stack" aria-labelledby="long"><h2 id="long" className="title">Long-run progress</h2><p className="caption">Longest run each month, {U}</p><LineChart series={[{ name: 'Longest run', values: longRuns.vals, color: 'var(--brand)' }]} labels={longRuns.labels} every={3} /></section>
-      </div>
-
-      {stage.predictions ? (
-      <section className="card stack" aria-labelledby="load">
-        <h2 id="load" className="title">Training load</h2>
-        <p className="caption">Fitness is your 6-week average load, fatigue your 1-week average, and form the difference. Form between –10 and –25 is productive training; below that, rest.</p>
-        <LineChart labels={loadSlice.map((d) => `${parseYmd(d.date).getDate()}/${parseYmd(d.date).getMonth() + 1}`)} every={3}
-          series={[{ name: 'Fitness', values: loadSlice.map((d) => d.ctl), color: 'var(--ink)' }, { name: 'Fatigue', values: loadSlice.map((d) => d.atl), color: 'var(--brand)' }, { name: 'Form', values: loadSlice.map((d) => d.tsb), color: 'var(--info)', dashed: true }]} />
-      </section>
-      ) : <Locked title="Training load">Fitness, fatigue and form need a few weeks of runs and a known fitness level. Until then they would only be guesses, so Ritmo keeps them hidden.</Locked>}
-
-      <div className="grid-2">
-        <section className="card stack" aria-labelledby="pbs">
-          <div className="row" style={{ gap: 8 }}><Award size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="pbs" className="title">Personal bests</h2></div>
-          {pbs.length === 0 && <p className="muted">Personal bests appear once you have run 1 km or more with GPS.</p>}
-          <p className="caption">Best times anywhere inside your runs, not only whole runs of that distance.</p>
-          <ul className="list">{pbs.map((p) => <PbRow key={p.label} pb={p} />)}</ul>
-          {toReview.length > 0 && (
-            <div className="stack-sm">
-              <p className="caption">Ritmo found {toReview.length} run{toReview.length === 1 ? '' : 's'} that look{toReview.length === 1 ? 's' : ''} like {toReview.length === 1 ? 'a race' : 'races'}. Confirming them labels your PBs correctly.</p>
-              <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setReviewing(true)}>Review races</button>
-            </div>
-          )}
-          {reviewing && <RaceReview runs={toReview} onClose={() => setReviewing(false)} />}
-        </section>
-{stage.predictions ? (
-        <section className="card stack" aria-labelledby="est">
-          <h2 id="est" className="title">Estimated race times</h2>
-          <p className="caption">Minutes, last 24 months. Lower is faster. Now based on {fitness?.basedOn ?? 'your recent runs'}, and never slower than a time you have run in the last 8 weeks.</p>
-          <LineChart labels={est.labels} every={4} format={(v) => duration(v * 60).replace(/:\d\d$/, '')} series={[{ name: 'Half marathon', values: est.half, color: 'var(--brand)' }, { name: '10K', values: est.ten, color: 'var(--ink)' }]} />
-          <div className="grid-3">
-            {[['5K', est.five], ['10K', est.ten], ['Half', est.half], ['Marathon', est.mar]].map(([l, v]) => {
-              const arr = (v as (number | null)[]).filter((x): x is number => x != null);
-              return <Kpi key={l as string} label={l as string} value={arr.length ? duration(arr[arr.length - 1] * 60) : '–'} sub={arr.length > 12 ? `${arr[arr.length - 1] < arr[arr.length - 13] ? '' : '+'}${duration(Math.abs(arr[arr.length - 1] - arr[arr.length - 13]) * 60)} vs a year ago` : undefined} />;
-            })}
-          </div>
-        </section>
-        ) : <Locked title="Estimated race times">Race predictions are based on a timed effort. Run a 5K time trial or a race and Ritmo will predict your 5K, 10K, half marathon and marathon times.</Locked>}
-      </div>
-
-      <section className="band row-between wrap">
-        <div className="stack-sm"><h2 className="title">Your reviews</h2><p className="muted">Shareable summaries of your month and year.</p></div>
-        <div className="row wrap">
-          <Link className="btn" style={{ color: 'var(--on-graphite)', borderColor: 'var(--on-graphite)' }} to={`/review/${ymd(lastMonth).slice(0, 7)}`}><Share2 size={18} strokeWidth={2} aria-hidden="true" />{MONTHS_LONG[lastMonth.getMonth()]}</Link>
-          <Link className="btn" style={{ color: 'var(--on-graphite)', borderColor: 'var(--on-graphite)' }} to={`/review/${today.getFullYear()}`}><Share2 size={18} strokeWidth={2} aria-hidden="true" />{today.getFullYear()}</Link>
-          <Link className="btn" style={{ color: 'var(--on-graphite)', borderColor: 'var(--on-graphite)' }} to="/story">Your running story</Link>
-        </div>
-      </section>
-    </div>
+    <figure className="pbars">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary}>
+        {[0, top / 2, top].map((v) => <g key={v}><line x1="0" x2={plotW} y1={y(v)} y2={y(v)} className="pbars-grid" /><text x={W - 2} y={y(v) + 4} textAnchor="end" className="pbars-axis">{v % 1 ? v.toFixed(1) : v}</text></g>)}
+        {bars.map((b, i) => {
+          const v = vals[i];
+          if (v <= 0) return null;
+          const h = Math.max(bw, (v / top) * (H - 30));
+          return <rect key={b.key} x={i * step + (step - bw) / 2} y={H - 18 - h} width={bw} height={h} rx={bw / 2} className={b.today ? 'pbar today' : 'pbar'}><title>{`${b.title}: ${v.toFixed(1)} ${unit}`}</title></rect>;
+        })}
+        {avg > 0 && <><line x1="0" x2={plotW} y1={y(avg)} y2={y(avg)} className="pbars-avg" /><text x={plotW - 2} y={y(avg) - 4} textAnchor="end" className="pbars-avg-label">avg {avg.toFixed(1)}</text></>}
+        {bars.map((b, i) => b.label && <text key={`l${b.key}`} x={i * step + step / 2} y={H - 3} textAnchor="middle" className="pbars-axis">{b.label}</text>)}
+      </svg>
+      <figcaption className="caption">{summary}</figcaption>
+    </figure>
   );
 }
 
-/** One PB, with its history (every time it was improved) folded underneath. */
-function PbRow({ pb }: { pb: PB }) {
-  const { data } = useApp();
-  const [open, setOpen] = useState(false);
-  const history = useMemo(() => (open ? pbHistory(forStats(data.activities), pb.m, data.races).reverse() : []), [open, data.activities, data.races, pb.m]);
+/** A tiny route drawing when the run's track is on this device, otherwise a tile for the run type */
+function RouteThumb({ a }: { a: Activity }) {
+  const { typeOf } = useApp();
+  const pts = (a.streams ?? []).filter((p) => p.lat != null && p.lon != null);
+  if (pts.length > 5) {
+    const lats = pts.map((p) => p.lat!), lons = pts.map((p) => p.lon!);
+    const minLa = Math.min(...lats), maxLa = Math.max(...lats), minLo = Math.min(...lons), maxLo = Math.max(...lons);
+    const k = Math.cos(((minLa + maxLa) / 2) * Math.PI / 180);
+    const span = Math.max((maxLa - minLa) || 1e-6, ((maxLo - minLo) || 1e-6) * k);
+    const step = Math.max(1, Math.floor(pts.length / 80));
+    const d = pts.filter((_, i) => i % step === 0).map((p, i) => `${i ? 'L' : 'M'}${(6 + (((p.lon! - minLo) * k) / span) * 52).toFixed(1)},${(58 - ((p.lat! - minLa) / span) * 52).toFixed(1)}`).join('');
+    return <svg className="run-thumb" viewBox="0 0 64 64" aria-hidden="true"><path d={d} fill="none" stroke="var(--brand)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  }
+  const z = ZONE_OF[typeOf(a)] ?? 2;
+  return <span className="run-thumb run-thumb-icon" style={{ color: `var(--zone-${z})` }} aria-hidden="true"><Footprints size={26} strokeWidth={2} /></span>;
+}
+
+/** A run as a card: route, date and name, km · pace · time, its plan tag, and the device */
+function RunCard({ a }: { a: Activity }) {
+  const { data, today, plan, sessionOfRun, labelOf, typeOf } = useApp();
+  const U = data.profile.units;
+  const d = dayOf(a), t = ymd(today);
+  const when = d === t ? 'Today' : d === ymd(addDays(today, -1)) ? 'Yesterday' : `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()} ${MONTHS[parseYmd(d).getMonth()]}${d.slice(0, 4) !== t.slice(0, 4) ? ` ${d.slice(0, 4)}` : ''}`;
+  const s = sessionOfRun(a.id);
+  const tag = s?.status === 'swapped' ? { kind: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
+    : s?.status === 'done' ? { kind: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `${d === t ? "Matched today's plan" : 'Matched your plan'} · ${TYPE_LABEL[typeOf(a)]}` }
+    : plan && d >= plan.startDate ? { kind: 'muted', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' }
+    : { kind: 'muted', icon: null, text: TYPE_LABEL[typeOf(a)] };
+  const device = a.device ?? (isStravaRun(a) ? 'From Strava' : garminAttribution(a) ?? (a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'manual' ? 'Logged by hand' : a.source === 'upload' ? 'File upload' : undefined));
   return (
     <li>
-      <div className="row-between" style={{ gap: 8 }}>
-        <Link to={`/activity/${pb.activityId}`} className="list-item row-between" style={{ flex: 1 }}>
-          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{pb.label}</span><span className="caption">{shortDate(parseYmd(pb.date))} · {pbSource(pb)}</span></span>
-          <span className="stat" style={{ fontSize: 20 }}>{duration(pb.timeS)}</span>
-        </Link>
-        <button className="btn btn-ghost btn-small" aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? 'Hide' : 'History'}</button>
-      </div>
-      {open && (
-        <ol className="pb-history caption">
-          {history.map((h) => <li key={h.activityId}><Link to={`/activity/${h.activityId}`}>{duration(h.timeS)}</Link> · {shortDate(parseYmd(h.date))} · {PB_KIND_LABEL[h.kind]}</li>)}
-        </ol>
-      )}
+      <Link to={`/activity/${a.id}`} className="run-card-link">
+        <RouteThumb a={a} />
+        <span className="run-card-body">
+          <span className="caption">{when}</span>
+          <span className="label run-card-name">{a.name}</span>
+          <span className="run-card-nums"><span className="stat">{toUnit(a.distanceM, U).toFixed(2)}<small> {U}</small></span><span className="stat">{pace(a.movingS / (a.distanceM / 1000), U, false)}<small>/{U}</small></span><span className="stat">{duration(a.movingS)}</span></span>
+          <span className={`plan-tag ${tag.kind}`}>{tag.icon}{tag.text}</span>
+          {device && <span className="run-card-device caption">{device}</span>}
+        </span>
+        <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
+      </Link>
     </li>
   );
 }
 
-/** Confirm or reject the runs Ritmo thinks were races. */
-function RaceReview({ runs, onClose }: { runs: Activity[]; onClose: () => void }) {
-  const { setRaceFlag, data } = useApp();
+function ProgressTab() {
+  const { data, today } = useApp();
   const U = data.profile.units;
+  const acts = useMemo(() => forStats(data.activities), [data.activities]);
+  const [p, setP] = useState<P>('M');
+  const [anchor, setAnchor] = useState(today);
+  const [picking, setPicking] = useState(false);
+  const [shown, setShown] = useState(10);
+  const v = useMemo(() => periodView(p, anchor, acts, today), [p, anchor, acts, today]);
+  const runs = acts.filter((a) => dayOf(a) >= v.from && dayOf(a) <= v.to).sort((x, y) => y.startTime.localeCompare(x.startTime));
+  const totalM = runs.reduce((x, a) => x + a.distanceM, 0), totalS = runs.reduce((x, a) => x + a.movingS, 0);
+  const pbs = useMemo(() => personalBests(acts, data.races), [acts, data.races]);
+  const tiles = [['5K', '5K'], ['10K', '10K'], ['Half marathon', 'Half']].map(([label, short]) => ({ short, pb: pbs.find((x) => x.label === label) }));
+  const recent = (date: string) => (today.getTime() - parseYmd(date).getTime()) / 86400000 <= 30;
+
+  // The periods to choose from, newest first, back to the first run
+  const options = useMemo(() => {
+    const first = acts.length ? parseYmd(acts.reduce((m, a) => (dayOf(a) < m ? dayOf(a) : m), ymd(today))) : today;
+    const out: { label: string; d: Date }[] = [];
+    if (p === 'W') for (let d = startOfWeek(today); d >= startOfWeek(first) && out.length < 104; d = addDays(d, -7)) out.push({ label: `Week of ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`, d });
+    if (p === 'M') for (let d = new Date(today.getFullYear(), today.getMonth(), 1); d >= new Date(first.getFullYear(), first.getMonth(), 1) && out.length < 120; d = new Date(d.getFullYear(), d.getMonth() - 1, 1)) out.push({ label: `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`, d });
+    if (p === 'Y') for (let y = today.getFullYear(); y >= first.getFullYear(); y--) out.push({ label: String(y), d: new Date(y, 0, 1) });
+    return out;
+  }, [p, acts, today]);
+
+  if (!acts.length) return (
+    <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/run">Record a run</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
+      Your distance, personal bests and runs appear here after your first run. Record one, log one by hand, or upload files from a watch.
+    </Empty>
+  );
   return (
-    <Sheet open onClose={onClose} title="Were these races?"
-      footer={<div className="row" style={{ gap: 8 }}><button className="btn btn-block" onClick={onClose}>Done</button><button className="btn btn-primary btn-block" onClick={() => { setRaceFlag(runs.map((r) => r.id), true); onClose(); }}>All were races</button></div>}>
-      <p className="caption">Races count fully towards your fitness and are labelled as races in your PBs. You can change this later on each run.</p>
-      <ul className="list">
-        {runs.map((a) => (
-          <li key={a.id} className="row-between wrap" style={{ padding: 'var(--s2) 0', gap: 8 }}>
-            <span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{shortDate(new Date(a.startTime))} · {dist(a.distanceM, U)} · {duration(a.movingS)}</span></span>
-            <span className="row" style={{ gap: 4 }}>
-              <button className="btn btn-small btn-primary" onClick={() => setRaceFlag([a.id], true)}>Race</button>
-              <button className="btn btn-small" onClick={() => setRaceFlag([a.id], false)}>Not a race</button>
-            </span>
-          </li>
-        ))}
-      </ul>
-      {!runs.length && <p className="muted">All done.</p>}
-    </Sheet>
+    <div className="stack-lg">
+      <div className="stack-sm">
+        <Segmented<P> label="Period" value={p} onChange={(x) => { setP(x); setAnchor(today); setShown(10); }} options={[{ value: 'W', label: 'W' }, { value: 'M', label: 'M' }, { value: 'Y', label: 'Y' }, { value: 'A', label: 'All' }]} />
+        {p !== 'A'
+          ? <button className="period-pick" aria-haspopup="dialog" onClick={() => setPicking(true)}>{v.title}<ChevronDown size={18} strokeWidth={2} aria-hidden="true" /></button>
+          : <span className="period-pick">{v.title}</span>}
+      </div>
+      <section className="stack-sm you-total" aria-label={`${v.title} total`}>
+        <span className="you-big">{toUnit(totalM, U).toFixed(totalM / (U === 'km' ? 1000 : 1609.344) >= 1000 ? 0 : 1)}</span>
+        <span className="label">{U === 'km' ? 'Kilometres' : 'Miles'}</span>
+        <div className="you-stats">
+          <div><span className="stat">{runs.length}</span><span className="caption">Runs</span></div>
+          <div><span className="stat">{totalM ? pace(totalS / (totalM / 1000), U, false) : '–'}</span><span className="caption">Avg pace /{U}</span></div>
+          <div><span className="stat">{duration(totalS)}</span><span className="caption">Time</span></div>
+        </div>
+      </section>
+      <PeriodBars bars={v.bars} unit={U} unitWord={v.unitWord} />
+
+      <section className="stack-sm" aria-labelledby="pb-h">
+        <div className="row-between"><h2 id="pb-h" className="title">Personal bests</h2><Link to="/you/records" className="link-row">All records <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></Link></div>
+        <div className="pb-tiles">
+          {tiles.map(({ short, pb }) => (
+            <Link key={short} to={pb ? `/activity/${pb.activityId}` : '/you/records'} className="pb-tile card">
+              <span className="row-between"><span className="label">{short}</span>{pb && recent(pb.date) && <span className="tag-new">New</span>}</span>
+              <span className="stat">{pb ? duration(pb.timeS) : '–'}</span>
+              <span className="caption">{pb ? `${parseYmd(pb.date).getDate()} ${MONTHS[parseYmd(pb.date).getMonth()]} ${pb.date.slice(0, 4)}` : 'Not yet'}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <Link to="/you/insights" className="card card-link insights-row">
+        <Sparkles size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" />
+        <span className="stack-sm" style={{ gap: 0, flex: 1 }}><span className="label">Insights</span><span className="caption">Training load, zones, threshold pace and race predictions</span></span>
+        <ChevronRight size={20} strokeWidth={2} aria-hidden="true" />
+      </Link>
+
+      <section className="stack-sm" id="recent" aria-labelledby="recent-h">
+        <h2 id="recent-h" className="title">{p === 'A' ? 'Recent activity' : `Runs · ${v.title}`}</h2>
+        {runs.length ? <ul className="run-cards">{runs.slice(0, shown).map((a) => <RunCard key={a.id} a={a} />)}</ul> : <p className="muted">No runs in this period.</p>}
+        {runs.length > shown && <button className="btn" onClick={() => setShown((n) => n + 20)}>Show more ({runs.length - shown})</button>}
+      </section>
+
+      <Sheet open={picking} onClose={() => setPicking(false)} title={p === 'W' ? 'Choose a week' : p === 'M' ? 'Choose a month' : 'Choose a year'}>
+        <ul className="list period-list">{options.map((o) => (
+          <li key={o.label}><button className={`list-item period-opt${o.label === v.title ? ' on' : ''}`} onClick={() => { setAnchor(o.d); setPicking(false); setShown(10); }}>{o.label}{o.label === v.title && <Check size={18} strokeWidth={2.5} aria-hidden="true" />}</button></li>
+        ))}</ul>
+      </Sheet>
+    </div>
+  );
+}
+
+function RacesTab() {
+  const { data, today, aRace, fitness, stage, plan } = useApp();
+  const acts = useMemo(() => forStats(data.activities), [data.activities]);
+  const [info, setInfo] = useState(false);
+  const t = ymd(today);
+  const rr = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
+  const days = aRace ? Math.round((parseYmd(aRace.date).getTime() - parseYmd(t).getTime()) / 86400000) : 0;
+  const taper = plan?.phases.find((x) => x.phase === 'taper');
+  const behind = rr && aRace?.goalS ? Math.round(rr.predictedS - aRace.goalS) : undefined;
+  const pbs = useMemo(() => personalBests(acts, data.races), [acts, data.races]);
+  const pbRuns = new Set(pbs.map((x) => x.activityId));
+  const past = acts.filter((a) => a.isRace).sort((x, y) => y.startTime.localeCompare(x.startTime));
+  const upcoming = data.races.filter((r) => r.date >= t && r.id !== aRace?.id).sort((a, b) => a.date.localeCompare(b.date));
+  return (
+    <div className="stack-lg">
+      {aRace ? (
+        <section className="card stack next-race-card" aria-labelledby="next-race-h">
+          <div className="row-between"><span className="caption">Next race{aRace.priority === 'A' ? ' · main goal' : ''}</span><span className="tag">{DAY_SHORT[weekday(parseYmd(aRace.date))]} {parseYmd(aRace.date).getDate()} {MONTHS[parseYmd(aRace.date).getMonth()]}</span></div>
+          <h2 id="next-race-h" className="title">{aRace.name}</h2>
+          <p><span className="you-countdown">{days}</span> <span className="label">{days === 1 ? 'day' : 'days'} to go</span></p>
+          <div className="race-vs">
+            <div><span className="caption">Your goal</span><span className="stat">{aRace.goalS ? duration(aRace.goalS) : '–'}</span></div>
+            <div><span className="caption">Ritmo estimate</span><span className="stat">{rr ? duration(Math.round(rr.predictedS)) : '–'}</span></div>
+          </div>
+          {behind != null && (behind <= 0
+            ? <p className="status status-success"><Check size={18} strokeWidth={2} aria-hidden="true" />On track for your goal{taper && taper.start > t ? ` · taper starts ${parseYmd(taper.start).getDate()} ${MONTHS[parseYmd(taper.start).getMonth()]}` : ''}</p>
+            : <p className="status status-warning"><TriangleAlert size={18} strokeWidth={2} aria-hidden="true" />Behind your goal by {duration(behind)}</p>)}
+          {!rr && <p className="caption">{stage.predictions ? 'Add a goal time to compare it with Ritmo\'s estimate.' : `Ritmo's estimate appears after a race or time trial. ${stage.next}`}</p>}
+          <div className="row wrap"><Link to={`/race/${aRace.id}/day`} className="btn btn-primary">Race plan</Link><Link to={`/race/${aRace.id}`} className="btn">Edit goal</Link></div>
+        </section>
+      ) : <Empty title="No race yet" action={<Link to="/race/new" className="btn btn-primary">Add a race</Link>}>Add a race and Ritmo builds your plan towards it.</Empty>}
+
+      {aRace && <Link to="/race/new" className="btn" style={{ alignSelf: 'flex-start' }}><Plus size={18} strokeWidth={2} aria-hidden="true" />Add a race</Link>}
+      {upcoming.length > 0 && (
+        <section className="stack-sm" aria-labelledby="upcoming-h"><h2 id="upcoming-h" className="title">Coming up</h2>
+          <ul className="group">{upcoming.map((r) => <li key={r.id}><Link to={`/race/${r.id}`} className="list-item row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{r.name}</span><span className="caption">{distanceLabel(r.distanceM)} · {parseYmd(r.date).getDate()} {MONTHS[parseYmd(r.date).getMonth()]} {r.date.slice(0, 4)}</span></span><span className={`tag ${r.priority === 'A' ? 'tag-accent' : ''}`}>{r.priority}</span></Link></li>)}</ul>
+        </section>
+      )}
+
+      <section className="stack-sm" aria-labelledby="pred-h">
+        <div className="row-between"><h2 id="pred-h" className="title">Race predictions</h2><button className="icon-btn" aria-label="How predictions work" aria-expanded={info} onClick={() => setInfo((x) => !x)}><Info size={20} strokeWidth={2} /></button></div>
+        {info && <p className="caption">Based on {fitness?.basedOn ?? 'your recent runs'}, and never slower than a time you have run in the last 8 weeks. Predictions assume you have trained for the distance: the marathon needs long runs behind it.</p>}
+        {fitness && stage.predictions ? (
+          <div className="pred-grid">{RACE_DISTANCES.map((d) => <div key={d.label} className="card pred-tile"><span className="caption">{d.label === 'Half marathon' ? 'Half' : d.label}</span><span className="stat">{duration(Math.round(predictRace(fitness.vdot, d.m, acts, today).timeS))}</span></div>)}</div>
+        ) : <p className="muted">Predictions need a timed effort. Run a 5K time trial or a race and Ritmo predicts your 5K, 10K, half marathon and marathon. {stage.next}</p>}
+      </section>
+
+      <section className="stack-sm" aria-labelledby="past-h">
+        <div className="row" style={{ gap: 8 }}><Flag size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="past-h" className="title">Past races</h2></div>
+        {past.length ? <ul className="group">{past.map((a) => (
+          <li key={a.id}><Link to={`/activity/${a.id}`} className="list-item row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{parseYmd(dayOf(a)).getDate()} {MONTHS[parseYmd(dayOf(a)).getMonth()]} {dayOf(a).slice(0, 4)} · {distanceLabel(a.distanceM)}</span></span>
+            <span className="row" style={{ gap: 6 }}>{pbRuns.has(a.id) && <span className="tag-new"><Award size={12} strokeWidth={2.5} aria-hidden="true" />PB</span>}<span className="stat">{duration(a.movingS)}</span></span></Link></li>
+        ))}</ul> : <p className="muted">Runs you mark as races appear here. On a run's page, tap "This was a race".</p>}
+      </section>
+    </div>
+  );
+}
+
+export default function You() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'races' ? 'races' : 'progress';
+  const [adding, setAdding] = useState(false);
+  return (
+    <div className="stack-lg">
+      <AppHeader title="You" avatar right={<><SampleChip /><button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button></>} />
+      <Segmented<'progress' | 'races'> label="Section" value={tab} onChange={(x) => setParams(x === 'races' ? { tab: 'races' } : {}, { replace: true })} options={[{ value: 'progress', label: 'Progress' }, { value: 'races', label: 'Races' }]} />
+      {tab === 'progress' ? <ProgressTab /> : <RacesTab />}
+      <QuickAdd open={adding} onClose={() => setAdding(false)} />
+    </div>
   );
 }
