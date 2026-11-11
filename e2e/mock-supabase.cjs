@@ -162,7 +162,10 @@ function createMock() {
     const clubReadable = (r) => table === 'clubs' || (table === 'club_members' && memberOf(r.club_id)) || (table === 'group_runs' && memberOf(r.club_id)) || (table === 'group_run_going' && memberOf(runClub(r.group_run_id)));
     const match = (r) => owner(r) === u.id && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     // Reads mirror the real row rules: public posts and runner profiles are readable by everyone signed in
-    const readable = (r) => (owner(r) === u.id || (table === 'posts' && r.visibility === 'everyone') || table === 'hub_profiles' || table === 'ritmos' || clubReadable(r)) && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
+    // Like can_see_post: followers-only posts for accepted followers; follows involving me (either side)
+    const followerPost = (r) => table === 'posts' && r.visibility === 'followers' && state.tables.follows.some((f) => f.follower_id === u.id && f.followee_id === r.user_id && f.status === 'accepted');
+    const myFollow = (r) => table === 'follows' && (r.follower_id === u.id || r.followee_id === u.id);
+    const readable = (r) => (owner(r) === u.id || followerPost(r) || myFollow(r) || (table === 'posts' && r.visibility === 'everyone') || table === 'hub_profiles' || table === 'ritmos' || clubReadable(r)) && filters.every(([k, v]) => (k === 'or' ? orTest(r, v) : test(r, k, v)));
     if (method === 'GET' || method === 'HEAD') {
       let out = rows.filter(readable);
       const total = out.length;
@@ -193,6 +196,8 @@ function createMock() {
         const i = rows.findIndex((x) => k.every((c) => String(x[c]) === String(r[c])));
         const t = table === 'activities' ? { updated_at: stamp() } : {};
         if (i >= 0) rows[i] = { ...rows[i], ...r, ...t }; else {
+          // Like the real hub_on_follow trigger: following a public profile is accepted at once
+          if (table === 'follows' && state.tables.hub_profiles.find((h) => h.user_id === r.followee_id)?.private === false) r.status = 'accepted';
           rows.push({ ...r, ...t, ...(table === 'posts' ? { ritmo_count: 0, comment_count: 0, created_at: new Date().toISOString() } : {}), ...(table === 'comments' ? { created_at: new Date().toISOString() } : {}) });
           const post = state.tables.posts.find((p) => p.id === r.post_id);
           if (post && table === 'ritmos') post.ritmo_count++;
@@ -316,6 +321,25 @@ function createMock() {
   function storage(path, method, req, body) {
     const own = (p) => { const u = userFromReq(req); return u && p.split('/')[0] === u.id ? u : undefined; };
     let m;
+    // Several signed links at once (createSignedUrls). Mirrors the photo rule: your own files, or another runner's
+    // profile photo (avatar.jpg, avatar-small.jpg; never shoe photos) when their setting allows you and no block
+    if (path === '/object/sign/avatars' && method === 'POST') {
+      const u = userFromReq(req);
+      const canSee = (p) => {
+        const [owner, file] = p.split('/');
+        if (u && owner === u.id) return true;
+        if (!u || !['avatar.jpg', 'avatar-small.jpg'].includes(file)) return false;
+        const h = state.tables.hub_profiles.find((x) => x.user_id === owner);
+        if (!h || state.tables.blocks.some((b) => (b.blocker_id === owner && b.blocked_id === u.id) || (b.blocker_id === u.id && b.blocked_id === owner))) return false;
+        const vis = h.photo_visibility ?? 'everyone';
+        return vis === 'everyone' || (vis === 'followers' && state.tables.follows.some((f) => f.follower_id === u.id && f.followee_id === owner && f.status === 'accepted'));
+      };
+      return { status: 200, body: (body.paths || []).map((p) => {
+        if (!canSee(p) || !state.files.has(`avatars/${p}`)) return { path: p, signedURL: null, error: 'Either the object does not exist or you do not have access to it' };
+        const token = crypto.randomUUID(); state.signed.set(token, `avatars/${p}`);
+        return { path: p, signedURL: `/object/sign/avatars/${p}?token=${token}`, error: null };
+      }) };
+    }
     if ((m = path.match(/^\/object\/sign\/avatars\/(.+)$/)) && method === 'POST') {
       if (!own(m[1]) || !state.files.has(`avatars/${m[1]}`)) return { status: 400, body: { statusCode: '404', error: 'not_found', message: 'Object not found' } };
       const token = crypto.randomUUID(); state.signed.set(token, `avatars/${m[1]}`);

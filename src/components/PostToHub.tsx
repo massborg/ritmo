@@ -1,9 +1,9 @@
 // "Post to Hub": share one run, choosing who sees it and whether the route and heart rate show.
-// Only after the runner has turned on sharing. Nothing is ever posted automatically.
+// Only after the runner has turned on sharing. Runs are also posted automatically (see HubSync), unless turned off.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
-import { createPost, shareableRoute, type Visibility, defaultPostTitle } from '../data/hub';
+import { createPost, shareableRoute, type Post, type Visibility, defaultPostTitle } from '../data/hub';
 import { Chips, Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { TYPE_LABEL } from '../training/analysis';
@@ -11,7 +11,7 @@ import { garminAttribution } from '../data/garmin';
 import type { Activity, SessionType } from '../lib/types';
 
 export function PostToHub({ run, type, badges, compliance, onClose }: { run: Activity; type: SessionType; badges: string[]; compliance?: string; onClose: () => void }) {
-  const { session } = useApp();
+  const { session, data } = useApp();
   const [title, setTitle] = useState(defaultPostTitle(run.startTime));
   const [body, setBody] = useState('');
   const [vis, setVis] = useState<Visibility>('followers');
@@ -19,7 +19,7 @@ export function PostToHub({ run, type, badges, compliance, onClose }: { run: Act
   const [hr, setHr] = useState(true);
   const [state, setState] = useState<'idle' | 'busy' | 'done'>('idle');
   const [err, setErr] = useState<string>();
-  const route = run.streams ? shareableRoute(run.streams) : null;
+  const route = run.streams ? shareableRoute(run.streams, data.profile.hub?.trimM ?? 200) : null;
   const post = async () => {
     setState('busy'); setErr(undefined);
     try {
@@ -52,3 +52,15 @@ export function PostToHub({ run, type, badges, compliance, onClose }: { run: Act
 function postDevice(run: Activity): string | undefined {
   return garminAttribution(run) ?? run.device ?? (run.source === 'ritmo_gps' ? 'Ritmo' : undefined);
 }
+
+/** A post for a run, as automatic posting makes it: the route with the start and finish hidden, heart rate shown */
+export function buildRunPost(run: Activity, o: { uid: string; type: SessionType; visibility: Visibility; trimM: number }): Omit<Post, 'ritmo_count' | 'comment_count' | 'created_at'> {
+  const route = run.streams ? shareableRoute(run.streams, o.trimM) : null;
+  const generic = !run.name || /^(Run|Morning run|Afternoon run|Evening run|Night run)$/i.test(run.name);
+  return {
+    id: crypto.randomUUID(), user_id: o.uid, activity_id: run.id, title: generic ? defaultPostTitle(run.startTime) : run.name, body: null, visibility: o.visibility,
+    show_map: !!route, show_hr: true, route, city: null,
+    stats: { startedAt: run.startTime, device: postDevice(run), distanceM: run.distanceM, movingS: run.movingS, paceS: run.movingS / (run.distanceM / 1000), elevGainM: run.elevGainM, avgHr: run.avgHr, type: o.type, typeLabel: TYPE_LABEL[o.type] },
+  };
+}
+

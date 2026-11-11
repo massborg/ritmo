@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity as Pulse, Camera, ChevronRight, Database, Footprints, HeartPulse, KeyRound, LogOut, Shield, Target, Thermometer, UserRound, Volume2 } from 'lucide-react';
+import { Activity as Pulse, Camera, ChevronRight, Database, Footprints, HeartPulse, KeyRound, LogOut, Shield, Target, Thermometer, UserRound, Users, Volume2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
 import { AppHeader, SampleChip } from '../components/app';
@@ -10,6 +10,8 @@ import { distanceLabel, duration, relTime, shortDate, parseYmd } from '../lib/fo
 import { sendPasswordReset } from '../app/auth';
 import type { Profile as P } from '../lib/types';
 import { PushReminders } from '../components/PushReminders';
+import { PhotoVisibility } from '../components/PhotoVisibility';
+import { autoPostOn } from '../training/autopost';
 import { shoeTotals } from '../training/shoes';
 import { BadgeShelf } from '../components/Badges';
 import { CalendarFeed } from '../components/CalendarFeed';
@@ -48,9 +50,10 @@ export default function Profile() {
           <AvatarImage size={72} />
           <div className="stack-sm" style={{ gap: 4 }}>
             <button className="btn btn-small" onClick={() => setPhoto(true)} disabled={data.mode === 'sample'}><Camera size={18} strokeWidth={2} aria-hidden="true" />{p.avatar ? 'Change or remove photo' : 'Add a photo'}</button>
-            <span className="caption">{data.mode === 'sample' ? 'Available with your own data' : 'Private to you'}</span>
+            {data.mode === 'sample' && <span className="caption">Available with your own data</span>}
           </div>
         </div>
+        {data.mode !== 'sample' && <PhotoVisibility />}
         <AvatarEditor open={photo} onClose={() => setPhoto(false)} />
         <div className="field"><label htmlFor="pname">Your name</label><input id="pname" className="input" value={p.name} onChange={(e) => updateProfile({ name: e.target.value })} autoComplete="given-name" /></div>
         <div className="row-between wrap"><span className="label">Units</span><Segmented label="Units" value={p.units} onChange={(u) => updateProfile({ units: u })} options={[{ value: 'km', label: 'Kilometres' }, { value: 'mi', label: 'Miles' }]} /></div>
@@ -78,6 +81,7 @@ export default function Profile() {
         <h2 id="data-h" className="label muted">Data and privacy</h2>
         <div className="group">
           <Row to="/profile/data" icon={<Database size={18} strokeWidth={2} />} title="Data sources" sub={`${data.sources.filter((s) => s.connected).map((s) => (s.kind === 'sample' ? 'Sample data' : s.kind === 'upload' ? 'File upload' : s.kind)).join(', ') || 'None connected'}${lastSync ? ` · last synced ${relTime(lastSync)}` : ''}`} />
+          {hasFlag('hub') && <Row to="/profile/hub" icon={<Users size={18} strokeWidth={2} />} title="Hub and privacy" sub={!autoPostOn(data.profile) ? 'Not posting runs automatically' : `Posting runs automatically · ${({ everyone: 'Everyone', followers: 'Followers', only_me: 'Only me' } as const)[data.profile.hub?.audience ?? 'followers']}`} />}
           <Row to="/profile/privacy" icon={<Shield size={18} strokeWidth={2} />} title="Privacy and your data" />
         </div>
       </section>

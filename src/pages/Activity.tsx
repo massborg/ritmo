@@ -3,7 +3,7 @@ import { forStats, implausible } from '../data/quality';
 import { garminAttribution } from '../data/garmin';
 import { isStravaRun, stravaUrl } from '../data/strava';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeftRight, Award, CalendarClock, Check, CheckCircle2, HeartPulse, MessageCircle, MoreHorizontal, Plus, Share2, Trash2, TrendingUp, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Award, CalendarClock, Check, CheckCircle2, HeartPulse, MessageCircle, EyeOff, MoreHorizontal, Plus, Share2, Trash2, TrendingUp, Upload, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
@@ -32,6 +32,8 @@ import { RunCharts } from '../components/RunCharts';
 import { RunShoes } from '../components/RunShoes';
 import { Sheet } from '../components/inputs';
 import { DeleteRunSheet } from '../components/DeleteRun';
+import { AudienceSheet, StravaShareGuide, useRunPost } from '../components/RunHub';
+import { setPostVisibility } from '../data/hub';
 
 /** After deleting: back to where the runner came from inside the app, otherwise to their runs (never out of the app,
  *  which would reload it and lose Undo) */
@@ -118,11 +120,14 @@ export default function ActivityPage() {
   const [sharing, setSharing] = useState(false);
   const [menu, setMenu] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [audience, setAudience] = useState(false);
+  const [stravaShare, setStravaShare] = useState(false);
   const nav = useNavigate();
   // Update 2, §2: Overview · Intervals · Charts · Shoes; the last tab is remembered for this browser session
   const [tab, setTabState] = useState<RunTab>(savedTab);
   const setTab = (t: RunTab) => { setTabState(t); try { sessionStorage.setItem(TAB_KEY, t); } catch { /* */ } };
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
+  const { post, reload: reloadPost } = useRunPost(a);
   const iv = useMemo(() => (a ? splitRun(a, data.profile.units) : undefined), [a, data.profile.units]);
   const [title, setTitle] = useState(a?.name ?? '');
   useEffect(() => { setTitle(a?.name ?? ''); }, [a?.id, a?.name]);
@@ -193,6 +198,8 @@ export default function ActivityPage() {
             onClick={() => setTab(t.id)} onKeyDown={(e) => tabKeys(e, i)}>{t.label}</button>
         ))}
       </div>
+      {audience && post && <AudienceSheet post={post} onClose={() => setAudience(false)} onChanged={() => void reloadPost()} />}
+      {stravaShare && <StravaShareGuide run={a} onClose={() => setStravaShare(false)} />}
       {deleting && <DeleteRunSheet run={a} onClose={() => setDeleting(false)} onDeleted={() => leaveRun(nav)} />}
       {loading && <p className="caption" role="status">Loading splits, charts and route…</p>}
       {menu && (
@@ -202,6 +209,9 @@ export default function ActivityPage() {
             <button className="btn btn-block" onClick={() => { setRunHidden(a.id, !a.hidden); setMenu(false); }}>{a.hidden ? 'Count in my stats again' : 'Leave out of my stats'}</button>
             <button className="btn btn-block" onClick={() => goFix('fix-km')}>Correct distance or time</button>
             {canShare && <button className="btn btn-block" onClick={() => { setMenu(false); setTab('overview'); setSharing(true); }}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share this run</button>}
+            {post && post.visibility !== 'only_me' && <button className="btn btn-block" onClick={async () => { setMenu(false); await setPostVisibility(post.id, 'only_me'); void reloadPost(); }}><EyeOff size={18} strokeWidth={2} aria-hidden="true" />Hide from Hub</button>}
+            {post && <button className="btn btn-block" onClick={() => { setMenu(false); setAudience(true); }}><Users size={18} strokeWidth={2} aria-hidden="true" />{post.visibility === 'only_me' ? 'Show on the Hub' : 'Change audience'}</button>}
+            {isStravaRun(a) && hasFlag('hub') && <button className="btn btn-block" onClick={() => { setMenu(false); setStravaShare(true); }}><Upload size={18} strokeWidth={2} aria-hidden="true" />Upload the original file to share</button>}
             <button className="btn btn-block btn-danger" onClick={() => { setMenu(false); setDeleting(true); }}><Trash2 size={18} strokeWidth={2} aria-hidden="true" />Delete run</button>
           </div>
         </Sheet>
@@ -340,9 +350,16 @@ export default function ActivityPage() {
       )}
       <div className="row wrap">
         <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(a.startTime))} go?`)}`} className="btn"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask the coach about this run</Link>
-        {!isStravaRun(a) && hasFlag('hub') && data.profile.consents?.hubSharing?.granted && <button className="btn" onClick={() => setPosting(true)}><Users size={18} strokeWidth={2} aria-hidden="true" />Post to Hub</button>}
-        {isStravaRun(a) && (hasFlag('hub') || hasFlag('share_cards')) && <p className="caption" style={{ flexBasis: '100%' }}>This run came from Strava, so it stays private to you: Strava's rules do not allow posting it to the Hub or sharing it as an image.</p>}
+        {!isStravaRun(a) && hasFlag('hub') && data.profile.consents?.hubSharing?.granted && post === null && <button className="btn" onClick={() => setPosting(true)}><Users size={18} strokeWidth={2} aria-hidden="true" />Post to Hub</button>}
+        {post && <span className="caption row" style={{ gap: 6, flexBasis: '100%' }}><Users size={14} strokeWidth={2} aria-hidden="true" />{post.visibility === 'only_me' ? 'Hidden from the Hub (only you see it).' : `On the Hub · ${post.visibility === 'everyone' ? 'Everyone' : 'Followers'} can see it.`} Change it from the ⋯ menu.</span>}
       </div>
+      {isStravaRun(a) && (hasFlag('hub') || hasFlag('share_cards')) && (
+        <div className="card stack-sm strava-private">
+          <p className="label">Private to you</p>
+          <p className="caption">This run came from Strava, and Strava's rules don't let apps show it to anyone else, so it isn't on the Hub and can't be shared as an image.</p>
+          {hasFlag('hub') && <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setStravaShare(true)}><Upload size={18} strokeWidth={2} aria-hidden="true" />Share this run: upload the original file from Garmin Connect</button>}
+        </div>
+      )}
       {sharing && <Suspense fallback={null}><ShareSheet onClose={() => setSharing(false)} data={{
         title: a.name, date: longDate(new Date(a.startTime)), distance: dist(a.distanceM, U), time: duration(a.movingS), pace: pace(a.movingS / (a.distanceM / 1000), U),
         hr: a.avgHr ? `${a.avgHr} bpm` : undefined, climb: a.elevGainM != null ? `${a.elevGainM} m` : undefined, cadence: a.avgCadence ? `${a.avgCadence} spm` : undefined,

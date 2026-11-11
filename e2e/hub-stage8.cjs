@@ -80,7 +80,7 @@ async function signUp(page, mock, email) {
   const week = page.locator('.hub-week');
   check(await week.isVisible() && /Your week/.test(await week.innerText()), 'the "Your week" card shows');
   check(await week.locator('.hub-week-bar.today').count() === 1, 'today is the orange bar');
-  for (const n of ['Find runners', 'Hub settings']) check(await page.getByRole('button', { name: n }).isVisible(), `header: ${n}`);
+  for (const n of ['Find runners', 'Hub settings']) check(await page.getByRole(n === 'Find runners' ? 'link' : 'button', { name: n }).isVisible(), `header: ${n}`);
   check(await page.getByRole('button', { name: /^Notifications/ }).isVisible(), 'header: Notifications');
   await page.screenshot({ path: path.join(OUT, 'feed.png') });
 

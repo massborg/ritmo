@@ -69,9 +69,21 @@ export async function uploadAvatar(uid: string, jpeg: Blob): Promise<string> {
   return path;
 }
 
+/** The small copy shown to other runners in lists (feed, comments, search): 128 px, about 6 KB, cached for an hour */
+export const smallAvatarPath = (uid: string) => `${uid}/avatar-small.jpg`;
+export async function uploadSmallAvatar(uid: string, big: Blob): Promise<string> {
+  if (!supabase) throw new Error('Accounts are not configured.');
+  const img = await decode(big);
+  const small = await renderAvatar(img, { x: 0, y: 0, scale: 1 }, 128);
+  const path = smallAvatarPath(uid);
+  const { error } = await supabase.storage.from(BUCKET).upload(path, small, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' });
+  if (error) throw new Error(`The photo could not be uploaded. ${error.message}`);
+  return path;
+}
+
 export async function removeAvatar(path: string): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.storage.from(BUCKET).remove([path]);
+  const { error } = await supabase.storage.from(BUCKET).remove([path, path.replace(/avatar\.jpg$/, 'avatar-small.jpg')]);
   if (error) throw new Error(`The photo could not be removed. ${error.message}`);
 }
 

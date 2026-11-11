@@ -3,7 +3,19 @@
 import { supabase } from './supabase';
 
 export type Visibility = 'everyone' | 'followers' | 'only_me';
-export interface HubProfile { user_id: string; display_name: string; bio?: string | null; club?: string | null; private: boolean }
+export type PhotoVisibility = 'everyone' | 'followers' | 'only_me';
+export interface HubProfile {
+  user_id: string; display_name: string; bio?: string | null; club?: string | null; private: boolean;
+  /** The small copy of the runner's photo ("<uid>/avatar-small.jpg"), shown wherever they appear */
+  photo_path?: string | null;
+  /** Who can see the photo (the database enforces it); Everyone by default */
+  photo_visibility?: PhotoVisibility;
+  /** The name in lower case without accents, for search */
+  search_name?: string | null;
+}
+
+/** "Żammit" → "zammit", "Ħal Far" → "hal far": lower case, no accents, single spaces */
+export const searchName = (s: string) => s.toLowerCase().replace(/ħ/g, 'h').replace(/ł/g, 'l').replace(/ø/g, 'o').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ').trim();
 export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string; /** Challenge posts: which medal to show */ badgeId?: string }
 export interface Post {
   id: string; user_id: string; activity_id?: string | null; title: string; body?: string | null; visibility: Visibility;
@@ -21,7 +33,11 @@ export async function myHubProfile(uid: string): Promise<HubProfile | undefined>
   return ok(await db().from('hub_profiles').select('*').eq('user_id', uid).maybeSingle()) ?? undefined;
 }
 export async function saveHubProfile(p: HubProfile) {
-  ok(await db().from('hub_profiles').upsert({ ...p, updated_at: new Date().toISOString() }));
+  ok(await db().from('hub_profiles').upsert({ ...p, search_name: searchName(p.display_name), updated_at: new Date().toISOString() }));
+}
+/** Keep the Hub profile's photo in step with the runner's own (after adding, changing or removing it) */
+export async function setHubPhoto(uid: string, path: string | null) {
+  ok(await db().from('hub_profiles').update({ photo_path: path, updated_at: new Date().toISOString() }).eq('user_id', uid));
 }
 export async function profilesFor(ids: string[]): Promise<Map<string, HubProfile>> {
   const m = new Map<string, HubProfile>();
@@ -29,9 +45,37 @@ export async function profilesFor(ids: string[]): Promise<Map<string, HubProfile
   for (const p of ok(await db().from('hub_profiles').select('*').in('user_id', [...new Set(ids)])) as HubProfile[]) m.set(p.user_id, p);
   return m;
 }
+/** Runners whose first name, surname or any part of their name contains the search, from the first letter. Accents
+ *  and case are ignored ("zammit" finds "Żammit"). */
 export async function searchRunners(q: string): Promise<HubProfile[]> {
-  return ok(await db().from('hub_profiles').select('*').ilike('display_name', `%${q.replace(/[%_]/g, '')}%`).limit(20)) as HubProfile[];
+  const n = searchName(q).replace(/'/g, '');
+  if (!n) return [];
+  const rows = ok(await db().from('hub_profiles').select('*').or(`search_name.ilike.*${n}*,display_name.ilike.*${n}*`).limit(40)) as HubProfile[];
+  // Names that start with the search (first name or surname) first, then the rest, alphabetically
+  const rank = (p: HubProfile) => { const s = p.search_name ?? searchName(p.display_name); return s.startsWith(n) ? 0 : s.split(' ').some((w) => w.startsWith(n)) ? 1 : 2; };
+  return rows.sort((a, b) => rank(a) - rank(b) || a.display_name.localeCompare(b.display_name)).slice(0, 20);
 }
+
+// ---------- Profile photos ----------
+// Signed links to the small photos, kept for the session (they last an hour); the storage rules decide who may see
+// each one, so a photo the owner keeps to themselves or their followers simply does not come back.
+const photoCache = new Map<string, { url?: string; until: number }>();
+export async function photoUrls(paths: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const now = Date.now();
+  const need = [...new Set(paths.filter(Boolean))].filter((p) => { const c = photoCache.get(p); if (c && c.until > now) { if (c.url) out.set(p, c.url); return false; } return true; });
+  if (need.length && supabase) {
+    const { data } = await supabase.storage.from('avatars').createSignedUrls(need, 3600);
+    const got = new Map((data ?? []).map((x) => [x.path ?? '', x.error ? undefined : x.signedUrl]));
+    for (const p of need) {
+      const url = got.get(p) ?? undefined;
+      photoCache.set(p, { url, until: now + (url ? 50 : 10) * 60e3 });
+      if (url) out.set(p, url);
+    }
+  }
+  return out;
+}
+export const forgetPhoto = (path: string) => photoCache.delete(path);
 
 /** Feed: "following" (people I follow and me), "everyone" (public posts), "mine" (my own posts) */
 export async function feed(uid: string, which: 'following' | 'everyone' | 'mine', following: string[]): Promise<Post[]> {
@@ -44,6 +88,15 @@ export async function feed(uid: string, which: 'following' | 'everyone' | 'mine'
 export async function createPost(p: Omit<Post, 'ritmo_count' | 'comment_count' | 'created_at'>) {
   ok(await db().from('posts').insert(p));
 }
+/** The runner's posts for some runs (to know which are already on the Hub) */
+export async function postsForRuns(uid: string, runIds: string[]): Promise<Map<string, Post>> {
+  const m = new Map<string, Post>();
+  if (!runIds.length) return m;
+  for (const p of ok(await db().from('posts').select('*').eq('user_id', uid).in('activity_id', runIds)) as Post[]) if (p.activity_id) m.set(p.activity_id, p);
+  return m;
+}
+/** "Hide from Hub" (only the runner sees it, and it is not posted again) and "Change audience" */
+export async function setPostVisibility(id: string, visibility: Visibility) { ok(await db().from('posts').update({ visibility }).eq('id', id)); }
 export async function deletePost(id: string) { ok(await db().from('posts').delete().eq('id', id)); }
 /** Turning sharing off hides every post (only the runner can see them) */
 export async function hideAllMyPosts(uid: string) { ok(await db().from('posts').update({ visibility: 'only_me' }).eq('user_id', uid)); }
@@ -154,3 +207,17 @@ export function defaultPostTitle(startIso: string): string {
   return `${d.toLocaleDateString('en-GB', { weekday: 'long' })} ${part} run`;
 }
 
+
+/** One photo link; calls made in the same moment (a whole feed of avatars) are fetched in a single request */
+let queued: { path: string; resolve: (u: string | undefined) => void }[] = [];
+export function photoUrl(path: string): Promise<string | undefined> {
+  const c = photoCache.get(path);
+  if (c && c.until > Date.now()) return Promise.resolve(c.url);
+  return new Promise((resolve) => {
+    queued.push({ path, resolve });
+    if (queued.length === 1) setTimeout(() => {
+      const batch = queued; queued = [];
+      photoUrls(batch.map((x) => x.path)).then((m) => batch.forEach((x) => x.resolve(m.get(x.path)))).catch(() => batch.forEach((x) => x.resolve(undefined)));
+    }, 0);
+  });
+}

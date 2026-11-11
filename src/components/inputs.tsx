@@ -6,15 +6,19 @@ import { addDays, DAY_SHORT, duration, longDate, MONTHS_LONG, parseTime, parseYm
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  // The latest onClose, so a parent passing a new function on every render does not re-run the effect below: that
+  // moved focus back to the first button after every keystroke (Find runners lost each letter after the first)
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
-    setTimeout(() => ref.current?.querySelector<HTMLElement>('[data-autofocus], button, input')?.focus(), 30);
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; prev?.focus(); };
-  }, [open, onClose]);
+    const t = setTimeout(() => { if (!ref.current?.contains(document.activeElement)) ref.current?.querySelector<HTMLElement>('[data-autofocus], button, input')?.focus(); }, 30);
+    return () => { clearTimeout(t); document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; prev?.focus(); };
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
