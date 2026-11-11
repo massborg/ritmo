@@ -38,10 +38,10 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   const first = sheet.locator('.shoe-result').first();
   check(/Vomero Plus/.test(await first.innerText()) && /Nike · Long runs/.test(await first.innerText()), 'searching "vomero plus" finds the Nike Vomero Plus');
   await sheet.getByLabel('Search shoes by brand or model').fill('');
-  await sheet.getByRole('button', { name: 'Brooks', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Brooks', exact: true }).click(); await page.waitForTimeout(400);
   const brooks = await sheet.locator('.shoe-result').allInnerTexts();
   check(brooks.length > 3 && brooks.every((x) => /Brooks/.test(x)), `the Brooks filter shows only Brooks (${brooks.length})`);
-  await sheet.getByRole('button', { name: 'All', exact: true }).click();
+  await sheet.getByRole('button', { name: 'All', exact: true }).click(); await page.waitForTimeout(400);
   // Each model is drawn in the shape that fits it
   const shapes = await sheet.locator('.shoe-result svg[data-shape]').evaluateAll((els) => els.map((e) => e.getAttribute('data-shape')));
   check(new Set(shapes).size >= 4, `the list draws different shoe shapes (${[...new Set(shapes)].join(', ')})`);
