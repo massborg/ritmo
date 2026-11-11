@@ -74,6 +74,8 @@ export default function Today() {
   const U = data.profile.units;
   const t = ymd(today);
   const [params] = useSearchParams();
+  // From the "Missed key session" reminder: its move-or-skip card is brought into view once
+  const scrolledToMissed = useRef(false);
   const [showRebuild, setShowRebuild] = useState(() => params.get('rebuilt') === '1');
   const [selected, setSelected] = useState(() => { const d = params.get('day'); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : t; });
   const [sheetDay, setSheetDay] = useState<string>();
@@ -139,9 +141,6 @@ export default function Today() {
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
   const lastAn = last ? analysisFor(last) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
-  // From the "Missed key session" reminder: bring its move-or-skip card into view
-  const fromMissed = params.get('missed');
-  useEffect(() => { if (fromMissed && missed) setTimeout(() => document.getElementById('missed')?.closest('section')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400); }, [fromMissed, missed?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const missedTo = plan && missed ? missedMoveOptions(plan, missed.id, today).slice(0, 3) : [];
   const ranHereKm = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).reduce((x, a) => x + a.distanceM, 0);
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
@@ -308,7 +307,7 @@ export default function Today() {
       )}
 
       {missed && (
-        <section className="card stack-sm" aria-labelledby="missed">
+        <section className="card stack-sm" aria-labelledby="missed" ref={(el) => { if (el && params.get('missed') && !scrolledToMissed.current) { scrolledToMissed.current = true; setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400); } }}>
           <h2 id="missed" className="label">You missed {missed.title.toLowerCase()} on {longDate(parseYmd(missed.date))}</h2>
           <p className="muted">{missedTo.length ? 'Move it to a day this week with an easier day either side, or let it go. One missed session costs very little.' : 'There is no safe day left this week, so it is best to let it go. One missed session costs very little.'}</p>
           <div className="row wrap">
