@@ -4,6 +4,7 @@ import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UndoDeleteToast } from './components/DeleteRun';
 import { HubSync } from './components/HubSync';
+import { PushHints } from './components/PushHints';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CircleUserRound, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
@@ -314,6 +315,7 @@ function Shell() {
         <UpdateToast />
         <UndoDeleteToast />
         <HubSync />
+        <PushHints />
         <ConsentBanner />
         <LegacyOffer />
         <PlanProblemSheet />

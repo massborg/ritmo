@@ -199,6 +199,8 @@ export interface Profile {
   photoVisibility?: 'everyone' | 'followers' | 'only_me';
   /** Hub posting settings (Profile › Hub and privacy) */
   hub?: HubPrefs;
+  /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
+  pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[] };
   /** PBs on the Hub profile (off by default, up to 4 distances) */
   hubPbs?: import('../training/profile-pbs').HubPbSettings;
 }

@@ -1095,3 +1095,4 @@ li + li > .profile-run, li.profile-run + li.profile-run { border-top: 1px solid 
 .note-avatar { position: relative; flex: none; }
 .note-kind { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-raised); border: 1px solid var(--hairline); color: var(--ink); }
 .note-kind.note-ritmo { color: var(--brand); }
+.reminder-group { margin: var(--s3) 0 0; padding-top: var(--s3); border-top: 1px solid var(--hairline); }

@@ -139,6 +139,9 @@ export default function Today() {
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
   const lastAn = last ? analysisFor(last) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
+  // From the "Missed key session" reminder: bring its move-or-skip card into view
+  const fromMissed = params.get('missed');
+  useEffect(() => { if (fromMissed && missed) setTimeout(() => document.getElementById('missed')?.closest('section')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400); }, [fromMissed, missed?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const missedTo = plan && missed ? missedMoveOptions(plan, missed.id, today).slice(0, 3) : [];
   const ranHereKm = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).reduce((x, a) => x + a.distanceM, 0);
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
