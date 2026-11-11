@@ -39,6 +39,10 @@ const HubPage = lazyPage(() => import('./pages/Hub'));
 const ClubPage = lazyPage(() => import('./pages/Club'));
 const FindRunners = lazyPage(() => import('./pages/FindRunners'));
 const HubPrivacy = lazyPage(() => import('./pages/HubPrivacy'));
+const RunnerProfile = lazyPage(() => import('./pages/RunnerProfile'));
+const HubPeople = lazyPage(() => import('./pages/HubPeople'));
+const HubNotifications = lazyPage(() => import('./pages/HubNotifications'));
+const EditHubProfile = lazyPage(() => import('./pages/EditHubProfile'));
 const ProfileShoes = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileShoes })));
 const ProfileBody = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileBody })));
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
@@ -281,6 +285,10 @@ function Shell() {
               <Route path="/hub" element={<HubPage />} />
               <Route path="/hub/club/:id" element={<ClubPage />} />
               <Route path="/hub/find" element={<FindRunners />} />
+              <Route path="/hub/runner/:id" element={<RunnerProfile />} />
+              <Route path="/hub/runner/:id/people/:tab" element={<HubPeople />} />
+              <Route path="/hub/notifications" element={<HubNotifications />} />
+              <Route path="/hub/edit" element={<EditHubProfile />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />

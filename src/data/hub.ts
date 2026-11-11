@@ -12,6 +12,12 @@ export interface HubProfile {
   photo_visibility?: PhotoVisibility;
   /** The name in lower case without accents, for search */
   search_name?: string | null;
+  /** Optional area under the name ("Sliema") */
+  area?: string | null;
+  /** Published by the runner's app for their profile; never from Strava runs */
+  stats?: { runs?: number; weekStreak?: number; updatedAt?: string } | null;
+  /** The PBs the runner chose to show (null when hidden) */
+  pbs?: import('../training/profile-pbs').ShownPb[] | null;
 }
 
 /** "Żammit" → "zammit", "Ħal Far" → "hal far": lower case, no accents, single spaces */
@@ -97,6 +103,24 @@ export async function postsForRuns(uid: string, runIds: string[]): Promise<Map<s
 }
 /** "Hide from Hub" (only the runner sees it, and it is not posted again) and "Change audience" */
 export async function setPostVisibility(id: string, visibility: Visibility) { ok(await db().from('posts').update({ visibility }).eq('id', id)); }
+/** A runner's posts that the viewer may see, newest first (the database decides what is visible) */
+export async function postsBy(uid: string, order: 'new' | 'fuego' = 'new'): Promise<Post[]> {
+  const q = db().from('posts').select('*').eq('user_id', uid).neq('visibility', 'only_me');
+  return ok(await (order === 'fuego' ? q.order('ritmo_count', { ascending: false }).limit(5) : q.order('created_at', { ascending: false }).limit(50))) as Post[];
+}
+export async function postById(id: string): Promise<Post | undefined> {
+  return (ok(await db().from('posts').select('*').eq('id', id).maybeSingle()) as Post | null) ?? undefined;
+}
+export interface HubCounts { followers: number; following: number; requests: number; fuego: number }
+/** Followers, following, requests (own profile only) and Fuego received, for any runner */
+export async function hubCounts(uid: string): Promise<HubCounts> {
+  const rows = ok(await db().rpc('hub_counts', { target: uid })) as HubCounts[] | null;
+  return rows?.[0] ?? { followers: 0, following: 0, requests: 0, fuego: 0 };
+}
+/** A runner's followers or following, when their privacy lets the viewer see them */
+export async function followList(uid: string, which: 'followers' | 'following'): Promise<string[]> {
+  return ((ok(await db().rpc('hub_follow_list', { target: uid, which })) as { user_id: string }[] | null) ?? []).map((r) => r.user_id);
+}
 export async function deletePost(id: string) { ok(await db().from('posts').delete().eq('id', id)); }
 /** Turning sharing off hides every post (only the runner can see them) */
 export async function hideAllMyPosts(uid: string) { ok(await db().from('posts').update({ visibility: 'only_me' }).eq('user_id', uid)); }

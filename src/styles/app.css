@@ -112,7 +112,7 @@ h1, h2, h3, h4 { margin: 0; }
 .btn-danger { color: var(--danger); border-color: var(--danger); }
 .btn-danger-solid { background: var(--danger); border-color: var(--danger); color: var(--surface); }
 .toast-action { display: flex; align-items: center; gap: 16px; padding: 6px 6px 6px 18px; }
-.toast-btn { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--brand-strong); font: 700 14px/20px var(--font-body); cursor: pointer; }
+.toast-btn { white-space: nowrap; flex: none; min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--brand-strong); font: 700 14px/20px var(--font-body); cursor: pointer; }
 .toast-btn:focus-visible { outline: 2px solid var(--brand-strong); outline-offset: 2px; }
 .btn-small { min-height: 44px; padding: 0 var(--s4); }
 .btn-block { width: 100%; }
@@ -1060,3 +1060,38 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 @keyframes sk-pulse { 50% { opacity: 0.5; } }
 @media (prefers-reduced-motion: reduce) { .find-skeleton .sk { animation: none; } }
 .steps-list { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+
+/* Hub profile, lists and notifications (update 2, §11–§14) */
+.runner-link { color: inherit; text-decoration: none; }
+.runner-link:hover { text-decoration: underline; }
+.profile-ring { display: inline-flex; padding: 3px; border-radius: 50%; background: var(--brand); flex: none; }
+.profile-ring .hub-avatar { width: 88px; height: 88px; font-size: 28px; border: 3px solid var(--bg, var(--surface)); }
+.profile-name { margin: 0; overflow-wrap: anywhere; }
+.flame { color: var(--brand); flex: none; }
+.profile-flames { gap: 18px; }
+.profile-flames .link-btn { color: inherit; min-height: 44px; }
+.profile-counts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.profile-count { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 64px; padding: 8px; border-radius: 14px; background: var(--surface-raised); border: 1px solid var(--hairline); color: inherit; text-decoration: none; }
+.profile-count .stat { font-size: 20px; }
+.profile-count.is-tinted { background: color-mix(in srgb, var(--brand) 12%, var(--surface-raised)); border-color: color-mix(in srgb, var(--brand) 35%, transparent); }
+.pb-strip { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; }
+.pb-cell { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--surface-raised); border: 1px solid var(--hairline); min-width: 0; }
+.pb-time { font-size: 18px; }
+.pb-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-choice { padding-top: 12px; border-top: 1px solid var(--hairline); }
+.profile-runs { padding: 0 var(--s4); }
+.profile-run { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 0; color: inherit; text-decoration: none; }
+li + li > .profile-run, li.profile-run + li.profile-run { border-top: 1px solid var(--hairline); }
+.profile-run-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.private-note { text-align: left; }
+.people-tabs { display: flex; border-bottom: 1px solid var(--hairline); }
+.people-tabs .run-tab { flex: 1; }
+.people-count { color: var(--muted); font-weight: 500; margin-left: 4px; }
+.find-search-sm { min-height: 44px; }
+.find-search-sm input { min-height: 40px; font-size: 16px; }
+.note-list { display: grid; gap: 4px; }
+.note-row { display: flex; gap: 12px; padding: 10px 8px; border-radius: 12px; align-items: flex-start; }
+.note-row.is-unread { background: color-mix(in srgb, var(--brand) 9%, transparent); }
+.note-avatar { position: relative; flex: none; }
+.note-kind { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-raised); border: 1px solid var(--hairline); color: var(--ink); }
+.note-kind.note-ritmo { color: var(--brand); }

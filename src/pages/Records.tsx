@@ -23,7 +23,7 @@ export default function Records() {
       <section className="card stack" aria-labelledby="pbs">
         <div className="row" style={{ gap: 8 }}><Award size={20} strokeWidth={2} color="var(--accent-mark)" aria-hidden="true" /><h2 id="pbs" className="title">Personal bests</h2></div>
         {pbs.length === 0 && <p className="muted">Personal bests appear once you have run 1 km or more with GPS.</p>}
-        <p className="caption">Best times anywhere inside your runs, not only whole runs of that distance. Tap History to see how each one improved.</p>
+        <p className="caption">Best times anywhere inside your runs, not only whole runs of that distance, worked out by Ritmo from each run's GPS or watch data. They can differ by a few seconds from Strava's best efforts or an official chip time, which isn't imported. To show an official time on your Hub profile, enter it there as your own. Tap History to see how each one improved.</p>
         <ul className="list">{pbs.map((p) => <PbRow key={p.label} pb={p} />)}</ul>
         {toReview.length > 0 && (
           <div className="stack-sm">
