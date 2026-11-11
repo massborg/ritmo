@@ -219,6 +219,8 @@ function createMock() {
           const entry = { user_id: u.id, id: rows[i].id, deleted_at: stamp() };
           if (j >= 0) d[j] = entry; else d.push(entry);
         }
+        // Like the real foreign keys: a post's Fuego, comments and media go with it
+        if (table === 'posts') for (const t of ['ritmos', 'comments', 'post_media']) if (state.tables[t]) state.tables[t] = state.tables[t].filter((x) => x.post_id !== gone.id);
         rows.splice(i, 1);
       }
       return { status: 204, body: null };

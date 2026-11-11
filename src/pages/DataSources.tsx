@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileUp, Upload } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { importedFrom } from '../components/DeleteRun';
 import { SKIP_LABEL, type SkipCategory } from '../data/parsers';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
@@ -93,6 +94,28 @@ function Duplicates() {
   );
 }
 
+/** Imported runs the runner deleted: kept so a sync does not bring them back; "Re-import" puts one back. */
+function DeletedRuns() {
+  const { data, restoreRun } = useApp();
+  const [msg, setMsg] = useState<string>();
+  const runs = [...(data.removed ?? [])].sort((a, b) => b.startTime.localeCompare(a.startTime));
+  if (data.mode !== 'real' || (!runs.length && !msg)) return null;
+  const U = data.profile.units;
+  return (
+    <section className="card stack" aria-labelledby="deleted-runs">
+      <h2 id="deleted-runs" className="title">Deleted runs</h2>
+      <p className="caption">Runs from Strava, a watch or a file that you deleted in Ritmo. They stay deleted when you sync. Re-import one to bring it back with everything it had.</p>
+      {runs.length > 0 && <ul className="list">{runs.map((a) => (
+        <li key={a.id} className="list-item row-between wrap" style={{ gap: 8 }}>
+          <span className="stack-sm" style={{ gap: 0 }}><span className="label">{a.name}</span><span className="caption">{new Date(a.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · {dist(a.distanceM, U)} · {duration(a.movingS)}{importedFrom(a) ? ` · from ${importedFrom(a)}` : ''}</span></span>
+          <button className="btn btn-small" onClick={() => { restoreRun(a.id); setMsg(`${a.name} is back in your runs.`); }}>Re-import</button>
+        </li>
+      ))}</ul>}
+      {msg && <p role="status" className="caption">{msg}</p>}
+    </section>
+  );
+}
+
 export default function DataSources() {
   const nav = useNavigate();
   const { data, loadSample, disconnectSource, startFresh, hasFlag, connectGarmin, syncGarminNow, garminSyncing, connectStrava, syncStravaNow, stravaSyncing } = useApp();
@@ -109,6 +132,7 @@ export default function DataSources() {
     <div className="stack-lg">
       <AppHeader title="Data sources" back />
       <Duplicates />
+      <DeletedRuns />
 
       {data.mode === 'sample' && (
         <div className="banner" role="note"><p>You are viewing <strong>sample data</strong>. Uploading your own runs replaces it.</p></div>
