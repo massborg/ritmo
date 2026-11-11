@@ -3,6 +3,7 @@ import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UndoDeleteToast } from './components/DeleteRun';
+import { HubSync } from './components/HubSync';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CircleUserRound, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
@@ -36,6 +37,8 @@ const Terms = lazyPage(() => import('./pages/Terms'));
 const RunPage = lazyPage(() => import('./pages/Run'));
 const HubPage = lazyPage(() => import('./pages/Hub'));
 const ClubPage = lazyPage(() => import('./pages/Club'));
+const FindRunners = lazyPage(() => import('./pages/FindRunners'));
+const HubPrivacy = lazyPage(() => import('./pages/HubPrivacy'));
 const ProfileShoes = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileShoes })));
 const ProfileBody = lazyPage(() => import('./pages/ProfileSections').then((m) => ({ default: m.ProfileBody })));
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
@@ -277,6 +280,7 @@ function Shell() {
               <Route path="/run" element={<RunPage />} />
               <Route path="/hub" element={<HubPage />} />
               <Route path="/hub/club/:id" element={<ClubPage />} />
+              <Route path="/hub/find" element={<FindRunners />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
@@ -285,6 +289,7 @@ function Shell() {
               <Route path="/garmin/callback" element={<GarminCallback />} />
               <Route path="/strava/callback" element={<StravaCallback />} />
               <Route path="/profile/privacy" element={<Privacy />} />
+              <Route path="/profile/hub" element={<HubPrivacy />} />
               <Route path="/goals" element={<Goals />} />
               <Route path="/profile/health" element={<HealthConnect />} />
               <Route path="/setup" element={<Setup />} />
@@ -300,6 +305,7 @@ function Shell() {
         </Gate>
         <UpdateToast />
         <UndoDeleteToast />
+        <HubSync />
         <ConsentBanner />
         <LegacyOffer />
         <PlanProblemSheet />

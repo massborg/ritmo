@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { RunnerAvatar } from '../components/RunnerAvatar';
 import { AppHeader } from '../components/app';
 import { Sheet } from '../components/inputs';
 import { Empty, Segmented, StatusLine } from '../components/ui';
@@ -77,7 +78,7 @@ export default function ClubPage() {
         </section>
         <section className="stack-sm" aria-labelledby="club-members">
           <h2 id="club-members" className="title">Members</h2>
-          <ul className="list card">{members.map((m) => <li key={m.user_id} className="club-row"><span className="hub-avatar" aria-hidden="true">{initials(names.get(m.user_id)?.display_name)}</span><span style={{ flex: 1 }}>{m.user_id === uid ? 'You' : names.get(m.user_id)?.display_name ?? 'Runner'}</span>{m.role === 'admin' && <span className="tag">Admin</span>}</li>)}</ul>
+          <ul className="list card">{members.map((m) => <li key={m.user_id} className="club-row"><RunnerAvatar id={m.user_id} profile={names.get(m.user_id)} /><span style={{ flex: 1 }}>{m.user_id === uid ? 'You' : names.get(m.user_id)?.display_name ?? 'Runner'}</span>{m.role === 'admin' && <span className="tag">Admin</span>}</li>)}</ul>
         </section>
         <ClubFeed memberIds={members.map((m) => m.user_id)} />
         {!(me.role === 'admin' && members.filter((m) => m.role === 'admin').length === 1) && <button className="btn btn-ghost" onClick={async () => { await clubs.leave(uid, id); nav('/hub?tab=clubs'); }}>Leave club</button>}

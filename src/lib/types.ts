@@ -195,6 +195,28 @@ export interface Profile {
   reminders?: import('../training/push-core').Reminders;
   /** Body check-ins (pain and niggles) and return-to-run progress; never shown on the Hub */
   body?: import('../training/body').BodyState;
+  /** Who can see the profile photo on the Hub (Everyone when not set) */
+  photoVisibility?: 'everyone' | 'followers' | 'only_me';
+  /** Hub posting settings (Profile › Hub and privacy) */
+  hub?: HubPrefs;
+}
+
+/** Hub posting (update 2, §6). Anything missing falls back to the default noted. */
+export interface HubPrefs {
+  /** Post runs automatically (on by default). Strava runs are never posted (Strava's rules). */
+  autoPost?: boolean;
+  /** Who sees automatic posts (Followers by default) */
+  audience?: 'everyone' | 'followers' | 'only_me';
+  /** Don't post races automatically */
+  skipRaces?: boolean;
+  /** Don't post runs shorter than this many km automatically (0 or missing: post all) */
+  skipUnderKm?: number;
+  /** Metres hidden at the start and finish of posted maps (200 by default, up to 500) */
+  trimM?: number;
+  /** Runs that started before this are never posted automatically (set when automatic posting starts) */
+  autoSince?: string;
+  /** Runs the runner asked to share by uploading the original file (posted whatever their date) */
+  shareIds?: string[];
 }
 
 export interface TrainingSettings {

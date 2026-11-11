@@ -90,14 +90,14 @@ const stravaRun = (id, daysAgo, km, name, sport = 'Run') => {
   const meta = (await page.locator('main p.caption').filter({ hasText: /·/ }).first().textContent()).trim();
   check(/(· |via )Strava$/.test(meta) && (await page.getByRole('link', { name: 'View on Strava' }).getAttribute('href')) === 'https://www.strava.com/activities/111', 'run page: dated "· Strava" with a View on Strava link');
   await page.getByRole('button', { name: 'Run options' }).click(); await page.waitForTimeout(300);
-  const noShare = await page.getByRole('button', { name: /Share this run/ }).count() === 0;
+  const noShare = await page.getByRole('button', { name: 'Share this run', exact: true }).count() === 0; // the image share (the original-file route is allowed)
   await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   check(await page.getByRole('button', { name: 'Post to Hub' }).count() === 0 && noShare, 'no Post to Hub or Share for a Strava run');
-  check(await page.getByText(/came from Strava, so it stays private to you/).isVisible(), 'explains why');
+  check(await page.getByText(/came from Strava, and Strava's rules don't let apps show it to anyone else/).isVisible(), 'explains why');
   const shots = require('path').join(__dirname, 'out');
   await page.locator('a.strava-link').evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-attribution.png') });
-  await page.getByText(/came from Strava, so it stays private to you/).evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.getByText(/came from Strava, and Strava's rules don't let apps show it to anyone else/).evaluate((e) => e.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: require('path').join(shots, 'strava-run-private.png') });
   // A non-Strava run still offers sharing
   const own = rows.activities[rows.activities.length - 1].id;

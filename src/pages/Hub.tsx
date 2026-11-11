@@ -5,7 +5,7 @@
 // - Clubs: need the Hub profile (members see each other's names), see ./Club.tsx for a club's own page.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Award, Bell, ChevronRight, Flame, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Settings, Share2, Trophy, UserPlus } from 'lucide-react';
+import { Award, Bell, ChevronRight, Flame, MapPin, MessageCircle, MoreHorizontal, Plus, Search, Settings, Share2, Trophy } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader, ZONE_OF } from '../components/app';
 import { Sheet } from '../components/inputs';
@@ -18,10 +18,13 @@ import type { Comment, HubProfile, Notification, Post } from '../data/hub';
 import type { Club, ClubMember, GroupRun, LeaderRow } from '../data/clubs';
 import { badgeOf, badgeSrc, BADGES, catalogue, localDay, progress, type BadgeId, type Challenge, type JoinedChallenge } from '../training/challenges';
 import { BadgeShelf, useChallenges } from '../components/Badges';
+import { RunnerAvatar } from '../components/RunnerAvatar';
+import { HUB_CONSENT_VERSION, autoPostUndecided } from '../training/autopost';
+import { FollowStateButton } from '../components/FollowButton';
 import { ZONE_NAMES } from '../training/fitness';
 import type { SessionType } from '../lib/types';
 
-export const HUB_CONSENT_VERSION = '2026-11';
+export { HUB_CONSENT_VERSION } from '../training/autopost';
 type Section = 'feed' | 'challenges' | 'clubs';
 type Tab = 'following' | 'everyone' | 'mine';
 export const initials = (n?: string) => (n ?? '?').split(/\s+/).map((x) => x[0]).slice(0, 2).join('').toUpperCase();
@@ -50,7 +53,7 @@ export default function HubPage() {
   const [notes, setNotes] = useState<Notification[]>([]);
   const [notePeople, setNotePeople] = useState<Map<string, HubProfile>>(new Map());
   const [follows, setFollows] = useState<hub.Follow[]>([]);
-  const [sheet, setSheet] = useState<'notes' | 'find' | 'settings'>();
+  const [sheet, setSheet] = useState<'notes' | 'settings'>();
   const loadSocial = useCallback(async () => {
     if (!uid) return;
     try {
@@ -72,7 +75,7 @@ export default function HubPage() {
   return (
     <div className="stack-lg">
       <AppHeader avatar title="Hub" right={ready ? <>
-        <button className="icon-btn icon-btn-round" aria-label="Find runners" onClick={() => setSheet('find')}><Search size={20} strokeWidth={2} /></button>
+        <Link className="icon-btn icon-btn-round" aria-label="Find runners" to="/hub/find"><Search size={20} strokeWidth={2} /></Link>
         <button className="icon-btn icon-btn-round hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} onClick={() => setSheet('notes')}><Bell size={20} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</button>
         <button className="icon-btn icon-btn-round" aria-label="Hub settings" onClick={() => setSheet('settings')}><Settings size={20} strokeWidth={2} /></button>
       </> : undefined} />
@@ -84,7 +87,6 @@ export default function HubPage() {
         : <ClubsTab me={me!} />}
 
       {sheet === 'notes' && <NotesSheet notes={notes} people={notePeople} follows={follows} onChange={loadSocial} onClose={() => { setSheet(undefined); void hub.markAllRead(uid!).then(loadSocial); }} />}
-      {sheet === 'find' && <FindSheet follows={follows} onChange={loadSocial} onClose={() => setSheet(undefined)} />}
       {sheet === 'settings' && me && <SettingsSheet me={me} onSaved={setMe} onClose={() => setSheet(undefined)} onStop={async () => {
         await hub.hideAllMyPosts(uid!);
         updateProfile({ consents: { ...data.profile.consents, hubSharing: { granted: false, at: new Date().toISOString(), version: HUB_CONSENT_VERSION } } });
@@ -98,6 +100,8 @@ function OptIn({ existing, onDone }: { existing?: HubProfile; onDone: (p: HubPro
   const { data, session } = useApp();
   const [name, setName] = useState(existing?.display_name ?? data.profile.name ?? '');
   const [priv, setPriv] = useState(existing?.private ?? true);
+  const { updateProfile } = useApp();
+  const [auto, setAuto] = useState(data.profile.hub?.autoPost ?? true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
   return (
@@ -105,17 +109,19 @@ function OptIn({ existing, onDone }: { existing?: HubProfile; onDone: (p: HubPro
       <h2 className="title">Share your runs on the Hub?</h2>
       <p>The Hub is where runners share runs, give each other a Fuego and run together in clubs. It is off until you turn it on.</p>
       <ul className="bullets">
-        <li>Nothing is posted automatically. You choose each run and who sees it: everyone, your followers, or only you.</li>
-        <li>Routes leave out the first and last 200 m, so your start and finish are not shown.</li>
+        <li>Your runs are posted automatically, to your followers. Runs from Strava never are: Strava's rules keep them private to you.</li>
+        <li>You can turn automatic posting off, change who sees your posts, or hide any run, at any time.</li>
+        <li>Routes leave out the first and last 200 m (up to 500 m if you prefer), so your start and finish are not shown.</li>
         <li>Other runners see the name below. Never your email, date of birth, health check, pain or how runs felt.</li>
         <li>You can delete posts any time, and turning sharing off hides them all.</li>
       </ul>
       <div className="field"><label htmlFor="hub-name">Your name on the Hub</label><input id="hub-name" className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></div>
       <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /> Approve new followers before they see my runs</label>
+      <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Post my runs automatically</label>
       {err && <StatusLine kind="danger">{err}</StatusLine>}
       <button className="btn btn-primary" disabled={!name.trim() || busy} onClick={async () => {
         setBusy(true); setErr(undefined);
-        try { await onDone({ user_id: session!.user.id, display_name: name.trim(), private: priv, bio: existing?.bio ?? null, club: existing?.club ?? null }); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+        try { updateProfile({ hub: { ...data.profile.hub, autoPost: auto, autoSince: auto ? new Date().toISOString() : data.profile.hub?.autoSince } }); await onDone({ user_id: session!.user.id, display_name: name.trim(), private: priv, bio: existing?.bio ?? null, club: existing?.club ?? null }); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
       }}>Yes, share my runs on the Hub</button>
       <p className="caption">Challenges work without sharing. See <Link to="/profile/privacy">how Ritmo handles your data</Link>.</p>
     </section>
@@ -160,6 +166,23 @@ export function useFeed(load: () => Promise<Post[]>, deps: unknown[]) {
   return { posts, setPosts, people, mine, givers, toggle, reload, err, loading };
 }
 
+/** For runners who joined before automatic posting existed: asked once, nothing is posted until they choose */
+function AutoPostNotice() {
+  const { data, updateProfile } = useApp();
+  if (!autoPostUndecided(data.profile)) return null;
+  const h = data.profile.hub ?? {};
+  return (
+    <section className="card stack-sm" aria-labelledby="autopost-h">
+      <h2 id="autopost-h" className="label">New: post your runs automatically</h2>
+      <p className="caption">New runs go on the Hub for your followers without you having to post each one. Runs from Strava are never posted. You can change who sees them, hide any run, or turn this off in Hub and privacy.</p>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <button className="btn btn-small btn-primary" onClick={() => updateProfile({ hub: { ...h, autoPost: true, autoSince: new Date().toISOString() } })}>Post automatically</button>
+        <button className="btn btn-small" onClick={() => updateProfile({ hub: { ...h, autoPost: false } })}>Not now</button>
+      </div>
+    </section>
+  );
+}
+
 function FeedTab({ follows, onSocial }: { follows: hub.Follow[]; onSocial: () => void }) {
   const { session } = useApp();
   const uid = session!.user.id;
@@ -172,11 +195,12 @@ function FeedTab({ follows, onSocial }: { follows: hub.Follow[]; onSocial: () =>
       <div className="row wrap hub-filter" role="group" aria-label="Show runs from">
         {([['following', 'Following'], ['everyone', 'Everyone'], ['mine', 'Your runs']] as [Tab, string][]).map(([v, l]) => <button key={v} type="button" className="chip" aria-pressed={tab === v} onClick={() => setTab(v)}>{l}</button>)}
       </div>
+      <AutoPostNotice />
       <YourWeek />
       <FirstTimeTip />
       {feed.err && <StatusLine kind="danger">{feed.err}</StatusLine>}
       {feed.loading && !feed.posts.length && <p className="muted" role="status">Loading runs…</p>}
-      {!feed.loading && !feed.posts.length && <Empty title={tab === 'mine' ? 'You have not posted a run yet' : 'Nothing here yet'}>{tab === 'mine' ? 'Open any run and choose "Post to Hub".' : tab === 'following' ? 'Find runners to follow with the search button.' : 'Public runs appear here.'}</Empty>}
+      {!feed.loading && !feed.posts.length && <Empty title={tab === 'mine' ? 'You have not posted a run yet' : 'Nothing here yet'}>{tab === 'mine' ? 'New runs appear here once posted. You can also open any run and choose "Post to Hub".' : tab === 'following' ? 'Find runners to follow with the search button.' : 'Public runs appear here.'}</Empty>}
       <PostList feed={feed} onComments={(p) => setSheet({ kind: 'comments', post: p })} onGivers={(p) => setSheet({ kind: 'givers', post: p })} />
       {sheet?.kind === 'comments' && <CommentsSheet post={sheet.post} people={feed.people} onClose={() => { setSheet(undefined); void feed.reload(); }} />}
       {sheet?.kind === 'givers' && <GiversSheet post={sheet.post} follows={follows} onClose={() => { setSheet(undefined); onSocial(); }} />}
@@ -283,7 +307,7 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
   return (
     <article className="hub-post" aria-labelledby={`post-${p.id}`}>
       <div className="hub-post-head">
-        <span className="hub-avatar" aria-hidden="true">{initials(author?.display_name)}</span>
+        <RunnerAvatar id={p.user_id} profile={author} />
         <div className="hub-post-who">
           <span className="label">{author?.display_name ?? 'Runner'}</span>
           <span className="caption">{meta}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span>
@@ -324,7 +348,7 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
       <div className="hub-summary hub-post-pad">
         {p.ritmo_count > 0 ? (
           <button className="hub-givers" onClick={onGivers} aria-label={`${hub.fuegoCount(p.ritmo_count)}: see who gave one`}>
-            <span className="hub-stack" aria-hidden="true">{givers.slice(0, 3).map((g) => <span key={g} className="hub-avatar hub-avatar-xs">{initials(people.get(g)?.display_name)}</span>)}</span>
+            <span className="hub-stack" aria-hidden="true">{givers.slice(0, 3).map((g) => <RunnerAvatar key={g} id={g} profile={people.get(g)} size="xs" />)}</span>
             <span className="ritmo-count">{hub.fuegoCount(p.ritmo_count)}</span>
           </button>
         ) : <span className="caption">{own ? 'No Fuego yet' : ''}</span>}
@@ -370,7 +394,7 @@ export function CommentsSheet({ post, people, onClose }: { post: Post; people: M
   const top = list.filter((c) => !c.parent_id);
   const Row = ({ c, child }: { c: Comment; child?: boolean }) => (
     <li className={`hub-comment${child ? ' child' : ''}`}>
-      <span className="label">{names.get(c.user_id)?.display_name ?? 'Runner'}</span> <span className="caption">{ago(c.created_at)}{c.edited_at ? ' · edited' : ''}</span>
+      <span className="row" style={{ gap: 8 }}><RunnerAvatar id={c.user_id} profile={names.get(c.user_id)} size={child ? 'xs' : 'md'} /><span><span className="label">{names.get(c.user_id)?.display_name ?? 'Runner'}</span> <span className="caption">{ago(c.created_at)}{c.edited_at ? ' · edited' : ''}</span></span></span>
       <p>{c.body}</p>
       <div className="row wrap" style={{ gap: 4 }}>
         {!child && <button className="btn btn-ghost btn-small" onClick={() => { setReply(c); setEditing(undefined); }}>Reply</button>}
@@ -396,24 +420,13 @@ export function CommentsSheet({ post, people, onClose }: { post: Post; people: M
   );
 }
 
-function FollowButton({ other, follows, onChange }: { other: string; follows: hub.Follow[]; onChange?: () => void }) {
-  const { session } = useApp();
-  const uid = session!.user.id;
-  const f = follows.find((x) => x.follower_id === uid && x.followee_id === other);
-  const [state, setState] = useState(f?.status);
-  if (other === uid) return null;
-  return state
-    ? <button className="btn btn-small" onClick={async () => { await hub.unfollow(uid, other); setState(undefined); onChange?.(); }}>{state === 'accepted' ? 'Following' : 'Requested'}</button>
-    : <button className="btn btn-small btn-primary" onClick={async () => { await hub.follow(uid, other); setState('pending'); onChange?.(); }}><UserPlus size={16} strokeWidth={2} aria-hidden="true" />Follow</button>;
-}
-
 export function GiversSheet({ post, follows, onClose }: { post: Post; follows: hub.Follow[]; onClose: () => void }) {
   const [givers, setGivers] = useState<HubProfile[]>([]);
   useEffect(() => { hub.ritmoGivers(post.id).then(async (ids) => { const m = await hub.profilesFor(ids); setGivers(ids.map((id) => m.get(id) ?? { user_id: id, display_name: 'Runner', private: true })); }).catch(() => {}); }, [post.id]);
   return (
     <Sheet open onClose={onClose} title="Fuego from">
       <p className="caption">{hub.giversLine(givers.map((g) => g.display_name), post.ritmo_count)}</p>
-      <ul className="list">{givers.map((g) => <li key={g.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><span className="row" style={{ gap: 8 }}><span className="hub-avatar" aria-hidden="true">{initials(g.display_name)}</span>{g.display_name}</span><FollowButton other={g.user_id} follows={follows} /></li>)}</ul>
+      <ul className="list">{givers.map((g) => <li key={g.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><span className="row" style={{ gap: 8 }}><RunnerAvatar id={g.user_id} profile={g} />{g.display_name}</span><FollowStateButton other={g.user_id} name={g.display_name} follows={follows} onChange={() => undefined} /></li>)}</ul>
     </Sheet>
   );
 }
@@ -434,8 +447,13 @@ function NotesSheet({ notes, people, follows, onChange, onClose }: { notes: Noti
           const pending = n.kind === 'follow_request' && follows.some((f) => f.follower_id === n.actor_id && f.followee_id === uid && f.status === 'pending');
           return (
             <li key={`${n.kind}-${n.id}`} className="stack-sm" style={{ padding: 'var(--s2) 0' }}>
-              <span className={g.some((x) => !x.read_at) ? 'label' : undefined}>{hub.notificationText(n.kind, [...new Set(g.map((x) => name(x.actor_id)))])}</span>
-              <span className="caption">{ago(n.created_at)}</span>
+              <span className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+                {n.actor_id ? <RunnerAvatar id={n.actor_id} profile={people.get(n.actor_id)} /> : null}
+                <span className="stack-sm" style={{ gap: 0 }}>
+                  <span className={g.some((x) => !x.read_at) ? 'label' : undefined}>{hub.notificationText(n.kind, [...new Set(g.map((x) => name(x.actor_id)))])}</span>
+                  <span className="caption">{ago(n.created_at)}</span>
+                </span>
+              </span>
               {pending && <div className="row" style={{ gap: 6 }}>
                 <button className="btn btn-small btn-primary" onClick={async () => { await hub.acceptFollower(uid, n.actor_id!); onChange(); }}>Accept</button>
                 <button className="btn btn-small" onClick={async () => { await hub.removeFollower(uid, n.actor_id!); onChange(); }}>Decline</button>
@@ -444,18 +462,6 @@ function NotesSheet({ notes, people, follows, onChange, onClose }: { notes: Noti
           );
         })}
       </ul>
-    </Sheet>
-  );
-}
-
-function FindSheet({ follows, onChange, onClose }: { follows: hub.Follow[]; onChange: () => void; onClose: () => void }) {
-  const [q, setQ] = useState('');
-  const [res, setRes] = useState<HubProfile[]>([]);
-  useEffect(() => { if (q.trim().length < 2) { setRes([]); return; } const id = setTimeout(() => { hub.searchRunners(q.trim()).then(setRes).catch(() => setRes([])); }, 250); return () => clearTimeout(id); }, [q]);
-  return (
-    <Sheet open onClose={() => { onChange(); onClose(); }} title="Find runners">
-      <input className="input" aria-label="Search by name" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} />
-      <ul className="list">{res.map((p) => <li key={p.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><span className="row" style={{ gap: 8 }}><span className="hub-avatar" aria-hidden="true">{initials(p.display_name)}</span><span className="stack-sm" style={{ gap: 0 }}><span>{p.display_name}</span>{p.club && <span className="caption">{p.club}</span>}</span></span><FollowButton other={p.user_id} follows={follows} /></li>)}</ul>
     </Sheet>
   );
 }
@@ -471,6 +477,7 @@ function SettingsSheet({ me, onSaved, onStop, onClose }: { me: HubProfile; onSav
       <div className="field"><label htmlFor="hs-bio">About you (optional)</label><textarea id="hs-bio" className="input" value={p.bio ?? ''} maxLength={280} onChange={(e) => setP({ ...p, bio: e.target.value || null })} /></div>
       <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={p.private} onChange={(e) => setP({ ...p, private: e.target.checked })} /> Approve new followers before they see my runs</label>
       {msg && <StatusLine kind="success">{msg}</StatusLine>}
+      <Link to="/profile/hub" className="btn btn-ghost" onClick={onClose}>Automatic posting, map privacy and your photo</Link>
       <button className="btn btn-ghost" onClick={() => void onStop()}>Stop sharing and hide all my posts</button>
     </Sheet>
   );
@@ -624,7 +631,7 @@ export function Leaderboard({ rows, uid, top = 3 }: { rows: LeaderRow[]; uid: st
   const shown = rows.slice(0, top);
   const meIdx = rows.findIndex((r) => r.user_id === uid);
   if (!rows.length) return <p className="caption">No runs counted yet. Only members who chose to be on the leaderboard are listed.</p>;
-  const Row = ({ r, i }: { r: LeaderRow; i: number }) => <li className={`leader-row${r.user_id === uid ? ' me' : ''}`}><span className="leader-rank">{i + 1}</span><span className="leader-name">{r.user_id === uid ? 'You' : r.display_name}</span><span className="stat">{dist(r.distance_m, U)}</span></li>;
+  const Row = ({ r, i }: { r: LeaderRow; i: number }) => <li className={`leader-row${r.user_id === uid ? ' me' : ''}`}><span className="leader-rank">{i + 1}</span><RunnerAvatar id={r.user_id} name={r.display_name} size="xs" /><span className="leader-name">{r.user_id === uid ? 'You' : r.display_name}</span><span className="stat">{dist(r.distance_m, U)}</span></li>;
   return (
     <ol className="leaderboard">
       {shown.map((r, i) => <Row key={r.user_id} r={r} i={i} />)}

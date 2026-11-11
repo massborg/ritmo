@@ -82,7 +82,11 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       const cur = list[match];
       mapped[inc.id] = cur.id;
       const sourceIds = { ...cur.sourceIds, ...inc.sourceIds };
-      if (inc.detailScore > cur.detailScore) {
+      // Strava's terms let Ritmo show Strava data only to the runner, so a copy of the same run from a file, a watch or
+      // Health becomes the run's source (and the run can be posted); a Strava copy never replaces such a copy
+      const shareable = (x: Activity) => x.source !== 'strava' && x.source !== 'manual' && x.source !== 'sample';
+      const takeInc = cur.source === 'strava' && shareable(inc) ? true : inc.source === 'strava' && shareable(cur) ? false : inc.detailScore > cur.detailScore;
+      if (takeInc) {
         // What the runner told us stays: the planned session link, reps they entered, race marks
         list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
           reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device,

@@ -12,7 +12,8 @@ import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge, mergeWithRemoved } from '../data/integration';
 import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
-import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
+import { avatarDataUrl, avatarUrl, removeAvatar, smallAvatarPath, uploadAvatar, uploadSmallAvatar } from '../data/avatar';
+import { forgetPhoto, setHubPhoto } from '../data/hub';
 import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
@@ -1202,10 +1203,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try { path = await uploadAvatar(userId, jpeg); } catch (e) { throw new Error(friendlyError(e)); }
     setAvatarSrc(URL.createObjectURL(jpeg));
     updateProfile({ avatar: { path, updatedAt: new Date().toISOString() } });
+    // The small copy other runners see on the Hub (only if the runner has a Hub profile; never blocks saving)
+    void uploadSmallAvatar(userId, jpeg).then((p) => { forgetPhoto(p); return setHubPhoto(userId, p); }).catch(() => undefined);
   };
   const deleteAvatar = async () => {
     const path = dataRef.current.profile.avatar?.path;
     if (path) { try { await removeAvatar(path); } catch (e) { throw new Error(friendlyError(e)); } }
+    if (userId) { forgetPhoto(smallAvatarPath(userId)); void setHubPhoto(userId, null).catch(() => undefined); }
     setAvatarSrc(undefined);
     updateProfile({ avatar: undefined });
   };
