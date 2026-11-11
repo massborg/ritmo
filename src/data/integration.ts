@@ -85,7 +85,9 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       if (inc.detailScore > cur.detailScore) {
         // What the runner told us stays: the planned session link, reps they entered, race marks
         list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
-          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device };
+          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device,
+          // A run the runner deleted stays deleted when a better copy arrives
+          deletedAt: cur.deletedAt };
         replaced++;
       } else {
         list[match] = { ...cur, sourceIds, device: cur.device ?? inc.device, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId, reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media };
@@ -94,4 +96,16 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
     }
   }
   return { activities: list, added, replaced, duplicates, mapped };
+}
+
+/**
+ * Merge new runs into the runner's runs, including the imported runs they deleted: a run that matches a deleted one
+ * joins it and stays deleted, so a sync never brings it back. `restore` (a file the runner chose to upload again)
+ * brings matching deleted runs back instead.
+ */
+export function mergeWithRemoved(activities: Activity[], removed: Activity[] | undefined, incoming: Activity[], restore = false): MergeResult & { removed: Activity[] } {
+  const m = merge([...activities, ...(removed ?? [])], incoming);
+  const back = new Set(restore ? Object.values(m.mapped) : []);
+  const all = m.activities.map((a) => (a.deletedAt && back.has(a.id) ? { ...a, deletedAt: undefined } : a));
+  return { ...m, activities: all.filter((a) => !a.deletedAt), removed: all.filter((a) => a.deletedAt) };
 }

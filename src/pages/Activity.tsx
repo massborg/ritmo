@@ -3,7 +3,7 @@ import { forStats, implausible } from '../data/quality';
 import { garminAttribution } from '../data/garmin';
 import { isStravaRun, stravaUrl } from '../data/strava';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeftRight, Award, CalendarClock, Check, CheckCircle2, HeartPulse, MessageCircle, MoreHorizontal, Plus, Share2, TrendingUp, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Award, CalendarClock, Check, CheckCircle2, HeartPulse, MessageCircle, MoreHorizontal, Plus, Share2, Trash2, TrendingUp, Users, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
@@ -31,6 +31,11 @@ import { RunIntervals } from '../components/RunIntervals';
 import { RunCharts } from '../components/RunCharts';
 import { RunShoes } from '../components/RunShoes';
 import { Sheet } from '../components/inputs';
+import { DeleteRunSheet } from '../components/DeleteRun';
+
+/** After deleting: back to where the runner came from inside the app, otherwise to their runs (never out of the app,
+ *  which would reload it and lose Undo) */
+const leaveRun = (nav: ReturnType<typeof useNavigate>) => ((window.history.state as { idx?: number } | null)?.idx ? nav(-1) : nav('/progress', { replace: true }));
 
 type RunTab = 'overview' | 'intervals' | 'charts' | 'shoes';
 const RUN_TABS: { id: RunTab; label: string }[] = [{ id: 'overview', label: 'Overview' }, { id: 'intervals', label: 'Intervals' }, { id: 'charts', label: 'Charts' }, { id: 'shoes', label: 'Shoes' }];
@@ -112,6 +117,8 @@ export default function ActivityPage() {
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const nav = useNavigate();
   // Update 2, §2: Overview · Intervals · Charts · Shoes; the last tab is remembered for this browser session
   const [tab, setTabState] = useState<RunTab>(savedTab);
   const setTab = (t: RunTab) => { setTabState(t); try { sessionStorage.setItem(TAB_KEY, t); } catch { /* */ } };
@@ -186,6 +193,7 @@ export default function ActivityPage() {
             onClick={() => setTab(t.id)} onKeyDown={(e) => tabKeys(e, i)}>{t.label}</button>
         ))}
       </div>
+      {deleting && <DeleteRunSheet run={a} onClose={() => setDeleting(false)} onDeleted={() => leaveRun(nav)} />}
       {loading && <p className="caption" role="status">Loading splits, charts and route…</p>}
       {menu && (
         <Sheet open onClose={() => setMenu(false)} title="Run options">
@@ -194,6 +202,7 @@ export default function ActivityPage() {
             <button className="btn btn-block" onClick={() => { setRunHidden(a.id, !a.hidden); setMenu(false); }}>{a.hidden ? 'Count in my stats again' : 'Leave out of my stats'}</button>
             <button className="btn btn-block" onClick={() => goFix('fix-km')}>Correct distance or time</button>
             {canShare && <button className="btn btn-block" onClick={() => { setMenu(false); setTab('overview'); setSharing(true); }}><Share2 size={18} strokeWidth={2} aria-hidden="true" />Share this run</button>}
+            <button className="btn btn-block btn-danger" onClick={() => { setMenu(false); setDeleting(true); }}><Trash2 size={18} strokeWidth={2} aria-hidden="true" />Delete run</button>
           </div>
         </Sheet>
       )}
@@ -442,6 +451,7 @@ export default function ActivityPage() {
 function FixRun({ run }: { run: Activity }) {
   const { data, mergeRuns, setRunHidden, setRunShoe, fixRunDistance, fixRunTime, typeOf } = useApp();
   const nav = useNavigate();
+  const [deleting, setDeleting] = useState(false);
   const U = data.profile.units;
   const toU = (m: number) => (U === 'mi' ? m / 1609.344 : m / 1000);
   const [km, setKm] = useState('');
@@ -502,6 +512,10 @@ function FixRun({ run }: { run: Activity }) {
           </div>
         </div>
       )}
+      <div className="stack-sm">
+        <button className="btn btn-small btn-danger" style={{ alignSelf: 'flex-start' }} onClick={() => setDeleting(true)}><Trash2 size={18} strokeWidth={2} aria-hidden="true" />Delete run</button>
+      </div>
+      {deleting && <DeleteRunSheet run={run} onClose={() => setDeleting(false)} onDeleted={() => leaveRun(nav)} />}
       {msg && <p role="status" className="caption">{msg}</p>}
     </section>
   );

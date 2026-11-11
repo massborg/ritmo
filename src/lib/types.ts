@@ -82,6 +82,9 @@ export interface Activity {
   weather?: RunWeather;
   /** Left out of fitness, PBs, volume and reviews (still listed), e.g. a run the watch recorded badly */
   hidden?: boolean;
+  /** Deleted by the runner (imported runs only, which are kept so a sync does not bring them back and so they can be
+   *  re-imported). A deleted run is never in the run list, stats, plan, coach or Hub. */
+  deletedAt?: string;
   /** The distance before the runner corrected it (treadmill calibration), metres */
   distFrom?: number;
   /** The shoe the runner chose for this run; otherwise Ritmo picks one by session type */

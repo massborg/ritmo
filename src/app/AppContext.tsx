@@ -5,11 +5,11 @@ import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
 import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
 import {
-  type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunsInCloud, emptyData, friendlyError,
+  type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunExtrasInCloud, deleteRunsInCloud, emptyData, friendlyError,
   actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushActivities, pushToCloud, saveUserCache,
 } from '../data/store';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
-import { detailScore, merge } from '../data/integration';
+import { detailScore, merge, mergeWithRemoved } from '../data/integration';
 import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, uploadAvatar } from '../data/avatar';
@@ -144,6 +144,14 @@ interface Ctx extends Derived {
   /** Data-quality tools: merge two copies of a run, leave a run out of stats, choose its shoe, correct its distance */
   mergeRuns: (a: Activity, b: Activity) => Promise<string | undefined>;
   setRunHidden: (id: string, hidden: boolean) => void;
+  /** Delete a run (update 2, §8). Hand-entered runs go completely; imported runs are deleted from Ritmo only and
+   *  remembered, so a sync does not bring them back. Undo is offered for 10 seconds. */
+  deleteRun: (id: string) => void;
+  /** The run just deleted, while Undo is still offered */
+  undoableDelete?: Activity;
+  undoDelete: () => void;
+  /** Bring back an imported run that was deleted ("Re-import" in Data sources) */
+  restoreRun: (id: string) => void;
   setRunShoe: (id: string, shoeId: string | undefined) => void;
   renameRun: (id: string, name: string) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
@@ -205,10 +213,13 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
   const out = { ...cloud };
   // Runs only on this device (not yet saved) are kept. Runs the account held before but no longer does were
   // deleted elsewhere, so they are not brought back.
-  const inCloud = new Set(cloud.activities.map((a) => a.id));
+  const inCloud = new Set([...cloud.activities, ...(cloud.removed ?? [])].map((a) => a.id));
   const knownInCloud = new Set(device.cloudIds ?? []);
   const deviceOnly = device.activities.filter((a) => !inCloud.has(a.id) && !knownInCloud.has(a.id));
   if (deviceOnly.length) out.activities = merge(cloud.activities, deviceOnly).activities;
+  // Imported runs deleted on this device that never reached the account are kept as deleted
+  const removedOnDevice = (device.removed ?? []).filter((a) => !inCloud.has(a.id) && !knownInCloud.has(a.id));
+  if (removedOnDevice.length) out.removed = [...(cloud.removed ?? []), ...removedOnDevice];
   const fb = new Map(cloud.feedback.map((f) => [f.activityId, f]));
   for (const f of device.feedback) { const c = fb.get(f.activityId); if (!c || f.loggedAt > c.loggedAt) fb.set(f.activityId, f); }
   out.feedback = [...fb.values()];
@@ -568,11 +579,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setData((d) => {
         const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
-        const m = merge(base.activities, parsed.activities);
+        // A file chosen again for a run that was deleted brings that run back
+        const m = mergeWithRemoved(base.activities, base.removed, parsed.activities, true);
         setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { found: parsed.activities.length, added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped } });
         const sources = base.sources.filter((s) => s.kind !== 'upload' && s.kind !== 'sample');
         sources.push({ kind: 'upload', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.source === 'upload').length, lastError: parsed.skipped.some((x) => x.category === 'unreadable') ? `${parsed.skipped.filter((x) => x.category === 'unreadable').length} file(s) could not be read` : undefined });
-        return { ...base, mode: 'real', activities: m.activities, sources };
+        return { ...base, mode: 'real', activities: m.activities, removed: m.removed, sources };
       });
     } catch (e) {
       setImportState({ running: false, done: 0, total: 0, label: '', error: `The upload failed: ${friendlyError(e)}` });
@@ -798,6 +810,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
       feedback: d.feedback.map((f) => (f.activityId === dropId ? { ...f, activityId: keep.id } : f)) }));
     return undefined;
   };
+  // ---- Deleting runs (update 2, §8) ----
+  // The run leaves every list, stat and the plan straight away. What cannot be undone (removing a hand-entered run
+  // and any Hub post from the account) waits until Undo is no longer offered, or the app is closed.
+  const pendingDelete = useRef<{ run: Activity; imported: boolean; sessions: PlannedSession[]; timer: number } | undefined>(undefined);
+  const [undoableDelete, setUndoableDelete] = useState<Activity>();
+  const commitPendingDelete = () => {
+    const p = pendingDelete.current;
+    if (!p) return;
+    window.clearTimeout(p.timer);
+    pendingDelete.current = undefined;
+    setUndoableDelete(undefined);
+    if (!p.imported) setData((d) => ({ ...d, feedback: d.feedback.filter((f) => f.activityId !== p.run.id) }));
+    const uidNow = currentUid.current;
+    if (dataRef.current.mode !== 'real' || !uidNow) return;
+    void (async () => {
+      try {
+        if (!p.imported) { await deleteRunsInCloud([p.run.id]); pushState.current.activities.delete(p.run.id); }
+        await deleteRunExtrasInCloud(uidNow, p.run.id, !p.imported);
+      } catch (e) {
+        setSyncError(`The run is deleted on this device but not yet in your account. ${friendlyError(e)}`);
+      }
+    })();
+  };
+  const commitPendingDeleteRef = useRef(commitPendingDelete);
+  commitPendingDeleteRef.current = commitPendingDelete;
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === 'hidden') commitPendingDeleteRef.current(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', onVis);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', onVis); commitPendingDeleteRef.current(); };
+  }, [userId]);
+  const deleteRun = (id: string) => {
+    commitPendingDelete(); // one Undo at a time
+    const run = dataRef.current.activities.find((a) => a.id === id);
+    if (!run) return;
+    const imported = dataRef.current.mode === 'real' && !['manual', 'sample', 'ritmo_gps'].includes(run.source);
+    const t = ymd(new Date());
+    const sessions = (dataRef.current.plan?.sessions ?? []).filter((x) => x.completedActivityId === id).map((x) => ({ ...x }));
+    setData((d) => ({
+      ...d,
+      activities: d.activities.filter((a) => a.id !== id),
+      removed: imported ? [...(d.removed ?? []).filter((a) => a.id !== id), { ...run, deletedAt: new Date().toISOString() }] : d.removed,
+      // The day's session is no longer done by this run: the plan matches that day again (another run, or missed)
+      plan: d.plan && sessions.length ? { ...d.plan, sessions: d.plan.sessions.map((x) => (x.completedActivityId === id ? { ...x, completedActivityId: undefined, swappedTo: undefined, status: x.date < t ? 'missed' : 'planned' } : x)) } : d.plan,
+    }));
+    pendingDelete.current = { run, imported, sessions, timer: window.setTimeout(() => commitPendingDeleteRef.current(), 10000) };
+    setUndoableDelete(run);
+  };
+  const undoDelete = () => {
+    const p = pendingDelete.current;
+    if (!p) return;
+    window.clearTimeout(p.timer);
+    pendingDelete.current = undefined;
+    setUndoableDelete(undefined);
+    const back = new Map(p.sessions.map((x) => [x.id, x]));
+    setData((d) => ({
+      ...d,
+      activities: [...d.activities.filter((a) => a.id !== p.run.id), { ...p.run, deletedAt: undefined }].sort((a, b) => a.startTime.localeCompare(b.startTime)),
+      removed: (d.removed ?? []).filter((a) => a.id !== p.run.id),
+      plan: d.plan && back.size ? { ...d.plan, sessions: d.plan.sessions.map((x) => back.get(x.id) ?? x) } : d.plan,
+    }));
+  };
+  const restoreRun = (id: string) => setData((d) => {
+    const run = (d.removed ?? []).find((a) => a.id === id);
+    if (!run) return d;
+    return { ...d, removed: (d.removed ?? []).filter((a) => a.id !== id), activities: [...d.activities, { ...run, deletedAt: undefined }].sort((a, b) => a.startTime.localeCompare(b.startTime)) };
+  });
   const patchRun = (id: string, patch: Partial<Activity>) => setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const setRunHidden = (id: string, hidden: boolean) => patchRun(id, { hidden: hidden || undefined });
   const setRunShoe = (id: string, shoeId: string | undefined) => patchRun(id, { shoeId });
@@ -950,12 +1029,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const { runs, clear } = await pullGarminInbox();
       // Saved to the account before the inbox is cleared, so a run can never be lost in between
-      if (runs.length) await pushActivities(userId, merge(dataRef.current.activities, runs).activities, pushState.current);
+      // Runs the runner deleted are matched too, so they stay deleted
+      if (runs.length) { const m = mergeWithRemoved(dataRef.current.activities, dataRef.current.removed, runs); await pushActivities(userId, [...m.activities, ...m.removed], pushState.current); }
       setData((d) => {
-        const m = runs.length ? merge(d.activities, runs) : { activities: d.activities };
+        const m = runs.length ? mergeWithRemoved(d.activities, d.removed, runs) : { activities: d.activities, removed: d.removed ?? [] };
         const sources = d.sources.filter((x) => x.kind !== 'garmin');
         sources.push({ kind: 'garmin', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.garmin).length });
-        return { ...d, activities: m.activities, sources };
+        return { ...d, activities: m.activities, removed: m.removed, sources };
       });
       // Cleared only after the runs are saved in the account
       await clear();
@@ -1009,16 +1089,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const { runs, deleted, clear } = await pullStravaInbox();
       // Saved to the account before the inbox is cleared, so a run can never be lost in between
-      if (runs.length) await pushActivities(userId, merge(dataRef.current.activities, runs).activities, pushState.current);
+      // Runs the runner deleted in Ritmo are matched too, so a sync never brings them back
+      if (runs.length) { const m = mergeWithRemoved(dataRef.current.activities, dataRef.current.removed, runs); await pushActivities(userId, [...m.activities, ...m.removed], pushState.current); }
       const gone = new Set(deleted);
-      const dropIds = dataRef.current.activities.filter((a) => isStravaRun(a) && a.sourceIds.strava && gone.has(a.sourceIds.strava)).map((a) => a.id);
+      const dropIds = [...dataRef.current.activities, ...(dataRef.current.removed ?? [])].filter((a) => isStravaRun(a) && a.sourceIds.strava && gone.has(a.sourceIds.strava)).map((a) => a.id);
       if (dropIds.length) await deleteRunsInCloud(dropIds);
       setData((d) => {
         const kept = d.activities.filter((a) => !dropIds.includes(a.id));
-        const m = runs.length ? merge(kept, runs) : { activities: kept };
+        const keptRemoved = (d.removed ?? []).filter((a) => !dropIds.includes(a.id));
+        const m = runs.length ? mergeWithRemoved(kept, keptRemoved, runs) : { activities: kept, removed: keptRemoved };
         const sources = d.sources.filter((x) => x.kind !== 'strava');
         sources.push({ kind: 'strava', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.strava).length, lastError: undefined });
-        return { ...d, activities: m.activities, sources };
+        return { ...d, activities: m.activities, removed: m.removed, sources };
       });
       await clear();
     } catch (e) {
@@ -1066,10 +1148,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const runs = await syncHealth(since);
       setData((d) => {
         const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
-        const m = merge(base.activities, runs);
+        const m = mergeWithRemoved(base.activities, base.removed, runs);
         const sources = base.sources.filter((x) => x.kind !== kind && x.kind !== 'sample');
         sources.push({ kind, connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds[kind]).length });
-        return { ...base, mode: 'real', activities: m.activities, sources };
+        return { ...base, mode: 'real', activities: m.activities, removed: m.removed, sources };
       });
     } catch (e) {
       setData((d) => ({ ...d, sources: d.sources.map((x) => (x.kind === kind ? { ...x, lastError: `Sync failed: ${friendlyError(e)}` } : x)) }));
@@ -1140,7 +1222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, setRunShoe, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

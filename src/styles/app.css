@@ -110,6 +110,10 @@ h1, h2, h3, h4 { margin: 0; }
 .hero .btn:hover { background: rgba(0,0,0,0.08); }
 .btn-ghost { border-color: transparent; }
 .btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger-solid { background: var(--danger); border-color: var(--danger); color: var(--surface); }
+.toast-action { display: flex; align-items: center; gap: 16px; padding: 6px 6px 6px 18px; }
+.toast-btn { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--brand-strong); font: 700 14px/20px var(--font-body); cursor: pointer; }
+.toast-btn:focus-visible { outline: 2px solid var(--brand-strong); outline-offset: 2px; }
 .btn-small { min-height: 44px; padding: 0 var(--s4); }
 .btn-block { width: 100%; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }

@@ -13,6 +13,9 @@ export interface AppData {
   flags?: string[];
   profile: Profile;
   activities: Activity[];
+  /** Imported runs the runner deleted (Strava, a watch, a file, Health). Kept, out of every list and stat, so the next
+   *  sync does not bring them back, and so they can be re-imported from Data sources. */
+  removed?: Activity[];
   races: Race[];
   plan?: Plan;
   feedback: SessionFeedback[];
@@ -56,11 +59,12 @@ export async function loadUserCache(uid: string): Promise<CachedData | undefined
  *  fetched again only when a run is opened. Runs not yet saved to the account keep their detail. */
 export async function saveUserCache(uid: string, data: AppData, inCloud?: (a: Activity) => boolean) {
   try {
-    const activities = data.mode === 'real' && inCloud
-      ? data.activities.map((a) => ((a.streams || a.laps) && inCloud(a) ? { ...a, streams: undefined, laps: undefined } : a))
-      : data.activities;
-    const cloudIds = inCloud ? data.activities.filter(inCloud).map((a) => a.id) : undefined;
-    await set(userKey(uid), { ...data, activities, cloudIds } satisfies CachedData);
+    const slim = (list: Activity[]) => (data.mode === 'real' && inCloud
+      ? list.map((a) => ((a.streams || a.laps) && inCloud(a) ? { ...a, streams: undefined, laps: undefined } : a))
+      : list);
+    const removed = data.removed ?? [];
+    const cloudIds = inCloud ? [...data.activities, ...removed].filter(inCloud).map((a) => a.id) : undefined;
+    await set(userKey(uid), { ...data, activities: slim(data.activities), removed: slim(removed), cloudIds } satisfies CachedData);
   } catch (e) { console.warn('Could not save on this device', e); }
 }
 export async function clearUserCache(uid: string) {
@@ -82,7 +86,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...a.sourceIds, ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...withoutDeletedMark(a.sourceIds), ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}), ...(a.deletedAt ? { deleted: a.deletedAt } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -90,6 +94,8 @@ const summaryRow = (uid: string, a: Activity): Row => ({
   // The summary is written only from detail on this device; for runs loaded as summaries the server keeps it
   ...(hasDetail(a) && deriveSummary(a) ? { derived: deriveSummary(a) } : {}),
 });
+/** The deleted mark is saved from deletedAt only, so a restored run never keeps an old one from its stored ids */
+const withoutDeletedMark = (ids: Activity['sourceIds']) => { const { deleted: _d, ...rest } = ids as Record<string, unknown>; return rest; }; // eslint-disable-line @typescript-eslint/no-unused-vars
 const hasDetail = (a: Activity) => a.streams !== undefined || a.laps !== undefined;
 /** Columns loaded for every run, with short names to keep years of history small: no streams or laps (fetched for
  *  one run at a time) and only the parts of the stored summary the app needs for the whole history. */
@@ -110,6 +116,7 @@ const rowToAct = (r: Row): Activity => ({
   distFrom: num((r.x as Record<string, unknown> | null)?.distFrom),
   shoeId: ((r.x as Record<string, unknown> | null)?.shoe as string | undefined) ?? undefined,
   calories: ((r.x as Record<string, unknown> | null)?.kcal as number | undefined) ?? undefined, detailScore: Number(r.sc),
+  deletedAt: ((r.x as Record<string, unknown> | null)?.deleted as string | undefined) ?? undefined,
   derived: r.v != null ? { v: Number(r.v), ...(r.be ? { be: r.be as Record<string, number> } : {}), ...(r.sg ? { segs: r.sg as number[] } : {}) } : undefined,
   importedAt: '',
 });
@@ -164,7 +171,7 @@ async function pullActivities(cache?: CachedData): Promise<{ activities: Activit
     if (count.error) throw count.error;
     const gone = new Set((dels.data ?? []).map((x) => x.id as string));
     const known = new Set(cache.cloudIds);
-    const map = new Map(cache.activities.filter((a) => known.has(a.id) && !gone.has(a.id)).map((a) => [a.id, { ...a, streams: undefined, laps: undefined } as Activity]));
+    const map = new Map([...cache.activities, ...(cache.removed ?? [])].filter((a) => known.has(a.id) && !gone.has(a.id)).map((a) => [a.id, { ...a, streams: undefined, laps: undefined } as Activity]));
     for (const r of delta.rows) map.set(r.id as string, rowToAct(r));
     // If anything does not add up (e.g. changes made elsewhere while offline for long), load everything again
     if (map.size === count.count) return { activities: [...map.values()].sort(byStart), syncedAt: delta.newest && delta.newest > since ? delta.newest : since };
@@ -234,7 +241,8 @@ export async function pullFromCloud(cache?: CachedData): Promise<CloudSnapshot> 
     found: true,
     data: {
       ...base,
-      activities: a.activities,
+      activities: a.activities.filter((x) => !x.deletedAt),
+      removed: a.activities.filter((x) => x.deletedAt),
       activitiesSyncedAt: a.syncedAt,
       races: (r.data ?? []).map((x) => x.data as Race),
       plan: (pl.data?.[0]?.data as Plan) ?? undefined,
@@ -255,10 +263,10 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}|${a.deletedAt ?? ''}`;
 
 export function markPulled(ps: PushState, d: AppData) {
-  for (const a of d.activities) ps.activities.set(a.id, actPrint(a));
+  for (const a of [...d.activities, ...(d.removed ?? [])]) ps.activities.set(a.id, actPrint(a));
   for (const m of d.coach) ps.coach.add(m.id);
   ps.profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
   ps.racesJson = JSON.stringify(d.races);
@@ -304,7 +312,7 @@ export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promi
     newMsgs.forEach((m) => ps.coach.add(m.id));
   }
   if (d.mode !== 'real') return; // sample data is regenerated on the device and never uploaded
-  await pushActivities(uid, d.activities, ps);
+  await pushActivities(uid, [...d.activities, ...(d.removed ?? [])], ps);
   const racesJson = JSON.stringify(d.races);
   if (racesJson !== ps.racesJson && d.races.length) {
     const r = await supabase.from('races').upsert(d.races.map((x) => ({ id: x.id, user_id: uid, data: x })));
@@ -330,6 +338,14 @@ export async function deleteRunsInCloud(ids: string[]) {
   if (!supabase || !ids.length) return;
   const r = await supabase.from('activities').delete().in('id', ids);
   if (r.error) throw r.error;
+}
+
+/** Deleting a run also removes what hangs off it: how it felt, and any Hub post (its Fuego and comments go with it). */
+export async function deleteRunExtrasInCloud(uid: string, id: string, alsoFeedback: boolean) {
+  if (!supabase) return;
+  const p = await supabase.from('posts').delete().eq('user_id', uid).eq('activity_id', id);
+  if (p.error) throw p.error;
+  if (alsoFeedback) { const f = await supabase.from('session_feedback').delete().eq('user_id', uid).eq('activity_id', id); if (f.error) throw f.error; }
 }
 
 export async function deleteRaceInCloud(id: string) {

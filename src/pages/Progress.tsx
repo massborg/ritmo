@@ -18,6 +18,7 @@ import { forStats } from '../data/quality';
 import { isStravaRun } from '../data/strava';
 import { garminAttribution } from '../data/garmin';
 import type { Activity } from '../lib/types';
+import { useRunLongPress } from '../components/DeleteRun';
 
 type P = 'W' | 'M' | 'Y' | 'A';
 interface Bar { key: string; label: string; m: number; title: string; today: boolean }
@@ -100,7 +101,7 @@ function RouteThumb({ a }: { a: Activity }) {
 }
 
 /** A run as a card: route, date and name, km · pace · time, its plan tag, and the device */
-function RunCard({ a }: { a: Activity }) {
+function RunCard({ a, press }: { a: Activity; press: Record<string, unknown> }) {
   const { data, today, plan, sessionOfRun, labelOf, typeOf } = useApp();
   const U = data.profile.units;
   const d = dayOf(a), t = ymd(today);
@@ -113,7 +114,7 @@ function RunCard({ a }: { a: Activity }) {
   const device = a.device ?? (isStravaRun(a) ? 'From Strava' : garminAttribution(a) ?? (a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'manual' ? 'Logged by hand' : a.source === 'upload' ? 'File upload' : undefined));
   return (
     <li>
-      <Link to={`/activity/${a.id}`} className="run-card-link">
+      <Link to={`/activity/${a.id}`} className="run-card-link" {...press}>
         <RouteThumb a={a} />
         <span className="run-card-body">
           <span className="caption">{when}</span>
@@ -136,6 +137,8 @@ function ProgressTab() {
   const [anchor, setAnchor] = useState(today);
   const [picking, setPicking] = useState(false);
   const [shown, setShown] = useState(10);
+  // Press and hold a run to delete it (update 2, §8)
+  const longPress = useRunLongPress();
   const v = useMemo(() => periodView(p, anchor, acts, today), [p, anchor, acts, today]);
   const runs = acts.filter((a) => dayOf(a) >= v.from && dayOf(a) <= v.to).sort((x, y) => y.startTime.localeCompare(x.startTime));
   const totalM = runs.reduce((x, a) => x + a.distanceM, 0), totalS = runs.reduce((x, a) => x + a.movingS, 0);
@@ -198,7 +201,8 @@ function ProgressTab() {
 
       <section className="stack-sm" id="recent" aria-labelledby="recent-h">
         <h2 id="recent-h" className="title">{p === 'A' ? 'Recent activity' : `Runs · ${v.title}`}</h2>
-        {runs.length ? <ul className="run-cards">{runs.slice(0, shown).map((a) => <RunCard key={a.id} a={a} />)}</ul> : <p className="muted">No runs in this period.</p>}
+        {runs.length ? <ul className="run-cards">{runs.slice(0, shown).map((a) => <RunCard key={a.id} a={a} press={longPress.bind(a)} />)}</ul> : <p className="muted">No runs in this period.</p>}
+        {longPress.sheet}
         {runs.length > shown && <button className="btn" onClick={() => setShown((n) => n + 20)}>Show more ({runs.length - shown})</button>}
       </section>
 
