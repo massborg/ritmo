@@ -91,11 +91,13 @@ export default function FindRunners() {
   const remember = (term: string) => { const t = term.trim(); if (!t) return; const next = [t, ...recent.filter((x) => x.toLowerCase() !== t.toLowerCase())]; setRecent(next.slice(0, 6)); saveRecent(next); };
   const row = (p: HubProfile) => (
     <li key={p.user_id} className="find-row">
-      <RunnerAvatar id={p.user_id} profile={p} />
-      <span className="find-row-text">
-        <span className="label">{p.display_name}</span>
-        {reasonFor(p, uid!, follows, sharedClub) && <span className="caption">{reasonFor(p, uid!, follows, sharedClub)}</span>}
-      </span>
+      <Link to={`/hub/runner/${p.user_id}`} className="row" style={{ gap: 12, flex: 1, minWidth: 0, color: 'inherit', textDecoration: 'none' }} onClick={() => remember(q)}>
+        <RunnerAvatar id={p.user_id} profile={p} />
+        <span className="find-row-text">
+          <span className="label">{p.display_name}</span>
+          {reasonFor(p, uid!, follows, sharedClub) && <span className="caption">{reasonFor(p, uid!, follows, sharedClub)}</span>}
+        </span>
+      </Link>
       <FollowStateButton other={p.user_id} name={p.display_name} follows={follows} onChange={() => { remember(q); void loadFollows(); }} />
     </li>
   );

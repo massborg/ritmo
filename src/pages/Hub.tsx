@@ -51,15 +51,13 @@ export default function HubPage() {
   const setSection = (s: Section) => setParams(s === 'feed' ? {} : { tab: s }, { replace: true });
   const { me, setMe, ready, loading } = useHubMe();
   const [notes, setNotes] = useState<Notification[]>([]);
-  const [notePeople, setNotePeople] = useState<Map<string, HubProfile>>(new Map());
   const [follows, setFollows] = useState<hub.Follow[]>([]);
-  const [sheet, setSheet] = useState<'notes' | 'settings'>();
+  const [sheet, setSheet] = useState<'settings'>();
   const loadSocial = useCallback(async () => {
     if (!uid) return;
     try {
       const [f, n] = await Promise.all([hub.follows(uid), hub.notifications()]);
       setFollows(f); setNotes(n);
-      setNotePeople(await hub.profilesFor([...n.map((x) => x.actor_id ?? ''), ...f.flatMap((x) => [x.follower_id, x.followee_id])].filter(Boolean)));
     } catch { /* the feed shows its own error */ }
   }, [uid]);
   useEffect(() => { if (ready) void loadSocial(); }, [ready, loadSocial]);
@@ -74,9 +72,9 @@ export default function HubPage() {
 
   return (
     <div className="stack-lg">
-      <AppHeader avatar title="Hub" right={ready ? <>
+      <AppHeader avatar={ready ? '/hub/runner/me' : true} title="Hub" right={ready ? <>
         <Link className="icon-btn icon-btn-round" aria-label="Find runners" to="/hub/find"><Search size={20} strokeWidth={2} /></Link>
-        <button className="icon-btn icon-btn-round hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} onClick={() => setSheet('notes')}><Bell size={20} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</button>
+        <Link className="icon-btn icon-btn-round hub-bell" aria-label={`Notifications${unread ? `, ${unread} new` : ''}`} to="/hub/notifications"><Bell size={20} strokeWidth={2} />{unread > 0 && <span className="hub-badge">{unread}</span>}</Link>
         <button className="icon-btn icon-btn-round" aria-label="Hub settings" onClick={() => setSheet('settings')}><Settings size={20} strokeWidth={2} /></button>
       </> : undefined} />
       <Segmented<Section> label="Hub sections" value={section} onChange={setSection} options={[{ value: 'feed', label: 'Feed' }, { value: 'challenges', label: 'Challenges' }, { value: 'clubs', label: 'Clubs' }]} />
@@ -86,7 +84,6 @@ export default function HubPage() {
         : section === 'feed' ? <FeedTab follows={follows} onSocial={loadSocial} />
         : <ClubsTab me={me!} />}
 
-      {sheet === 'notes' && <NotesSheet notes={notes} people={notePeople} follows={follows} onChange={loadSocial} onClose={() => { setSheet(undefined); void hub.markAllRead(uid!).then(loadSocial); }} />}
       {sheet === 'settings' && me && <SettingsSheet me={me} onSaved={setMe} onClose={() => setSheet(undefined)} onStop={async () => {
         await hub.hideAllMyPosts(uid!);
         updateProfile({ consents: { ...data.profile.consents, hubSharing: { granted: false, at: new Date().toISOString(), version: HUB_CONSENT_VERSION } } });
@@ -307,9 +304,9 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
   return (
     <article className="hub-post" aria-labelledby={`post-${p.id}`}>
       <div className="hub-post-head">
-        <RunnerAvatar id={p.user_id} profile={author} />
+        <Link to={`/hub/runner/${p.user_id}`} aria-label={`${author?.display_name ?? 'Runner'}'s profile`}><RunnerAvatar id={p.user_id} profile={author} /></Link>
         <div className="hub-post-who">
-          <span className="label">{author?.display_name ?? 'Runner'}</span>
+          <Link to={`/hub/runner/${p.user_id}`} className="label runner-link">{author?.display_name ?? 'Runner'}</Link>
           <span className="caption">{meta}{own ? ` · ${p.visibility === 'everyone' ? 'Everyone' : p.visibility === 'followers' ? 'Followers' : 'Only you'}` : ''}</span>
           {(p.city || posted) && <span className="caption row" style={{ gap: 4 }}>{p.city && <><MapPin size={13} strokeWidth={2} aria-hidden="true" />{p.city}</>}{p.city && posted ? ' · ' : ''}{posted}</span>}
         </div>
@@ -394,7 +391,7 @@ export function CommentsSheet({ post, people, onClose }: { post: Post; people: M
   const top = list.filter((c) => !c.parent_id);
   const Row = ({ c, child }: { c: Comment; child?: boolean }) => (
     <li className={`hub-comment${child ? ' child' : ''}`}>
-      <span className="row" style={{ gap: 8 }}><RunnerAvatar id={c.user_id} profile={names.get(c.user_id)} size={child ? 'xs' : 'md'} /><span><span className="label">{names.get(c.user_id)?.display_name ?? 'Runner'}</span> <span className="caption">{ago(c.created_at)}{c.edited_at ? ' · edited' : ''}</span></span></span>
+      <span className="row" style={{ gap: 8 }}><Link to={`/hub/runner/${c.user_id}`} aria-hidden="true" tabIndex={-1}><RunnerAvatar id={c.user_id} profile={names.get(c.user_id)} size={child ? 'xs' : 'md'} /></Link><span><Link to={`/hub/runner/${c.user_id}`} className="label runner-link">{names.get(c.user_id)?.display_name ?? 'Runner'}</Link> <span className="caption">{ago(c.created_at)}{c.edited_at ? ' · edited' : ''}</span></span></span>
       <p>{c.body}</p>
       <div className="row wrap" style={{ gap: 4 }}>
         {!child && <button className="btn btn-ghost btn-small" onClick={() => { setReply(c); setEditing(undefined); }}>Reply</button>}
@@ -426,42 +423,7 @@ export function GiversSheet({ post, follows, onClose }: { post: Post; follows: h
   return (
     <Sheet open onClose={onClose} title="Fuego from">
       <p className="caption">{hub.giversLine(givers.map((g) => g.display_name), post.ritmo_count)}</p>
-      <ul className="list">{givers.map((g) => <li key={g.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><span className="row" style={{ gap: 8 }}><RunnerAvatar id={g.user_id} profile={g} />{g.display_name}</span><FollowStateButton other={g.user_id} name={g.display_name} follows={follows} onChange={() => undefined} /></li>)}</ul>
-    </Sheet>
-  );
-}
-
-function NotesSheet({ notes, people, follows, onChange, onClose }: { notes: Notification[]; people: Map<string, HubProfile>; follows: hub.Follow[]; onChange: () => void; onClose: () => void }) {
-  const { session } = useApp();
-  const uid = session!.user.id;
-  // Batch: the same kind on the same post becomes one line ("Anna and 5 others gave your run a Fuego")
-  const groups = new Map<string, Notification[]>();
-  for (const n of notes) { const k = n.kind === 'follow_request' ? `${n.kind}:${n.actor_id}` : `${n.kind}:${n.post_id ?? n.actor_id}`; groups.set(k, [...(groups.get(k) ?? []), n]); }
-  const name = (id?: string | null) => people.get(id ?? '')?.display_name ?? 'Someone';
-  return (
-    <Sheet open onClose={onClose} title="Notifications">
-      {!notes.length && <p className="muted">Nothing yet.</p>}
-      <ul className="list">
-        {[...groups.values()].map((g) => {
-          const n = g[0];
-          const pending = n.kind === 'follow_request' && follows.some((f) => f.follower_id === n.actor_id && f.followee_id === uid && f.status === 'pending');
-          return (
-            <li key={`${n.kind}-${n.id}`} className="stack-sm" style={{ padding: 'var(--s2) 0' }}>
-              <span className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                {n.actor_id ? <RunnerAvatar id={n.actor_id} profile={people.get(n.actor_id)} /> : null}
-                <span className="stack-sm" style={{ gap: 0 }}>
-                  <span className={g.some((x) => !x.read_at) ? 'label' : undefined}>{hub.notificationText(n.kind, [...new Set(g.map((x) => name(x.actor_id)))])}</span>
-                  <span className="caption">{ago(n.created_at)}</span>
-                </span>
-              </span>
-              {pending && <div className="row" style={{ gap: 6 }}>
-                <button className="btn btn-small btn-primary" onClick={async () => { await hub.acceptFollower(uid, n.actor_id!); onChange(); }}>Accept</button>
-                <button className="btn btn-small" onClick={async () => { await hub.removeFollower(uid, n.actor_id!); onChange(); }}>Decline</button>
-              </div>}
-            </li>
-          );
-        })}
-      </ul>
+      <ul className="list">{givers.map((g) => <li key={g.user_id} className="row-between" style={{ padding: 'var(--s2) 0' }}><Link to={`/hub/runner/${g.user_id}`} className="row runner-link" style={{ gap: 8 }}><RunnerAvatar id={g.user_id} profile={g} />{g.display_name}</Link><FollowStateButton other={g.user_id} name={g.display_name} follows={follows} onChange={() => undefined} /></li>)}</ul>
     </Sheet>
   );
 }

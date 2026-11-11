@@ -8,7 +8,7 @@ import { useApp } from '../app/AppContext';
 
 /** iOS-style header: large title that collapses into a compact sticky bar on scroll. */
 /** Screen header. Main screens pass `avatar` (Profile at the top left); other screens pass `back`. */
-export function AppHeader({ title, eyebrow, right, back, avatar, large = true }: { title: string; eyebrow?: ReactNode; right?: ReactNode; back?: boolean; avatar?: boolean; large?: boolean }) {
+export function AppHeader({ title, eyebrow, right, back, avatar, large = true }: { title: string; eyebrow?: ReactNode; right?: ReactNode; back?: boolean; /** true: your photo opens Profile; a path: it opens that page instead (the Hub opens your Hub profile) */ avatar?: boolean | string; large?: boolean }) {
   const nav = useNavigate();
   const [compact, setCompact] = useState(false);
   useEffect(() => {
@@ -21,7 +21,7 @@ export function AppHeader({ title, eyebrow, right, back, avatar, large = true }:
     <>
       <div className={`appbar${compact || !large ? ' appbar-compact' : ''}${!large ? ' appbar-small' : ''}`}>
         <div className="appbar-inner">
-          <div className="appbar-side">{back ? <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><ChevronLeft size={26} strokeWidth={2} /></button> : avatar ? <Avatar /> : null}</div>
+          <div className="appbar-side">{back ? <button className="icon-btn" aria-label="Back" onClick={() => nav(-1)}><ChevronLeft size={26} strokeWidth={2} /></button> : avatar ? <Avatar to={typeof avatar === 'string' ? avatar : undefined} /> : null}</div>
           {large ? <span className="appbar-title" aria-hidden={!compact}>{title}</span> : <h1 className="appbar-title">{title}</h1>}
           <div className="appbar-side appbar-right">{right}</div>
         </div>
@@ -40,12 +40,13 @@ export function SampleChip() {
   return <Link to="/profile/data" className="tag tag-sample" style={{ minHeight: 32 }} aria-label="Sample data. Tap to use your own data.">Sample data</Link>;
 }
 
-export function Avatar() {
+export function Avatar({ to = '/profile' }: { to?: string }) {
   const { data, session, avatarSrc } = useApp();
+  const label = to === '/profile' ? 'Profile' : 'Your Hub profile';
   const initials = (data.profile.name ? data.profile.name.split(' ').map((x) => x[0]).join('') : (session?.user.email ?? 'R')[0]).slice(0, 2).toUpperCase();
   return avatarSrc
-    ? <Link to="/profile" className="avatar avatar-photo" aria-label="Profile"><img src={avatarSrc} alt="" /></Link>
-    : <Link to="/profile" className="avatar" aria-label="Profile">{initials}</Link>;
+    ? <Link to={to} className="avatar avatar-photo" aria-label={label}><img src={avatarSrc} alt="" /></Link>
+    : <Link to={to} className="avatar" aria-label={label}>{initials}</Link>;
 }
 
 export const ZONE_OF: Partial<Record<SessionType, number>> = { recovery: 1, easy: 2, long: 2, runwalk: 2, tempo: 3, threshold: 4, hills: 4, timetrial: 4, vo2max: 5, speed: 5, race: 4 };

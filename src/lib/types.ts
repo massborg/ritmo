@@ -199,6 +199,8 @@ export interface Profile {
   photoVisibility?: 'everyone' | 'followers' | 'only_me';
   /** Hub posting settings (Profile › Hub and privacy) */
   hub?: HubPrefs;
+  /** PBs on the Hub profile (off by default, up to 4 distances) */
+  hubPbs?: import('../training/profile-pbs').HubPbSettings;
 }
 
 /** Hub posting (update 2, §6). Anything missing falls back to the default noted. */

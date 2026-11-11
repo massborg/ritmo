@@ -8,6 +8,7 @@ import { avatarUrl, uploadSmallAvatar } from '../data/avatar';
 import { fetchRunDetail } from '../data/store';
 import { autoPostCandidates, autoPostOn, DEFAULT_TRIM_M } from '../training/autopost';
 import { buildRunPost } from './PostToHub';
+import { resolvePbs, ritmoBests, shareableRuns, weekStreak } from '../training/profile-pbs';
 
 export function HubSync() {
   const { data, session, hasFlag, typeOf, updateProfile } = useApp();
@@ -44,6 +45,22 @@ export function HubSync() {
     })();
     return () => { live = false; };
   }, [joined, uid, photoVis, avatarPath]);
+
+  // ---- The profile's numbers and chosen PBs (never from Strava runs), published when they change ----
+  const pbSettings = data.profile.hubPbs;
+  useEffect(() => {
+    if (!joined || !uid) return;
+    const t = setTimeout(async () => {
+      const runs = shareableRuns(data.activities);
+      const stats = { runs: runs.length, weekStreak: weekStreak(data.activities, new Date()) };
+      const pbs = resolvePbs(pbSettings, ritmoBests(data.activities, data.races));
+      const me = await hub.myHubProfile(uid).catch(() => undefined);
+      if (!me) return;
+      const same = me.stats?.runs === stats.runs && me.stats?.weekStreak === stats.weekStreak && JSON.stringify(me.pbs ?? null) === JSON.stringify(pbs);
+      if (!same) await hub.saveHubProfile({ ...me, stats: { ...stats, updatedAt: new Date().toISOString() }, pbs }).catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [joined, uid, data.activities, data.races, pbSettings]);
 
   // ---- Automatic posting starts from now: earlier runs are never posted automatically ----
   useEffect(() => {

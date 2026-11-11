@@ -198,6 +198,8 @@ function createMock() {
         if (i >= 0) rows[i] = { ...rows[i], ...r, ...t }; else {
           // Like the real hub_on_follow trigger: following a public profile is accepted at once
           if (table === 'follows' && state.tables.hub_profiles.find((h) => h.user_id === r.followee_id)?.private === false) r.status = 'accepted';
+          // Like hub_follow_notify: the followed runner is told (a request, or a new follower)
+          if (table === 'follows') { state.noteId = (state.noteId ?? 1000) + 1; state.tables.notifications.push({ id: state.noteId, user_id: r.followee_id, kind: r.status === 'accepted' ? 'follow' : 'follow_request', actor_id: r.follower_id, created_at: new Date().toISOString(), read_at: null }); }
           rows.push({ ...r, ...t, ...(table === 'posts' ? { ritmo_count: 0, comment_count: 0, created_at: new Date().toISOString() } : {}), ...(table === 'comments' ? { created_at: new Date().toISOString() } : {}) });
           const post = state.tables.posts.find((p) => p.id === r.post_id);
           if (post && table === 'ritmos') post.ritmo_count++;
@@ -208,11 +210,15 @@ function createMock() {
       return { status: 201, body: null };
     }
     if (method === 'PATCH') {
+      // Like the "accept my followers" rule: the followed runner may update (accept) a request
+      if (table === 'follows') { for (const r of rows) if (r.followee_id === u.id && filters.every(([k, v]) => test(r, k, v))) Object.assign(r, body); return { status: 204, body: null }; }
       for (const r of rows) if (match(r)) Object.assign(r, body, table === 'activities' ? { updated_at: stamp() } : {});
       return { status: 204, body: null };
     }
     if (method === 'DELETE') {
-      for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) {
+      // Like "unfollow or remove": either runner may delete a follow row
+      const canDelete = (r) => match(r) || (table === 'follows' && r.followee_id === u.id && filters.every(([k, v]) => test(r, k, v)));
+      for (let i = rows.length - 1; i >= 0; i--) if (canDelete(rows[i])) {
         const post = state.tables.posts.find((p) => p.id === rows[i].post_id);
         if (post && table === 'ritmos') post.ritmo_count = Math.max(0, post.ritmo_count - 1);
         if (post && table === 'comments') post.comment_count = Math.max(0, post.comment_count - 1);
@@ -388,6 +394,21 @@ function createMock() {
       if (url.pathname.startsWith('/auth/v1')) res = auth(url.pathname.slice(8), method, url, body, req);
       else if (url.pathname === '/rest/v1/rpc/strava_status') { state.rpc.push('strava_status'); const u = userFromReq(req); res = { status: 200, body: u && state.strava?.connected?.has(u.id) ? [{ connected: true, connected_at: new Date().toISOString(), scope: 'read,activity:read_all' }] : [] }; }
       else if (url.pathname === '/rest/v1/rpc/club_leaderboard') { const u = userFromReq(req); res = { status: 200, body: u ? leaderboardRpc(u, body || {}) : [] }; }
+      else if (url.pathname === '/rest/v1/rpc/hub_counts' || url.pathname === '/rest/v1/rpc/hub_follow_list') {
+        // Mirrors the real functions: counts for anyone (requests only for yourself), lists only when the runner is
+        // public or you follow them, never across a block
+        const u = userFromReq(req); const t = (body || {}).target;
+        const blocked = (a, b) => state.tables.blocks.some((x) => (x.blocker_id === a && x.blocked_id === b) || (x.blocker_id === b && x.blocked_id === a));
+        const F = state.tables.follows;
+        if (!u || blocked(t, u.id)) res = { status: 200, body: [] };
+        else if (url.pathname.endsWith('hub_counts')) res = { status: 200, body: [{ followers: F.filter((f) => f.followee_id === t && f.status === 'accepted').length, following: F.filter((f) => f.follower_id === t && f.status === 'accepted').length, requests: t === u.id ? F.filter((f) => f.followee_id === t && f.status === 'pending').length : 0, fuego: state.tables.posts.filter((x) => x.user_id === t).reduce((n, x) => n + (x.ritmo_count || 0), 0) }] };
+        else {
+          const h = state.tables.hub_profiles.find((x) => x.user_id === t);
+          const can = t === u.id || (h && h.private === false) || F.some((f) => f.follower_id === u.id && f.followee_id === t && f.status === 'accepted');
+          const which = body.which;
+          res = { status: 200, body: !can ? [] : F.filter((f) => f.status === 'accepted' && (which === 'followers' ? f.followee_id === t : f.follower_id === t)).map((f) => ({ user_id: which === 'followers' ? f.follower_id : f.followee_id, created_at: f.created_at ?? new Date().toISOString() })) };
+        }
+      }
       else if (url.pathname.startsWith('/rest/v1/rpc/')) { state.rpc.push(url.pathname.slice(12)); res = { status: 204, body: null }; }
       else if (url.pathname.startsWith('/storage/v1')) res = storage(url.pathname.slice(11), method, req, body);
       else if (url.pathname.startsWith('/rest/v1/')) res = rest(url.pathname.slice(9), method, url, body, req, req.headers());
