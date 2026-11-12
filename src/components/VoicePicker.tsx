@@ -5,16 +5,21 @@ import { Check, Play } from 'lucide-react';
 import { Chips } from './inputs';
 import { isIos } from '../lib/install';
 import { loadVoices, rankVoices, SAMPLE, speak, voiceLabel, type VoiceChoice } from '../run/voice';
+import { hasNativeVoice, nativeVoices, speakNative, stopNative } from '../run/native-voice';
+import { voiceLog } from '../run/cues';
 
 export function VoicePicker({ voiceURI, rate, onChange }: { voiceURI?: string; rate: number; onChange: (v: { voiceURI?: string; rate?: number }) => void }) {
   const [voices, setVoices] = useState<VoiceChoice[]>();
   const [playing, setPlaying] = useState<string>();
-  useEffect(() => { let live = true; loadVoices().then((v) => { if (live) setVoices(rankVoices(v, navigator.language || 'en-GB')); }); return () => { live = false; }; }, []);
-  if (!('speechSynthesis' in window)) return null;
+  // In the store app the phone's own speech engine speaks the cues, so its voices are the ones to offer
+  const native = hasNativeVoice();
+  useEffect(() => { let live = true; (native ? nativeVoices() : loadVoices()).then((v) => { if (live) setVoices(rankVoices(v, navigator.language || 'en-GB')); }); return () => { live = false; }; }, [native]);
+  const [log] = useState(voiceLog);
+  if (!native && !('speechSynthesis' in window)) return null;
   const play = (uri: string | undefined) => {
-    window.speechSynthesis.cancel();
+    if (native) stopNative(); else window.speechSynthesis.cancel();
     setPlaying(uri ?? 'auto');
-    speak(SAMPLE, { voiceURI: uri, rate });
+    (native ? speakNative : speak)(SAMPLE, { voiceURI: uri, rate });
     window.setTimeout(() => setPlaying(undefined), 3500);
   };
   const current = voiceURI && voices?.some((v) => v.uri === voiceURI) ? voiceURI : undefined;
@@ -49,6 +54,13 @@ export function VoicePicker({ voiceURI, rate, onChange }: { voiceURI?: string; r
           ? 'For more natural voices on iPhone: Settings → Accessibility → Spoken Content → Voices → English, then download an "Enhanced" or "Premium" voice. It will appear here.'
           : 'For more voices: install them in your phone\'s text-to-speech settings (on Android, Settings → Accessibility → Text-to-speech). They will appear here.'}
       </p>
+      {log.length > 0 && (
+        <details className="voice-log">
+          <summary className="caption">Voice problems on this device ({log.length})</summary>
+          <ul className="caption">{log.slice(-5).reverse().map((e) => <li key={e.at}>{new Date(e.at).toLocaleString()}: {e.why}</li>)}</ul>
+          <p className="caption">If cues go quiet, tap Test voice before you start. This list helps support see what happened.</p>
+        </details>
+      )}
     </div>
   );
 }

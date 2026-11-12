@@ -62,7 +62,8 @@ async function account(b, mock, email, works) {
   await page.goto(`${APP}/run`); await page.waitForTimeout(1500);
   await page.getByRole('tab', { name: 'Free run' }).click().catch(() => {});
   await page.locator('.run-go').click();
-  const spokenAtTap = await page.evaluate(() => window.__spoken.slice());
+  // The tap also says a silent word (it unlocks speech on iPhone); the first real phrase is "Ready when you are"
+  const spokenAtTap = await page.evaluate(() => window.__spoken.filter((t) => t.trim()));
   check(spokenAtTap[0] === 'Ready when you are.', `the Start tap speaks "Ready when you are" straight away (${JSON.stringify(spokenAtTap)})`);
   const sheet = page.getByRole('dialog', { name: 'Before you start' });
   await sheet.waitFor();
@@ -111,9 +112,10 @@ async function account(b, mock, email, works) {
   await sheet2.screenshot({ path: path.join(OUT, 'voice-blocked.png') });
   check((await page.evaluate(() => window.__clips.slice())).includes('ready'), 'the recorded "Ready when you are" plays instead');
   const log = await page.evaluate(() => JSON.parse(localStorage.getItem('ritmo:voice-log') || '[]'));
-  check(log.length === 1 && /nothing spoken within 2 s/.test(log[0].why), `the failure is logged on the device (${log[0]?.why})`);
-  await page.getByRole('button', { name: 'Test voice' }).click(); await page.waitForTimeout(800);
-  check((await page.evaluate(() => window.__clips.slice())).includes('voice-check'), 'Test voice plays the recorded clip');
+  check(log.length === 1 && /nothing spoken within 2\.5 s/.test(log[0].why), `the failure is logged on the device (${log[0]?.why})`);
+  // Test voice checks speech again (it may work now), then plays the recorded clip
+  await page.getByRole('button', { name: 'Test voice' }).click(); await page.waitForTimeout(5200);
+  check((await page.evaluate(() => window.__clips.slice())).includes('voice-check'), 'Test voice checks speech again, then plays the recorded clip');
   // Start the run: cues go straight to the clips (no 2 s wait each time)
   await page.getByRole('checkbox', { name: 'Start in Pocket mode' }).uncheck();
   const before = await page.evaluate(() => window.__spoken.length);

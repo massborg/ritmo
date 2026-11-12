@@ -3,14 +3,16 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, AlertTriangle, Loader2, Smartphone, Volume2 } from 'lucide-react';
 import { Sheet } from './inputs';
-import { cue, onVoiceState, voiceState, type VoiceState } from '../run/cues';
+import { cue, onVoiceState, resetVoice, unlockAudio, voiceState, type VoiceState } from '../run/cues';
 import type { SpeakOptions } from '../run/voice';
+import { hasBackgroundGps } from '../run/native-gps';
 
 export function RunCheck({ open, onClose, onStart, gps, gpsReady, cuesOn, voice, pocket, setPocket }: {
   open: boolean; onClose: () => void; onStart: () => void; gps: string; gpsReady: boolean; cuesOn: boolean; voice: SpeakOptions;
   pocket: boolean; setPocket: (on: boolean) => void;
 }) {
   const [v, setV] = useState<VoiceState>(voiceState());
+  const native = hasBackgroundGps();
   useEffect(() => onVoiceState(setV), []);
   useEffect(() => { if (open) setV(voiceState()); }, [open]);
   const line = (ok: boolean | undefined, text: string, cls: string) => (
@@ -23,7 +25,7 @@ export function RunCheck({ open, onClose, onStart, gps, gpsReady, cuesOn, voice,
     <Sheet open={open} onClose={onClose} title="Before you start"
       footer={<div className="stack-sm">
         <button className="btn btn-primary btn-block run-check-start" onClick={onStart}>Start run</button>
-        {cuesOn && <button className="btn btn-block" onClick={() => { void cue('Voice cues are working.', voice); }}><Volume2 size={18} strokeWidth={2} aria-hidden="true" />Test voice</button>}
+        {cuesOn && <button className="btn btn-block" onClick={() => { resetVoice(); unlockAudio(); void cue('Voice cues are working.', voice); }}><Volume2 size={18} strokeWidth={2} aria-hidden="true" />Test voice</button>}
       </div>}>
       <div className="stack">
         <ul className="run-check" aria-live="polite">
@@ -39,12 +41,12 @@ export function RunCheck({ open, onClose, onStart, gps, gpsReady, cuesOn, voice,
               <li>The volume is up (press the volume buttons now)</li>
               <li>A voice is installed: Settings › Accessibility › Spoken Content › Voices</li>
             </ul>
-            <p className="caption">Until then, Ritmo plays its own recorded cues for distance and pace.</p>
+            <p className="caption">Then tap Test voice to try again. Until it works, Ritmo plays its own recorded cues for distance and pace.</p>
           </div>
         )}
         <div className="card stack-sm run-pocket-warn">
-          <p className="label row" style={{ gap: 8 }}><Smartphone size={18} strokeWidth={2} aria-hidden="true" />Don't lock your phone, use Pocket mode</p>
-          <p className="caption">A browser pauses GPS and voice when the screen locks. Pocket mode keeps Ritmo running with a black screen that ignores touches. Swipe up to unlock it.</p>
+          <p className="label row" style={{ gap: 8 }}><Smartphone size={18} strokeWidth={2} aria-hidden="true" />{native ? 'Locking your phone is fine' : "Don't lock your phone, use Pocket mode"}</p>
+          <p className="caption">{native ? 'In the app, GPS and voice keep going with the phone locked. Pocket mode is there if you prefer it: a black screen that ignores touches. Swipe up to unlock it.' : 'A browser pauses GPS and voice when the screen locks. Pocket mode keeps Ritmo running with a black screen that ignores touches. Swipe up to unlock it.'}</p>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={pocket} onChange={(e) => setPocket(e.target.checked)} /> Start in Pocket mode</label>
         </div>
       </div>

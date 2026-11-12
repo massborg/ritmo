@@ -1,10 +1,15 @@
-// Voice cues that are checked (update 3, §2). On iPhone, speech started from a timer is often blocked, the silent
-// switch can mute it and a voice may not be installed. So:
-// - the Start tap speaks "Ready when you are" straight away (inside the tap), which unlocks later cues
-// - every cue is watched: if speech reports an error, or has not started within 2 seconds, voice is "blocked"
-// - once blocked, cues are played from short recorded clips instead (numbers 1–59, "kilometres", pace words)
+// Voice cues that are checked (update 3, §2; hardened after testers heard nothing). On iPhone, speech started from a
+// timer is blocked unless a tap spoke first, the silent switch can mute it, speech can be left paused after the page
+// was in the background, and the engine can get stuck "speaking" while saying nothing. So:
+// - every tap that leads to a run (Start, Quick run, Start now, Test voice) unlocks speech and the recorded clips
+// - every cue is watched: if it has not started within 2.5 seconds, Ritmo retries once with the default voice
+//   (the chosen voice may be missing or need a download), then plays its recorded clips instead
+// - speech that is stuck (queued for 8 seconds with nothing spoken) is cleared before the next cue
+// - if speech starts working again later (a late start), Ritmo goes back to it
+// - in the store app the phone's own speech engine speaks, which no browser rule can block
 // - failures are logged once per run, so they can be seen in support
-import { speak, type SpeakOptions } from './voice';
+import { speak, unlockSpeech, type SpeakOptions } from './voice';
+import { hasNativeVoice, speakNative } from './native-voice';
 import { reportError } from '../lib/errors';
 
 export type VoiceState = 'unknown' | 'checking' | 'ok' | 'blocked';
@@ -15,7 +20,7 @@ const setState = (s: VoiceState) => { state = s; listeners.forEach((f) => f(s));
 export const voiceState = () => state;
 export function onVoiceState(f: (s: VoiceState) => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
 /** A new run: check again, and log again if it fails */
-export function resetVoice() { state = 'unknown'; logged = false; }
+export function resetVoice() { state = 'unknown'; logged = false; useDefault = false; }
 
 /** The recorded clips in public/audio/cues (made with scripts/make-cue-clips.sh) */
 export const CLIP_WORDS = ['kilometre', 'kilometres', 'mile', 'miles', 'average-pace', 'minutes', 'seconds', 'go', 'paused', 'resumed', 'run-finished', 'ready', 'lap', 'recovery', 'easy', 'too-fast', 'too-slow', 'goal-reached', 'next', 'great-work', 'voice-check'] as const;
@@ -86,42 +91,124 @@ export function playClips(names: string[]): void {
   if (!playing) next();
 }
 
+/** Stop the recorded clips (speech is working again) */
+export function stopClips(): void {
+  queue = []; playing = false;
+  try { audio?.pause(); } catch { /* */ }
+}
+
+/** Inside any tap that leads to a run: unlock speech and the recorded clips, and load the clips */
+export function unlockAudio(): void {
+  if (!hasNativeVoice()) unlockSpeech();
+  unlockClips();
+  void preloadClips();
+}
+
+function log(why: string, text: string) {
+  // For support: error tracking (when on), the console, and a short log kept on the device
+  reportError(new Error(`Voice cue: ${why}`), `run-voice:${text.slice(0, 40)}`);
+  console.warn(`[ritmo] voice cue: ${why}`);
+  try {
+    const list = JSON.parse(localStorage.getItem('ritmo:voice-log') ?? '[]') as unknown[];
+    localStorage.setItem('ritmo:voice-log', JSON.stringify([...list, { at: new Date().toISOString(), why, cue: text.slice(0, 60), ua: navigator.userAgent.slice(0, 120) }].slice(-20)));
+  } catch { /* storage may be off */ }
+}
 function blocked(why: string, text: string) {
   setState('blocked');
-  if (!logged) {
-    logged = true;
-    // For support: error tracking (when on), the console, and a short log kept on the device
-    reportError(new Error(`Voice cue blocked: ${why}`), `run-voice:${text.slice(0, 40)}`);
-    console.warn(`[ritmo] voice cue blocked: ${why}`);
-    try {
-      const log = JSON.parse(localStorage.getItem('ritmo:voice-log') ?? '[]') as unknown[];
-      localStorage.setItem('ritmo:voice-log', JSON.stringify([...log, { at: new Date().toISOString(), why, cue: text.slice(0, 60), ua: navigator.userAgent.slice(0, 120) }].slice(-20)));
-    } catch { /* storage may be off */ }
-  }
+  if (!logged) { logged = true; log(`blocked: ${why}`, text); }
+}
+
+/** What the device said about the voice on this device, newest last (shown in Settings: Voice, for support) */
+export function voiceLog(): { at: string; why: string; cue: string }[] {
+  try { return JSON.parse(localStorage.getItem('ritmo:voice-log') ?? '[]'); } catch { return []; }
+}
+
+// Speech engine health: when one of our utterances last started or ended, and how many are waiting
+let lastProgress = 0;
+let waiting = 0;
+let useDefault = false;
+const STUCK_MS = 8000;
+const progress = () => { lastProgress = Date.now(); };
+/** Speech says it is busy, but none of our cues has started or ended for 8 seconds: it is stuck */
+function stuck(): boolean {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  const ss = window.speechSynthesis;
+  return waiting > 0 && (ss.speaking || ss.pending) && Date.now() - lastProgress > STUCK_MS;
+}
+function unstick() {
+  if (!stuck()) return;
+  try { window.speechSynthesis.cancel(); } catch { /* */ }
+  waiting = 0;
+  log('speech was stuck: cleared', '');
+}
+if (typeof document !== 'undefined') {
+  // Back from the background (or the screen was off): iPhone can leave speech paused or stuck
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !('speechSynthesis' in window)) return;
+    try { window.speechSynthesis.resume?.(); } catch { /* */ }
+    unstick();
+  });
+}
+
+/** One attempt to speak; resolves 'started', 'failed' (with why) or 'silent' (nothing within the time) */
+function attempt(text: string, o: SpeakOptions, ms: number, onLate: () => void): Promise<{ r: 'started' | 'failed' | 'silent'; why?: string }> {
+  return new Promise((resolve) => {
+    let done = false;
+    const end = (r: 'started' | 'failed' | 'silent', why?: string) => { if (done) return; done = true; window.clearTimeout(timer); resolve({ r, why }); };
+    let counted = true;
+    waiting++;
+    const settle = () => { if (counted) { counted = false; waiting = Math.max(0, waiting - 1); } };
+    const timer = window.setTimeout(() => {
+      // Queued behind a cue that is still being spoken, with the engine making progress: it will come
+      const ss = window.speechSynthesis;
+      if ((ss.speaking || ss.pending) && Date.now() - lastProgress < STUCK_MS && waiting > 1) end('started');
+      else end('silent');
+    }, ms);
+    const opts: SpeakOptions = {
+      ...o,
+      onStart: () => { progress(); if (done) onLate(); else end('started'); },
+      onEnd: () => { progress(); settle(); },
+      onError: (e) => { settle(); end('failed', e); },
+    };
+    if (hasNativeVoice()) speakNative(text, opts); else speak(text, opts);
+  });
 }
 
 /**
  * Say a cue and check that it was spoken. Resolves true when speech started; false when it failed (then the
- * recorded clips play instead, now and for the rest of the run).
+ * recorded clips play instead, until speech is seen working again).
  */
-export function cue(text: string, o: SpeakOptions = {}): Promise<boolean> {
-  if (state === 'blocked') { playClips(clipsFor(text)); return Promise.resolve(false); }
-  const has = typeof window !== 'undefined' && 'speechSynthesis' in window;
-  if (!has) { blocked('no speechSynthesis', text); playClips(clipsFor(text)); return Promise.resolve(false); }
+let checking: Promise<boolean> | undefined;
+export async function cue(text: string, o: SpeakOptions = {}): Promise<boolean> {
+  // While the first cue is being checked, later ones wait for the answer (the countdown says a number a second)
+  if (state === 'checking' && checking) await checking.catch(() => false);
+  const p = run(text, o);
+  if (state === 'checking' || state === 'unknown') checking = p;
+  return p;
+}
+async function run(text: string, o: SpeakOptions): Promise<boolean> {
+  const native = hasNativeVoice();
+  const has = native || (typeof window !== 'undefined' && 'speechSynthesis' in window);
+  if (!has) { blocked('no speech on this device', text); playClips(clipsFor(text)); return false; }
+  if (state === 'blocked') { playClips(clipsFor(text)); return false; }
   if (state === 'unknown') setState('checking');
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (ok: boolean, why = '') => {
-      if (done) return;
-      done = true; window.clearTimeout(timer);
-      if (ok) { if (state !== 'ok') setState('ok'); }
-      else { blocked(why, text); playClips(clipsFor(text)); }
-      resolve(ok);
-    };
-    const timer = window.setTimeout(() => {
-      // iPhone may not fire onstart: if it says it is speaking, that counts
-      if (window.speechSynthesis.speaking) finish(true); else finish(false, 'nothing spoken within 2 s');
-    }, 2000);
-    speak(text, { ...o, onStart: () => finish(true), onError: (e) => finish(false, e) });
-  });
+  if (!native) unstick();
+  // A late start (the phone was slow, not blocked): go back to speech and stop the clips saying the same thing
+  const late = () => { if (state === 'blocked') { stopClips(); setState('ok'); } };
+  const first = await attempt(text, { ...o, defaultVoice: o.defaultVoice || useDefault }, 2500, late);
+  if (first.r === 'started') { if (state !== 'ok') setState('ok'); return true; }
+  // Once more with the device's default voice: the chosen voice may be missing, or need a download or signal
+  if (!useDefault) {
+    if (!native) { try { window.speechSynthesis.cancel(); waiting = 0; } catch { /* */ } }
+    const second = await attempt(text, { ...o, defaultVoice: true }, 2000, late);
+    if (second.r === 'started') {
+      useDefault = true;
+      log(`chosen voice failed (${first.why ?? 'nothing spoken'}), default voice used`, text);
+      if (state !== 'ok') setState('ok');
+      return true;
+    }
+  }
+  blocked(first.why ?? 'nothing spoken within 2.5 s', text);
+  playClips(clipsFor(text));
+  return false;
 }

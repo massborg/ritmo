@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, MessageCircle, Pencil, Play, Plus, Sparkles, Upload, Zap } from 'lucide-react';
+import { resetVoice, unlockAudio } from '../run/cues';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
@@ -107,8 +108,9 @@ function CareCard() {
   );
 }
 
-/** iPhone Safari only speaks after a tap: a silent word now lets the run's audio cues play later. */
-const primeSpeech = () => { try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch { /* cues are optional */ } };
+/** iPhone Safari only speaks after a tap: a silent word now (and the recorded clips unlocked) lets the run's
+ *  audio cues play later, even when a Quick run starts by itself once GPS is ready. */
+const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
   const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen } = useApp();
