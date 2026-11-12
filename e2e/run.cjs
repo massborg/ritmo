@@ -30,7 +30,7 @@ async function account(mock, ctx, email, flagged) {
   const mock = createMock();
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
-  await ctx.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
+  await ctx.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:run:pocket', 'off'); } catch { /* */ } });
   await mock.install(ctx, SUPA);
 
   // An account without the flag: the Run tab, Quick run and recording are open to everyone
@@ -46,7 +46,7 @@ async function account(mock, ctx, email, flagged) {
   await ctx.clearCookies();
 
   const ctx2 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
-  await ctx2.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
+  await ctx2.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:run:pocket', 'off'); } catch { /* */ } });
   await mock.install(ctx2, SUPA);
   const tiles = [];
   await ctx2.route('https://tile.openstreetmap.org/**', (r) => { tiles.push(r.request().url()); return r.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN4+/btfwAJfwPpa1fKXQAAAABJRU5ErkJggg==', 'base64') }); });
@@ -60,7 +60,7 @@ async function account(mock, ctx, email, flagged) {
   await page.waitForTimeout(500);
   check(tiles.length > 0, `the map around the runner starts loading before the run starts (${tiles.length} tiles fetched while waiting)`);
   await page.getByRole('tab', { name: 'Free run' }).click();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click(); await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('.run-live').waitFor({ timeout: 8000 });
   check(true, 'countdown then live screen');
 
@@ -110,7 +110,7 @@ async function account(mock, ctx, email, flagged) {
   check(errors.length === 0, `no errors ${errors.slice(0, 2).join(' | ')}`);
   // Quick run on the Training page: a small outline button in the header, opens Run as a free run that starts by itself once GPS is ready
   const ctx3 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
-  await ctx3.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
+  await ctx3.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:run:pocket', 'off'); } catch { /* */ } });
   await mock.install(ctx3, SUPA);
   const q = await account(mock, ctx3, 'quick@test.ritmo', false); // no flag: Quick run is for everyone
   await q.page.goto(`${APP}/`); await q.page.waitForTimeout(1200);

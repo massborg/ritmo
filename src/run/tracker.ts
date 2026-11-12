@@ -1,11 +1,14 @@
 // Recording a run with the phone's GPS (review #2 §3). Pure functions, so the maths is tested without a phone.
 // Fixes worse than 25 m are dropped, and so are jumps faster than anyone runs. Distance comes from the filtered
 // track; pace is smoothed over the last 30 seconds; once you have got going, the run pauses itself when you stop
-// for 3 seconds.
+// for 3 seconds. When GPS comes back after more than 30 seconds without a fix (the phone was locked, the page was
+// paused), nothing is invented: no straight line, no distance and no time for the gap, which is kept and shown.
 import type { PlannedSession, StreamPoint } from '../lib/types';
 
 export interface Fix { t: number; lat: number; lon: number; acc: number; alt?: number | null; speed?: number | null }
-export interface TrackPoint { t: number; lat: number; lon: number; d: number; alt?: number; moving: boolean }
+export interface TrackPoint { t: number; lat: number; lon: number; d: number; alt?: number; moving: boolean; /** First point after a GPS gap */ gap?: boolean }
+/** A stretch with no GPS (ms timestamps), and the distance when it started */
+export interface TrackGap { fromT: number; toT: number; atM: number }
 
 export interface TrackState {
   points: TrackPoint[];
@@ -22,7 +25,12 @@ export interface TrackState {
   last?: Fix;
   /** Recent good fixes, for a speed that GPS jitter cannot fake while standing still */
   recent?: Fix[];
+  /** GPS gaps of more than 30 seconds: left out of distance, time and pace */
+  gaps?: TrackGap[];
 }
+
+/** No fix for this long while running is a gap, not a straight line */
+export const GAP_MS = 30000;
 
 export const MAX_ACCURACY_M = 25;
 const MAX_SPEED = 1000 / 140; // 2:20/km: faster than any runner, so a GPS jump
@@ -55,6 +63,13 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
   }
   const dt = (f.t - prev.t) / 1000;
   if (dt <= 0) return next;
+  if (f.t - prev.t > GAP_MS && !s.paused) {
+    // GPS was gone (a locked phone, a paused page): start again from here, with nothing added for the gap
+    next.gaps = [...(s.gaps ?? []), { fromT: prev.t, toT: f.t, atM: s.distanceM }];
+    next.last = f; next.recent = [f]; next.stillSince = undefined; next.autoPaused = false;
+    next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: true, gap: true }];
+    return next;
+  }
   const dd = haversine(prev, f);
   if (dd / dt > MAX_SPEED) return next; // a jump: ignore this fix, keep the previous one
   // Speed over the last ~8 seconds: GPS jitter of a few metres cannot make a standing runner look like moving
@@ -86,8 +101,16 @@ export const setPaused = (s: TrackState, paused: boolean, now = Date.now()): Tra
  */
 export function clockS(s: TrackState, now: number): number {
   if (s.paused || s.autoPaused) return s.movingS;
-  const since = s.last ? s.last.t : (s.resumedAt ?? s.startedAt);
-  return s.movingS + Math.max(0, (now - since) / 1000);
+  // Before the first fix the clock runs from the start; after that, a GPS gap holds it (the gap isn't counted)
+  if (!s.last) return s.movingS + Math.max(0, (now - (s.resumedAt ?? s.startedAt)) / 1000);
+  return s.movingS + Math.min(GAP_MS / 1000, Math.max(0, (now - s.last.t) / 1000));
+}
+
+/** Seconds since the last GPS fix while running, when that is longer than a gap (else undefined) */
+export function gpsLostS(s: TrackState, now: number): number | undefined {
+  if (s.paused || !s.last) return undefined;
+  const x = now - s.last.t;
+  return x > GAP_MS ? Math.round(x / 1000) : undefined;
 }
 
 /** Mark a lap at this moment (clock time and distance). */
@@ -118,9 +141,10 @@ export const avgPace = (s: TrackState) => (s.distanceM > 20 ? s.movingS / (s.dis
 export function toStreams(s: TrackState): StreamPoint[] {
   let t = 0, prevT: number | undefined;
   return s.points.filter((p) => p.moving).map((p) => {
-    if (prevT != null) t += Math.min(p.t - prevT, 30);
+    // A gap adds no time: the run's clock only counts what GPS saw
+    if (prevT != null && !p.gap) t += Math.min(p.t - prevT, 30);
     prevT = p.t;
-    return { t: Math.round(t), d: Math.round(p.d * 10) / 10, lat: p.lat, lon: p.lon, alt: p.alt };
+    return { t: Math.round(t), d: Math.round(p.d * 10) / 10, lat: p.lat, lon: p.lon, alt: p.alt, ...(p.gap ? { gap: true } : {}) };
   });
 }
 

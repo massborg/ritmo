@@ -87,16 +87,18 @@ export function LineChart({ series, labels, height = 180, format = (v: number) =
 }
 
 /** Route over OpenStreetMap tiles (the runner's own runs only). The map can be switched off on this device. */
-export function RouteMap({ points, byPace, weather }: { points: { lat?: number; lon?: number; t?: number; d?: number }[]; byPace?: boolean; weather?: string }) {
+export function RouteMap({ points, byPace, weather }: { points: { lat?: number; lon?: number; t?: number; d?: number; gap?: boolean }[]; byPace?: boolean; weather?: string }) {
   const [showMap, setShowMap] = useState(mapsOn);
-  const pts = points.filter((p) => p.lat != null && p.lon != null) as { lat: number; lon: number; t?: number; d?: number }[];
+  const pts = points.filter((p) => p.lat != null && p.lon != null) as { lat: number; lon: number; t?: number; d?: number; gap?: boolean }[];
   const W = 640, H = 400;
   const view = fitView(pts, W, H, 28);
   if (!view) return null;
   const step = Math.max(1, Math.floor(pts.length / 1500));
-  const kept = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
+  // A GPS gap (the phone was locked) is never drawn as part of the route: the line breaks, and a dashed line shows the gap
+  const kept = pts.filter((p, i) => i % step === 0 || i === pts.length - 1 || p.gap || pts[i + 1]?.gap);
   const xy = kept.map((p) => view.toView(p.lat, p.lon));
-  const d = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  const d = xy.map((p, i) => `${i && !kept[i].gap ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  const gapLines = kept.map((p, i) => (i && p.gap ? { a: xy[i - 1], b: xy[i] } : undefined)).filter(Boolean) as { a: { x: number; y: number }; b: { x: number; y: number } }[];
   // Coloured by pace: each piece's pace over ~150 m, in five bands from the run's own slowest to fastest
   const pieces = byPace && kept.every((p) => p.t != null && p.d != null) ? (() => {
     const pace: number[] = kept.map((p, i) => { let j = i; while (j > 0 && p.d! - kept[j].d! < 150) j--; const dd = p.d! - kept[j].d!, dt = p.t! - kept[j].t!; return dd > 20 ? dt / (dd / 1000) : NaN; });
@@ -104,7 +106,7 @@ export function RouteMap({ points, byPace, weather }: { points: { lat?: number; 
     if (ok.length < 10) return undefined;
     const q = [0.2, 0.4, 0.6, 0.8].map((f) => ok[Math.floor(ok.length * f)]);
     const band = (v: number) => (!Number.isFinite(v) ? 2 : v <= q[0] ? 5 : v <= q[1] ? 4 : v <= q[2] ? 3 : v <= q[3] ? 2 : 1);
-    return xy.slice(1).map((p, i) => ({ a: xy[i], b: p, z: band(pace[i + 1]) }));
+    return xy.slice(1).map((p, i) => ({ a: xy[i], b: p, z: band(pace[i + 1]), gap: kept[i + 1].gap })).filter((g) => !g.gap);
   })() : undefined;
   const a = xy[0], b = xy[xy.length - 1];
   const toggle = () => { setMapsOn(!showMap); setShowMap(!showMap); };
@@ -118,6 +120,7 @@ export function RouteMap({ points, byPace, weather }: { points: { lat?: number; 
           <path d={d} fill="none" stroke="#fff" strokeOpacity={showMap ? 0.9 : 0} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
           {pieces ? pieces.map((g, i) => <line key={i} x1={g.a.x} y1={g.a.y} x2={g.b.x} y2={g.b.y} stroke={`var(--zone-${g.z})`} strokeWidth="5" strokeLinecap="round" />)
             : <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />}
+          {gapLines.map((g, i) => <line key={`gap${i}`} className="route-gap" x1={g.a.x} y1={g.a.y} x2={g.b.x} y2={g.b.y} stroke="var(--ink)" strokeOpacity="0.7" strokeWidth="3" strokeDasharray="6 8" strokeLinecap="round"><title>GPS gap</title></line>)}
           <circle cx={a.x} cy={a.y} r="8" fill="#fff" stroke="var(--brand)" strokeWidth="4"><title>Start</title></circle>
           <circle cx={b.x} cy={b.y} r="8" fill="var(--brand)" stroke="#fff" strokeWidth="3"><title>Finish</title></circle>
         </svg>
@@ -135,6 +138,7 @@ export function RouteMap({ points, byPace, weather }: { points: { lat?: number; 
         <span className="row" style={{ gap: 12 }}>
           <span className="row" style={{ gap: 6 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', border: '3px solid var(--brand)', display: 'inline-block' }} />Start</span>
           <span className="row" style={{ gap: 6 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--brand)', display: 'inline-block' }} />Finish</span>
+          {gapLines.length > 0 && <span className="row" style={{ gap: 6 }}><span aria-hidden style={{ width: 16, borderTop: '3px dashed var(--ink)', opacity: 0.7, display: 'inline-block' }} />GPS gap</span>}
         </span>
       </div>
     </div>

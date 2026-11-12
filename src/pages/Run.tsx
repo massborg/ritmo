@@ -4,7 +4,7 @@
 // Honest about the web: a browser may pause GPS when the screen locks, so Ritmo keeps the screen on and says so.
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, ChevronRight, Flag, History, Lock, MapPin, Pause, Play, Settings2, Square, Unlock, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, Flag, History, Lock, MapPin, Smartphone, Pause, Play, Settings2, Square, Unlock, Volume2, VolumeX } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
 import { plannedNum, structureLine } from '../training/session-view';
@@ -16,9 +16,12 @@ import { SessionSheet } from '../components/training';
 import { moveTargets } from '../training/plan';
 import { ZONE_NAMES } from '../training/fitness';
 import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
-import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
-import { primeVoices, speak, type SpeakOptions } from '../run/voice';
+import { primeVoices, type SpeakOptions } from '../run/voice';
+import { cue, preloadClips, resetVoice, unlockClips } from '../run/cues';
+import { RunCheck } from '../components/RunCheck';
+import { PocketMode } from '../components/PocketMode';
 import { VoicePicker } from '../components/VoicePicker';
 import type { Lap, PlannedSession } from '../lib/types';
 
@@ -33,7 +36,8 @@ interface Saved { track: TrackState; sessionId?: string; stepIdx: number; stepSt
 const spoken = (sec: number) => { const m = Math.floor(sec / 60), x = Math.round(sec % 60); return `${m ? `${m} minute${m > 1 ? 's' : ''} ` : ''}${x} second${x === 1 ? '' : 's'}`; };
 // The voice and speed chosen in Settings (kept here so every cue uses them)
 let voiceOpts: SpeakOptions = {};
-const say = (text: string, on: boolean) => { if (on) speak(text, voiceOpts); };
+// Every cue is checked: if the phone blocks speech, Ritmo's recorded clips say it instead (update 3, §2)
+const say = (text: string, on: boolean) => { if (on) void cue(text, voiceOpts); };
 
 export default function RunPage() {
   const { plan, today, data, saveRecordedRun, session, moveSession } = useApp();
@@ -68,6 +72,9 @@ export default function RunPage() {
   const [count, setCount] = useState(0);
   const [track, setTrack] = useState<TrackState>();
   const [locked, setLocked] = useState(false);
+  const [checkOpen, setCheckOpen] = useState(false);
+  const [pocket, setPocket] = useState(false);
+  const [pocketNext, setPocketNext] = useState(() => { try { return localStorage.getItem('ritmo:run:pocket') !== 'off'; } catch { return true; } });
   const [unfinished, setUnfinished] = useState<Saved>();
   const [stepIdx, setStepIdx] = useState(0);
   const stepStart = useRef({ s: 0, m: 0 });
@@ -179,6 +186,19 @@ export default function RunPage() {
       } else { setCount(n); say(String(n), cues); }
     }, 1000);
   };
+  // The Start tap: speak straight away (inside the tap), so the phone allows the cues that come later from a timer,
+  // unlock the recorded clips, and show "Before you start"
+  const openCheck = () => {
+    resetVoice(); unlockClips(); void preloadClips();
+    if (cues) void cue('Ready when you are.', voiceOpts);
+    setCheckOpen(true);
+  };
+  const startFromCheck = () => {
+    setCheckOpen(false);
+    try { localStorage.setItem('ritmo:run:pocket', pocketNext ? 'on' : 'off'); } catch { /* */ }
+    if (pocketNext) setPocket(true);
+    begin();
+  };
   const ready0 = acc != null && acc <= 20;
   useEffect(() => {
     if (!autoStart || phase !== 'ready' || unfinished || !ready0) return;
@@ -209,7 +229,8 @@ export default function RunPage() {
     return t.laps.length ? marks.map((m, i) => { const l = { index: i + 1, startS: ps, durationS: m.atS - ps, distanceM: m.atM - pm }; ps = m.atS; pm = m.atM; return l; }) : [];
   };
   const save = (t: TrackState, sessionId?: string) => {
-    const id = saveRecordedRun({ startedAt: t.startedAt, streams: toStreams(t), movingS: t.movingS, elapsedS: t.elapsedS, distanceM: t.distanceM, laps: lapsOf(t), sessionId });
+    const id = saveRecordedRun({ startedAt: t.startedAt, streams: toStreams(t), movingS: t.movingS, elapsedS: t.elapsedS, distanceM: t.distanceM, laps: lapsOf(t), sessionId,
+      gaps: t.gaps?.map((g) => ({ from: new Date(g.fromT).toISOString(), to: new Date(g.toT).toISOString(), atM: Math.round(g.atM) })) });
     void del(key).catch(() => {});
     nav(`/activity/${id}`);
   };
@@ -230,8 +251,16 @@ export default function RunPage() {
   const gauge = paceGauge(cp, st?.kind === 'work' ? st.pace : undefined);
   const ready = acc != null && acc <= 20;
 
+  const lostS = t && phase === 'running' ? gpsLostS(t, Date.now()) : undefined;
+  const unitWord = U === 'km' ? 'km' : 'mi';
+  const nextCueAt = t ? Math.floor(t.distanceM / unitM) + 1 : 1;
+  if (phase === 'running' && t && pocket) return (
+    <PocketMode distance={dist(t.distanceM, U, 2).split(' ')[0]} unit={U} time={duration(Math.floor(clockS(t, Date.now())))} pace={cp ? `${fmtPace(cp, U)} now` : ap ? `${fmtPace(ap, U)} average` : '–'}
+      cueLine={cues ? `Voice cues on · next at ${nextCueAt} ${unitWord}` : 'Voice cues off'} gpsLost={lostS} onUnlock={() => setPocket(false)} />
+  );
   if (phase === 'running' && t) return (
     <div className="run-live" aria-live="off">
+      {lostS != null && <StatusLine kind="warning">No GPS for {lostS} s. Distance waits for the signal: nothing is added for the gap.</StatusLine>}
       <div className="run-stats">
         <div className="run-big"><span className="caption">Time</span><span className="stat-xl" data-testid="run-clock">{duration(Math.floor(clockS(t, Date.now())))}</span></div>
         <div className="run-big"><span className="caption">Distance</span><span className="stat-xl">{dist(t.distanceM, U, 2).split(' ')[0]}<small> {U}</small></span></div>
@@ -254,6 +283,7 @@ export default function RunPage() {
         <button className="btn btn-block" onClick={lap} disabled={locked}><Flag size={20} strokeWidth={2} aria-hidden="true" />Lap {t.laps.length + 1}</button>
         <button className={`btn btn-block${holding ? ' holding' : ''}`} disabled={locked} onPointerDown={holdStart} onPointerUp={holdEnd} onPointerLeave={holdEnd} aria-label="Hold to finish the run"><Square size={20} strokeWidth={2} aria-hidden="true" />Hold to finish</button>
         <button className="btn btn-ghost btn-block" onClick={() => setLocked((l) => !l)} aria-pressed={locked}>{locked ? <><Unlock size={20} strokeWidth={2} aria-hidden="true" />Unlock</> : <><Lock size={20} strokeWidth={2} aria-hidden="true" />Lock</>}</button>
+        <button className="btn btn-block run-pocket-btn" onClick={() => setPocket(true)}><Smartphone size={20} strokeWidth={2} aria-hidden="true" />Pocket mode</button>
       </div>
       {t.laps.length > 0 && (
         <section className="card stack-sm" aria-label="Laps">
@@ -263,7 +293,7 @@ export default function RunPage() {
           ))}</ol>
         </section>
       )}
-      <p className="caption">Keep Ritmo open with the screen on: phones can pause GPS when the screen locks or another app is in front.</p>
+      <p className="caption">Don't lock your phone: use Pocket mode. A locked screen pauses GPS in a browser; any gap is left out, never guessed.</p>
     </div>
   );
 
@@ -366,7 +396,7 @@ export default function RunPage() {
 
         <div className="run-gps-row" aria-live="polite">
           <span className={`gps-pill${gpsReady ? ' ok' : gpsErr && !acc ? ' bad' : ''}`}><MapPin size={16} strokeWidth={2.2} aria-hidden="true" />{gpsText}</span>
-          {!gpsReady && phase === 'ready' && !autoStart && <button className="link-btn" onClick={begin}>Start anyway</button>}
+          {!gpsReady && phase === 'ready' && !autoStart && <button className="link-btn" onClick={openCheck}>Start anyway</button>}
         </div>
 
         {phase === 'countdown'
@@ -379,16 +409,18 @@ export default function RunPage() {
             </div>
           : <div className="run-controls-row">
               <button className="run-round" aria-label="Run settings" onClick={() => setSettingsOpen(true)}><Settings2 size={24} strokeWidth={2} /></button>
-              <button className="run-go" onClick={begin} disabled={!gpsReady}>Start</button>
+              <button className="run-go" onClick={openCheck} disabled={!gpsReady}>Start</button>
               <button className="run-round" aria-label={cues ? 'Audio cues on. Tap to turn off, hold for voice settings' : 'Audio cues off. Tap to turn on, hold for voice settings'} aria-pressed={cues}
                 onPointerDown={audioDown} onPointerUp={audioUp} onPointerLeave={() => { if (holdAudio.current) { window.clearTimeout(holdAudio.current); holdAudio.current = undefined; } }} onContextMenu={(e) => e.preventDefault()}>
                 {cues ? <Volume2 size={24} strokeWidth={2} /> : <VolumeX size={24} strokeWidth={2} />}
               </button>
             </div>}
         {phase === 'ready' && !autoStart && what === 'planned' && shown && <button className="pill-btn" style={{ alignSelf: 'center' }} onClick={() => setSwapDay(shown.date)}><ArrowLeftRight size={16} strokeWidth={2} aria-hidden="true" />Swap session</button>}
-        <p className="caption run-note">In a browser, GPS can stop when the screen locks. Ritmo keeps the screen on while you run.</p>
+        <p className="caption run-note">Don't lock your phone; use Pocket mode. In a browser, GPS stops when the screen locks.</p>
       </div>
 
+      <RunCheck open={checkOpen} onClose={() => setCheckOpen(false)} onStart={startFromCheck} gps={gpsText} gpsReady={gpsReady} cuesOn={cues} voice={voiceOpts}
+        pocket={pocketNext} setPocket={setPocketNext} />
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Run settings">
         <div className="stack">
           <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: 'Every step and km' }, { value: 'km', label: 'Every km' }, { value: 'off', label: 'Off' }]} />
@@ -433,7 +465,9 @@ function RouteLine({ track }: { track: TrackState }) {
   const view = fitView(pts, W, H, 36, 16);
   if (!view) return null;
   const xy = pts.map((p) => view.toView(p.lat, p.lon));
-  const d = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  // The line breaks at a GPS gap; the gap itself is dashed
+  const d = xy.map((p, i) => `${i && !pts[i].gap ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join('');
+  const gapLines = xy.map((p, i) => (i && pts[i].gap ? [xy[i - 1], p] : undefined)).filter(Boolean) as { x: number; y: number }[][];
   const a = xy[0], b = view.toView(track.points[track.points.length - 1].lat, track.points[track.points.length - 1].lon);
   const toggle = () => { setMapsOn(!showMap); setShowMap(!showMap); };
   return (
@@ -444,6 +478,7 @@ function RouteLine({ track }: { track: TrackState }) {
           {xy.length > 1 && <>
             <path d={d} fill="none" stroke="#fff" strokeOpacity={showMap ? 0.9 : 0} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
             <path d={d} fill="none" stroke="var(--brand)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            {gapLines.map(([g0, g1], i) => <line key={i} className="route-gap" x1={g0.x} y1={g0.y} x2={g1.x} y2={g1.y} stroke="var(--ink)" strokeOpacity="0.7" strokeWidth="3" strokeDasharray="6 8" />)}
             <circle cx={a.x} cy={a.y} r="7" fill="#fff" stroke="var(--brand)" strokeWidth="4"><title>Start</title></circle>
           </>}
           <circle cx={b.x} cy={b.y} r="13" fill="var(--brand)" opacity="0.25" />

@@ -56,7 +56,7 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-export interface SpeakOptions { voiceURI?: string; rate?: number }
+export interface SpeakOptions { voiceURI?: string; rate?: number; /** Called when speech starts, or with the reason it failed */ onStart?: () => void; onError?: (why: string) => void }
 
 /** Ask the device for its voices early (the Run screen calls this when it opens), so the first cue already has
  *  them: on iPhone the list is often empty for a moment, and anything spoken then uses the default voice. */
@@ -71,7 +71,7 @@ export function primeVoices(): void {
  *  chosen voice is there. */
 let noVoiceList = false;
 export function speak(text: string, o: SpeakOptions = {}, waited = false): void {
-  if (!('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) { o.onError?.('no speechSynthesis'); return; }
   const all = window.speechSynthesis.getVoices();
   if (!all.length && !waited && !noVoiceList) {
     try { const unlock = new SpeechSynthesisUtterance(''); unlock.volume = 0; window.speechSynthesis.speak(unlock); } catch { /* */ }
@@ -84,7 +84,9 @@ export function speak(text: string, o: SpeakOptions = {}, waited = false): void 
   const u = new SpeechSynthesisUtterance(text);
   if (chosen) { u.voice = chosen; u.lang = chosen.lang; } else u.lang = 'en-GB';
   u.rate = o.rate ?? 1;
-  window.speechSynthesis.speak(u);
+  if (o.onStart) u.onstart = () => o.onStart?.();
+  if (o.onError) u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled') o.onError?.(e.error || 'speech error'); };
+  try { window.speechSynthesis.speak(u); } catch (e) { o.onError?.((e as Error).message); }
 }
 
 /** A short sample in the style of a real cue, for trying voices. */

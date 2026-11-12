@@ -86,7 +86,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...withoutDeletedMark(a.sourceIds), ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}), ...(a.deletedAt ? { deleted: a.deletedAt } : {}), ...(a.gear ? { gear: a.gear } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...withoutDeletedMark(a.sourceIds), ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}), ...(a.deletedAt ? { deleted: a.deletedAt } : {}), ...(a.gear ? { gear: a.gear } : {}), ...(a.gpsGaps?.length ? { gaps: a.gpsGaps } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -95,7 +95,7 @@ const summaryRow = (uid: string, a: Activity): Row => ({
   ...(hasDetail(a) && deriveSummary(a) ? { derived: deriveSummary(a) } : {}),
 });
 /** The deleted mark is saved from deletedAt only, so a restored run never keeps an old one from its stored ids */
-const withoutDeletedMark = (ids: Activity['sourceIds']) => { const { deleted: _d, gear: _g, ...rest } = ids as Record<string, unknown>; return rest; }; // eslint-disable-line @typescript-eslint/no-unused-vars
+const withoutDeletedMark = (ids: Activity['sourceIds']) => { const { deleted: _d, gear: _g, gaps: _p, ...rest } = ids as Record<string, unknown>; return rest; }; // eslint-disable-line @typescript-eslint/no-unused-vars
 const hasDetail = (a: Activity) => a.streams !== undefined || a.laps !== undefined;
 /** Columns loaded for every run, with short names to keep years of history small: no streams or laps (fetched for
  *  one run at a time) and only the parts of the stored summary the app needs for the whole history. */
@@ -118,6 +118,7 @@ const rowToAct = (r: Row): Activity => ({
   calories: ((r.x as Record<string, unknown> | null)?.kcal as number | undefined) ?? undefined, detailScore: Number(r.sc),
   deletedAt: ((r.x as Record<string, unknown> | null)?.deleted as string | undefined) ?? undefined,
   gear: ((r.x as Record<string, unknown> | null)?.gear as Activity['gear']) ?? undefined,
+  gpsGaps: ((r.x as Record<string, unknown> | null)?.gaps as Activity['gpsGaps']) ?? undefined,
   derived: r.v != null ? { v: Number(r.v), ...(r.be ? { be: r.be as Record<string, number> } : {}), ...(r.sg ? { segs: r.sg as number[] } : {}) } : undefined,
   importedAt: '',
 });
@@ -264,7 +265,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}|${a.deletedAt ?? ''}|${a.gear?.id ?? ''}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}|${a.deletedAt ?? ''}|${a.gear?.id ?? ''}|${a.gpsGaps?.map((g) => g.resolved ?? '-').join('') ?? ''}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of [...d.activities, ...(d.removed ?? [])]) ps.activities.set(a.id, actPrint(a));

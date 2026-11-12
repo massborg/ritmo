@@ -17,6 +17,7 @@ import { swapLine } from '../training/plan';
 import { raceEvidence, zoneOf } from '../training/fitness';
 import { ROLE_LABEL } from '../training/sessions';
 import { DayRuns } from '../components/DayRuns';
+import { GapNotice } from '../components/GapNotice';
 import { Breakdown, RepChart, Sparkline } from '../components/ReportParts';
 import { buildReport } from '../training/report';
 import { weatherLine } from '../training/weather';
@@ -229,6 +230,7 @@ export default function ActivityPage() {
 
       {tab === 'overview' && <div role="tabpanel" id="run-panel-overview" aria-labelledby="run-tab-overview" className="stack-lg">
       {/* The route coloured by pace, with the weather (start and finish privacy applies only to anything shared) */}
+      {a.gpsGaps?.length ? <GapNotice run={a} /> : null}
       {a.streams?.some((p) => p.lat != null && p.lon != null) && <RouteMap points={a.streams} byPace weather={weatherChip} />}
       <div className="stack-sm">
         <p className="caption row" style={{ gap: 6 }}><CalendarClock size={14} strokeWidth={2} aria-hidden="true" />{dateline}</p>
