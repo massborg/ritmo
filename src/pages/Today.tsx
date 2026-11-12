@@ -11,6 +11,7 @@ import { buildReport } from '../training/report';
 import { buildVerdict } from '../training/verdict';
 import { forStats } from '../data/quality';
 import { LogRunSheet } from '../components/LogRun';
+import { GearQuestion } from '../components/GearQuestion';
 import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
@@ -203,6 +204,8 @@ export default function Today() {
           {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} />}
         </div>
       )}
+      {/* Strava shoes not matched to a Ritmo shoe yet: asked once (also on Profile › Shoes) */}
+      {isToday && (data.profile.shoes?.length ?? 0) > 0 && <GearQuestion />}
       {isToday && data.mode === 'real' && (
         <Link to="/run?quick=1" className="btn btn-primary btn-block quick-run" onClick={primeSpeech}>
           <Zap size={22} strokeWidth={2.2} aria-hidden="true" />

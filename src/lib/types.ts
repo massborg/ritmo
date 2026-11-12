@@ -89,6 +89,8 @@ export interface Activity {
   distFrom?: number;
   /** The shoe the runner chose for this run; otherwise Ritmo picks one by session type */
   shoeId?: string;
+  /** The shoes the run was logged with on Strava, for matching to a Ritmo shoe (asked once per pair) */
+  gear?: { id: string; name: string };
   /** Why this run has no weather and is never looked up (e.g. 'no_gps' for an indoor run) */
   weatherSkip?: string;
   detailScore: number; // higher = more detailed, used to choose the best duplicate
@@ -199,6 +201,8 @@ export interface Profile {
   photoVisibility?: 'everyone' | 'followers' | 'only_me';
   /** Hub posting settings (Profile › Hub and privacy) */
   hub?: HubPrefs;
+  /** Strava shoes matched to Ritmo shoes: Strava gear id → shoe id, or 'ignore' (not tracked) */
+  gearMap?: Record<string, string>;
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
   pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[] };
   /** PBs on the Hub profile (off by default, up to 4 distances) */

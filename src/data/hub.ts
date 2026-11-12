@@ -121,6 +121,17 @@ export async function hubCounts(uid: string): Promise<HubCounts> {
 export async function followList(uid: string, which: 'followers' | 'following'): Promise<string[]> {
   return ((ok(await db().rpc('hub_follow_list', { target: uid, which })) as { user_id: string }[] | null) ?? []).map((r) => r.user_id);
 }
+export interface RunnerReason { user_id: string; mutuals: number; followed_by?: string | null; race_name?: string | null; race_date?: string | null }
+/** Why runners are suggested: runners you follow who follow them, and a race you both have coming up. Empty (not an
+ *  error) if the reasons can't be loaded, so search still works. */
+export async function runnerReasons(ids: string[]): Promise<Map<string, RunnerReason>> {
+  const m = new Map<string, RunnerReason>();
+  if (!ids.length || !supabase) return m;
+  const r = await supabase.rpc('hub_runner_reasons', { targets: [...new Set(ids)].slice(0, 60) });
+  if (r.error) return m;
+  for (const x of (r.data ?? []) as RunnerReason[]) m.set(x.user_id, x);
+  return m;
+}
 export async function deletePost(id: string) { ok(await db().from('posts').delete().eq('id', id)); }
 /** Turning sharing off hides every post (only the runner can see them) */
 export async function hideAllMyPosts(uid: string) { ok(await db().from('posts').update({ visibility: 'only_me' }).eq('user_id', uid)); }

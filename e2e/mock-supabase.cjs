@@ -394,6 +394,19 @@ function createMock() {
       if (url.pathname.startsWith('/auth/v1')) res = auth(url.pathname.slice(8), method, url, body, req);
       else if (url.pathname === '/rest/v1/rpc/strava_status') { state.rpc.push('strava_status'); const u = userFromReq(req); res = { status: 200, body: u && state.strava?.connected?.has(u.id) ? [{ connected: true, connected_at: new Date().toISOString(), scope: 'read,activity:read_all' }] : [] }; }
       else if (url.pathname === '/rest/v1/rpc/club_leaderboard') { const u = userFromReq(req); res = { status: 200, body: u ? leaderboardRpc(u, body || {}) : [] }; }
+      else if (url.pathname === '/rest/v1/rpc/hub_runner_reasons') {
+        // Mirrors the real function: runners you follow (public ones) who follow them, and a race you both have
+        const u = userFromReq(req); const F = state.tables.follows; const H = state.tables.hub_profiles; const R = state.tables.races;
+        const pub = (id) => H.find((h) => h.user_id === id)?.private === false;
+        const blocked = (a, b) => state.tables.blocks.some((x) => (x.blocker_id === a && x.blocked_id === b) || (x.blocker_id === b && x.blocked_id === a));
+        const mine = u ? F.filter((f) => f.follower_id === u.id && f.status === 'accepted' && pub(f.followee_id)).map((f) => f.followee_id) : [];
+        const today = new Date().toISOString().slice(0, 10);
+        res = { status: 200, body: !u ? [] : [...new Set((body || {}).targets || [])].filter((t) => t !== u.id && !blocked(t, u.id)).map((t) => {
+          const m = F.filter((f) => f.followee_id === t && f.status === 'accepted' && mine.includes(f.follower_id));
+          const r1 = R.filter((r) => r.user_id === u.id && r.data?.date >= today).find((r) => pub(t) && R.some((r2) => r2.user_id === t && r2.data?.date === r.data.date && Math.abs((r2.data.distanceM || 0) - (r.data.distanceM || 0)) <= Math.max((r.data.distanceM || 0) * 0.03, 50)));
+          return { user_id: t, mutuals: m.length, followed_by: m[m.length - 1]?.follower_id ?? null, race_name: r1?.data.name ?? null, race_date: r1?.data.date ?? null };
+        }) };
+      }
       else if (url.pathname === '/rest/v1/rpc/hub_counts' || url.pathname === '/rest/v1/rpc/hub_follow_list') {
         // Mirrors the real functions: counts for anyone (requests only for yourself), lists only when the runner is
         // public or you follow them, never across a block

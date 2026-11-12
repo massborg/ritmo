@@ -32,3 +32,19 @@ describe('Strava to Ritmo', () => {
     expect(stravaUrl({ source: 'upload', sourceIds: { strava: '1' } })).toBeUndefined();
   });
 });
+
+describe('Strava shoes (matched to Ritmo shoes, asked once)', () => {
+  it('keeps the shoes a run was logged with', () => {
+    expect(stravaToActivity({ ...act, gear: { id: 'g123', name: ' Pegasus 41 ' } })?.gear).toEqual({ id: 'g123', name: 'Pegasus 41' });
+    expect(stravaToActivity({ ...act, gear_id: 'g9' })?.gear).toEqual({ id: 'g9', name: '' });
+    expect(stravaToActivity(act)?.gear).toBeUndefined();
+  });
+  it('a file copy of the run keeps the Strava shoes and any shoe the runner chose', async () => {
+    const { merge } = await import('./integration');
+    const s = { ...stravaToActivity({ ...act, gear: { id: 'g123', name: 'Pegasus 41' } })!, shoeId: 'shoe-1' };
+    const file = { ...s, id: 'fit-1', source: 'upload' as const, sourceIds: { upload: 'fit-1' }, gear: undefined, shoeId: undefined, detailScore: 9 };
+    const m = merge([s], [file]);
+    expect(m.activities).toHaveLength(1);
+    expect(m.activities[0]).toMatchObject({ source: 'upload', gear: { id: 'g123' }, shoeId: 'shoe-1' });
+  });
+});

@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../app/AppContext';
 import { ShoeFinder, ShoeImage, ShoePhotoButton } from './ShoeFinder';
+import { GearQuestion } from './GearQuestion';
 import { removeShoePhoto } from '../data/shoe-photo';
 import { StatusLine } from './ui';
 import { shortDate, parseYmd, ymd } from '../lib/format';
@@ -18,6 +19,8 @@ export function Shoes({ heading = true }: { heading?: boolean } = {}) {
   const save = (list: Shoe[]) => updateProfile({ shoes: list });
   if (data.mode === 'sample') return null;
   return (
+    <>
+    <GearQuestion />
     <section className="card stack" aria-labelledby="shoes" id="shoes-card">
       <div className="row-between"><h2 id="shoes" className={heading ? 'title' : 'sr-only'}>Shoes</h2><button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button></div>
       {!shoes.length && !adding && <p className="caption">Add your shoes and Ritmo counts the distance, so you know when they are worn out. Most running shoes last 500 to 800 km.</p>}
@@ -48,5 +51,6 @@ export function Shoes({ heading = true }: { heading?: boolean } = {}) {
       })}</ul>
       <ShoeFinder open={adding} onClose={() => setAdding(false)} onSave={(sh) => save([...shoes, sh])} />
     </section>
+    </>
   );
 }

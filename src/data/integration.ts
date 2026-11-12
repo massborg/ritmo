@@ -91,10 +91,10 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
         list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
           reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device,
           // A run the runner deleted stays deleted when a better copy arrives
-          deletedAt: cur.deletedAt };
+          deletedAt: cur.deletedAt, gear: inc.gear ?? cur.gear, shoeId: cur.shoeId ?? inc.shoeId };
         replaced++;
       } else {
-        list[match] = { ...cur, sourceIds, device: cur.device ?? inc.device, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId, reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media };
+        list[match] = { ...cur, sourceIds, gear: cur.gear ?? inc.gear, device: cur.device ?? inc.device, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId, reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media };
         duplicates++;
       }
     }
