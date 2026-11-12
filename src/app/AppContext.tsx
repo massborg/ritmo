@@ -139,7 +139,7 @@ interface Ctx extends Derived {
   addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>) => string[];
   updateBody: (patch: Partial<BodyState>) => void;
   /** Save a run recorded with the Run tab; returns its id */
-  saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }) => string;
+  saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string; gaps?: Activity['gpsGaps'] }) => string;
   skipSession: (sessionId: string) => void;
   /** A feature switched on for this account (Run, Hub, share cards, Body); never in sample mode */
   hasFlag: (f: 'run_tab' | 'hub' | 'share_cards' | 'body' | 'garmin' | 'strava') => boolean;
@@ -161,6 +161,7 @@ interface Ctx extends Derived {
   answerGear: (gearId: string, choice: string) => void;
   renameRun: (id: string, name: string) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
+  resolveGap: (runId: string, index: number, addM?: number) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
   swap: (sessionId: string, kind: SwapKind) => void;
@@ -637,7 +638,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return kept;
   };
 
-  const saveRecordedRun = (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string }): string => {
+  const saveRecordedRun = (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string; gaps?: Activity['gpsGaps'] }): string => {
     const id = `gps-${r.startedAt}`;
     const session = derived.plan?.sessions.find((s) => s.id === r.sessionId);
     const start = new Date(r.startedAt);
@@ -652,6 +653,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       elevGainM: r.streams.some((p) => p.alt != null) ? Math.round(gain) : undefined,
       streams: r.streams, laps: r.laps.length ? r.laps : undefined, plannedSessionId: session?.id,
       isTimeTrial: session?.type === 'timetrial' || undefined, detailScore: 0, importedAt: new Date().toISOString(),
+      gpsGaps: r.gaps?.length ? r.gaps : undefined,
     };
     a.detailScore = detailScore(a);
     setData((d) => {
@@ -916,6 +918,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fixed = withDistance(run, distanceM);
     setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === run.id ? { ...x, ...fixed } : x)) }));
   };
+  /** A GPS gap on a run recorded in Ritmo (update 3, §3): keep the run as is, or add the km run during the gap by
+   *  hand (with the gap's time, so the pace stays honest) */
+  const resolveGap = (runId: string, index: number, addM?: number) => setData((d) => ({ ...d, activities: d.activities.map((x) => {
+    if (x.id !== runId || !x.gpsGaps?.[index]) return x;
+    const g = x.gpsGaps[index];
+    const gapS = Math.max(0, (new Date(g.to).getTime() - new Date(g.from).getTime()) / 1000);
+    const gpsGaps = x.gpsGaps.map((y, i) => (i === index ? { ...y, resolved: addM ? 'added' as const : 'kept' as const, ...(addM ? { addedM: Math.round(addM) } : {}) } : y));
+    return addM && addM > 0 ? { ...x, gpsGaps, distanceM: Math.round(x.distanceM + addM), movingS: Math.round(x.movingS + gapS) } : { ...x, gpsGaps };
+  }) }));
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
   const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
@@ -1268,7 +1279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

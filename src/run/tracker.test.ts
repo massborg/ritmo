@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addFix, addLap, avgPace, clockS, currentPace, lapSplits, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
 import type { PlannedSession } from '../lib/types';
 
 /** A simulated run north from Valletta: one fix a second at 5:00/km, with GPS noise, bad fixes and a stop. */
@@ -73,11 +73,41 @@ describe('run clock and laps', () => {
     expect(clockS(s, T0 + 9000)).toBe(9);
     expect(clockS(s, T0 + 12000)).toBe(12);
   });
-  it('carries on through a GPS gap', () => {
+  it('a short GPS dropout (under 30 s) still counts; a longer gap is never filled in (update 3, §3)', () => {
     let s = addFix(startTrack(T0), fix(1, 0), false);
-    expect(clockS(s, T0 + 61_000)).toBe(61);
-    s = addFix(s, fix(61, 150), false);
-    expect(s.movingS).toBe(61);
+    s = addFix(s, fix(25, 90), false);
+    expect(s.movingS).toBe(25);
+    expect(Math.round(s.distanceM)).toBe(90);
+    // No fix for 6 minutes (the phone was locked): the clock holds at +30 s, then nothing is added for the gap
+    expect(clockS(s, T0 + 25_000 + 360_000)).toBe(55);
+    expect(gpsLostS(s, T0 + 25_000 + 360_000)).toBe(360);
+    s = addFix(s, fix(385, 1500), false);
+    expect(s.movingS).toBe(25);
+    expect(Math.round(s.distanceM)).toBe(90);
+    expect(s.gaps).toEqual([{ fromT: T0 + 25_000, toT: T0 + 385_000, atM: s.distanceM }]);
+    expect(s.points[s.points.length - 1].gap).toBe(true);
+    // Running on from there counts again
+    s = addFix(s, fix(405, 1580), false);
+    expect(Math.round(s.distanceM)).toBe(170);
+    expect(s.movingS).toBe(45);
+  });
+  it('a 5 km run with the screen locked for 10 minutes: the gap is left out of distance and pace, and marked', () => {
+    // 3:30 for the first 2 km at 4:00/km... then locked for 10 min, then 2 km more at 4:00/km
+    let s = startTrack(T0);
+    let t = 0, m = 0;
+    for (; m < 2000; t += 4, m += 16.7) s = addFix(s, fix(t, m), false);
+    const before = s.distanceM;
+    t += 600; m += 2500; // 10 minutes and about 2.5 km with no GPS
+    for (let k = 0; k < 120; k++, t += 4, m += 16.7) s = addFix(s, fix(t, m), false);
+    expect(s.gaps).toHaveLength(1);
+    expect(s.distanceM).toBeGreaterThan(before + 1900);
+    expect(s.distanceM).toBeLessThan(before + 2100); // nothing invented for the gap
+    expect(Math.round(avgPace(s)! )).toBeGreaterThan(230); // pace still about 4:00/km
+    expect(Math.round(avgPace(s)!)).toBeLessThan(250);
+    const streams = toStreams(s);
+    const g = streams.findIndex((p) => p.gap);
+    expect(g).toBeGreaterThan(0);
+    expect(streams[g].t - streams[g - 1].t).toBe(0); // no time for the gap in the saved run
   });
   it('stops while paused and picks up again after Resume', () => {
     let s = addFix(startTrack(T0), fix(1, 0), false);
@@ -91,8 +121,10 @@ describe('run clock and laps', () => {
   });
   it('splits laps by clock time and distance', () => {
     let s = addFix(startTrack(T0), fix(1, 0), false);
+    s = addFix(s, fix(30, 100), false);
     s = addFix(s, fix(60, 200), false);
     s = addLap(s, T0 + 60_000);
+    s = addFix(s, fix(80, 275), false);
     s = addFix(s, fix(100, 350), false);
     const laps = lapSplits(s, T0 + 100_000);
     expect(laps.map((l) => l.n)).toEqual([1, 2]);

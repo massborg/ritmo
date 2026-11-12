@@ -18,9 +18,9 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
   await ctx.addInitScript(() => {
-    try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ }
+    try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:run:pocket', 'off'); } catch { /* */ }
     window.__spoken = [];
-    if ('speechSynthesis' in window) { const real = window.speechSynthesis.speak.bind(window.speechSynthesis); window.speechSynthesis.speak = (u) => { window.__spoken.push(u.text); try { real(u); } catch { /* */ } }; }
+    if ('speechSynthesis' in window) { const real = window.speechSynthesis.speak.bind(window.speechSynthesis); window.speechSynthesis.speak = (u) => { window.__spoken.push(u.text); setTimeout(() => u.onstart?.(), 0); try { real(u); } catch { /* */ } }; }
   });
   await mock.install(ctx, SUPA);
   const page = await ctx.newPage();
@@ -102,7 +102,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 
   // A free run with a 0.1 km goal (at 5 m/s, a realistic pace: faster jumps are ignored as GPS errors): the goal is said when reached, and the run is not linked to the plan
   await page.evaluate(() => { window.__spoken.length = 0; });
-  await page.locator('.run-go').click();
+  await page.locator('.run-go').click(); await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('.run-live').waitFor({ timeout: 8000 });
   let d = 0;
   for (let i = 0; i < 48; i++) { d += 2.5; await ctx.setGeolocation({ latitude: LAT0 + d / M_PER_DEG, longitude: LON0, accuracy: 5 }); await page.waitForTimeout(500); }
@@ -119,7 +119,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   await page.goto(`${APP}/run`); await page.waitForTimeout(1500);
   check(await page.getByRole('tab', { name: 'Ritmo plan' }).getAttribute('aria-selected') === 'true', 'the plan tab is shown again for the open session');
   await page.locator('.gps-pill', { hasText: 'GPS ready' }).waitFor({ timeout: 8000 });
-  await page.locator('.run-go').click();
+  await page.locator('.run-go').click(); await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('.run-live').waitFor({ timeout: 8000 });
   for (let i = 0; i < 16; i++) { d += 2.5; await ctx.setGeolocation({ latitude: LAT0 + d / M_PER_DEG, longitude: LON0, accuracy: 5 }); await page.waitForTimeout(500); }
   await page.getByRole('button', { name: 'Hold to finish the run' }).dispatchEvent('pointerdown'); await page.waitForTimeout(1800);

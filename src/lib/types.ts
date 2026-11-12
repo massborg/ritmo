@@ -34,6 +34,8 @@ export interface StreamPoint {
   alt?: number; // metres
   lat?: number;
   lon?: number;
+  /** First point after a GPS gap (the phone was locked): not joined to the point before it */
+  gap?: boolean;
 }
 
 export interface Lap {
@@ -91,6 +93,9 @@ export interface Activity {
   shoeId?: string;
   /** The shoes the run was logged with on Strava, for matching to a Ritmo shoe (asked once per pair) */
   gear?: { id: string; name: string };
+  /** Stretches a run recorded in Ritmo had no GPS (the phone was locked), left out of distance and pace.
+   *  resolved: the runner kept the run as is, or added the missing km by hand */
+  gpsGaps?: { from: string; to: string; atM: number; resolved?: 'kept' | 'added'; addedM?: number }[];
   /** Why this run has no weather and is never looked up (e.g. 'no_gps' for an indoor run) */
   weatherSkip?: string;
   detailScore: number; // higher = more detailed, used to choose the best duplicate

@@ -20,7 +20,7 @@ const stub = () => {
   ].map(([name, lang, voiceURI]) => ({ name, lang, voiceURI, localService: true, default: false }));
   window.__spoken = [];
   window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; this.rate = 1; } };
-  const synth = { getVoices: () => (window.__voicesHidden ? [] : list), speak: (u) => window.__spoken.push({ text: u.text, voice: u.voice?.voiceURI, rate: u.rate }), cancel() {}, addEventListener() {}, removeEventListener() {} };
+  const synth = { getVoices: () => (window.__voicesHidden ? [] : list), speak: (u) => { window.__spoken.push({ text: u.text, voice: u.voice?.voiceURI, rate: u.rate }); setTimeout(() => u.onstart?.(), 0); }, cancel() {}, addEventListener() {}, removeEventListener() {} };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => synth });
 };
 
@@ -28,7 +28,7 @@ const stub = () => {
   const mock = createMock();
   const b = await chromium.launch();
   const ctx = await b.newContext({ ...devices['iPhone 13'], geolocation: { latitude: 35.9, longitude: 14.5, accuracy: 5 }, permissions: ['geolocation'] });
-  await ctx.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
+  await ctx.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); localStorage.setItem('ritmo:run:pocket', 'off'); } catch { /* */ } });
   await ctx.addInitScript(stub);
   await mock.install(ctx, SUPA);
   const page = await ctx.newPage();
@@ -87,7 +87,7 @@ const stub = () => {
   await page.evaluate(() => { window.__spoken.length = 0; });
   await page.getByRole('tab', { name: 'Free run' }).click().catch(() => {});
   await page.getByText(/GPS ready/).waitFor({ timeout: 10000 });
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click(); await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('.run-live').waitFor({ timeout: 8000 });
   const spoken = await page.evaluate(() => window.__spoken);
   check(spoken.length >= 3 && spoken.every((x) => x.voice === 'com.apple.voice.enhanced.en-US.Samantha' && x.rate === 1.1), `the run's cues use the chosen voice and speed (${spoken.map((x) => x.text).join(' | ')})`);
@@ -96,7 +96,7 @@ const stub = () => {
   await page.goto(`${APP}/run`); await page.getByRole('tab', { name: 'Free run' }).click().catch(() => {});
   await page.getByText(/GPS ready/).waitFor({ timeout: 10000 });
   await page.evaluate(() => { window.__spoken.length = 0; window.__voicesHidden = true; setTimeout(() => { window.__voicesHidden = false; }, 400); });
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click(); await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('.run-live').waitFor({ timeout: 10000 }); await page.waitForTimeout(1600);
   const late = await page.evaluate(() => window.__spoken.filter((x) => x.text));
   check(late.length >= 3 && late.every((x) => x.voice === 'com.apple.voice.enhanced.en-US.Samantha'), `when the phone lists its voices late, no cue is spoken in the default voice (${late.map((x) => `${x.text}:${x.voice ? 'chosen' : 'DEFAULT'}`).join(' | ')})`);
