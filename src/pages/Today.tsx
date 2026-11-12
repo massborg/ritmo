@@ -74,6 +74,8 @@ export default function Today() {
   const U = data.profile.units;
   const t = ymd(today);
   const [params] = useSearchParams();
+  // From the "Missed key session" reminder: its move-or-skip card is brought into view once
+  const scrolledToMissed = useRef(false);
   const [showRebuild, setShowRebuild] = useState(() => params.get('rebuilt') === '1');
   const [selected, setSelected] = useState(() => { const d = params.get('day'); return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : t; });
   const [sheetDay, setSheetDay] = useState<string>();
@@ -305,7 +307,7 @@ export default function Today() {
       )}
 
       {missed && (
-        <section className="card stack-sm" aria-labelledby="missed">
+        <section className="card stack-sm" aria-labelledby="missed" ref={(el) => { if (el && params.get('missed') && !scrolledToMissed.current) { scrolledToMissed.current = true; setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 400); } }}>
           <h2 id="missed" className="label">You missed {missed.title.toLowerCase()} on {longDate(parseYmd(missed.date))}</h2>
           <p className="muted">{missedTo.length ? 'Move it to a day this week with an easier day either side, or let it go. One missed session costs very little.' : 'There is no safe day left this week, so it is best to let it go. One missed session costs very little.'}</p>
           <div className="row wrap">

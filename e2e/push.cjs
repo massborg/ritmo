@@ -57,14 +57,26 @@ const until = async (fn, ms = 5000) => { const end = Date.now() + ms; while (Dat
     const card = page.locator('section', { has: page.getByRole('heading', { name: 'Reminders' }) });
     check(await card.getByRole('button', { name: 'Turn on reminders' }).isVisible(), 'Profile has a Reminders card with "Turn on reminders"');
     await card.getByRole('button', { name: 'Turn on reminders' }).click();
-    await card.getByText("Morning: today's session").waitFor({ timeout: 5000 });
+    await card.getByText("Today's session, in the morning").waitFor({ timeout: 5000 });
     const subs = [...(mock.state.push?.subs.values() ?? [])];
     check(subs.length === 1 && subs[0].user_id === uid, 'turning on saves this browser for the signed-in runner');
     check(subs[0]?.tz === 'Europe/Madrid', 'the device time zone is saved, so reminders arrive at local time');
     check(await until(() => profileData(mock, uid).reminders?.morning === '07:00' && profileData(mock, uid).reminders?.evening === '20:00'), 'default times are saved: 07:00 morning, 20:00 evening');
-    await card.getByRole('radio', { name: '06:30' }).click().catch(async () => card.getByRole('button', { name: '06:30' }).click());
-    await card.getByRole('radio', { name: '21:00' }).click().catch(async () => card.getByRole('button', { name: '21:00' }).click());
+    const group = (name) => card.getByRole('group', { name });
+    const pick = (g, v) => group(g).getByRole('radio', { name: v }).click().catch(async () => group(g).getByRole('button', { name: v }).click());
+    await pick("Today's session, in the morning", '06:30');
+    await pick("Haven't logged a run, in the evening", '21:00');
     check(await until(() => profileData(mock, uid).reminders?.morning === '06:30' && profileData(mock, uid).reminders?.evening === '21:00'), 'choosing other times saves them with the profile');
+    // Update 2, §15: grouped, with the new reminder types and quiet hours
+    const text = await card.innerText();
+    check(['Training', 'Races and gear', 'Hub', 'Quiet hours'].every((h) => text.includes(h)), 'reminders are grouped: Training, Races and gear, Hub, Quiet hours');
+    check(['No run for a while', 'Missed key session', 'Low readiness on a hard day', 'How did it feel?', 'Race countdown', 'Weekly summary', 'Shoes nearly worn out', 'Follow requests and new followers', 'Fuego and comments on your runs'].every((t) => text.includes(t)), 'every new reminder type can be toggled');
+    check(!(await card.getByRole('checkbox', { name: /Shoes nearly worn out/ }).isChecked()) && await card.getByRole('checkbox', { name: /Race countdown/ }).isChecked(), 'shoes is off by default; the others are on');
+    await pick('No run for a while', '4 days');
+    await card.getByRole('checkbox', { name: /Missed key session/ }).uncheck();
+    await pick('From', '22:00');
+    check(await until(() => { const r = profileData(mock, uid).reminders ?? {}; return r.noRunDays === 4 && r.missedKey === false && r.quietStart === '22:00'; }), 'the new settings and quiet hours are saved with the profile');
+    await card.screenshot({ path: require('path').join(__dirname, 'out', 'reminders.png') }).catch(() => {});
     await card.getByRole('button', { name: 'Send a test' }).click();
     check(await card.getByText('Sent. It should appear in a few seconds.').waitFor({ timeout: 4000 }).then(() => true, () => false) && mock.state.push.tests === 1, '"Send a test" asks the server to send a test notification');
     // After a reload the card still shows reminders as on (subscription found again)
