@@ -1,6 +1,7 @@
 // Profile › Strength (update 3, §4–6, §8): the equipment you have, "Never give me…" (exercises or whole categories),
 // the swaps you chose with "Always use this instead", the rest between sets, and posting strength to the Hub.
 import { X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
@@ -16,6 +17,7 @@ export default function ProfileStrength() {
   return (
     <div className="stack-lg" style={{ maxWidth: 720 }}>
       <AppHeader title="Strength" eyebrow="What Ritmo gives you in strength sessions" back />
+      <Link to="/strength-plan" className="card card-link row-between"><span className="label">Your strength plan</span><span className="caption">Blocks, progress and what's next</span></Link>
       <section className="card stack">
         <Chips<Equipment> label="Equipment you have" value={p.equipment ?? 'none'} onChange={(v) => setStrengthPrefs({ equipment: v })}
           options={(['none', 'light', 'gym'] as Equipment[]).map((e) => ({ value: e, label: EQUIPMENT_LABEL[e] }))} />

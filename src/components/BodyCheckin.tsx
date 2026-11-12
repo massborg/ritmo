@@ -3,6 +3,8 @@
 // general tips, and when to see a physio. General guidance only, never a diagnosis.
 import { useState } from 'react';
 import { useApp } from '../app/AppContext';
+import { careAreaFor } from '../training/care';
+import { Link } from 'react-router-dom';
 import { Chips, Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { BODY_AREAS, type BodyArea, DISCLAIMER, PREHAB, prehabFor, type PainWhen, type Sign, SIGN_LABEL, WHEN_LABEL } from '../training/body';
@@ -44,6 +46,7 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
               <ul className="bullets">{tips.exercises.slice(0, 4).map((e) => <li key={e.name}>{e.name}: {e.dose[0]}</li>)}</ul>
               <p className="caption">Only if they do not hurt. Stop any exercise that makes the pain worse.</p>
             </section>}
+            {careAreaFor(area) && !data.profile.body?.care && <Link to="/care" className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={onClose}>Start a care plan for this area</Link>}
             <section className="stack-sm"><h3 className="label">When to see a physio</h3>
               <p>If it is not clearly better within a week, if it changes how you run, or if it keeps coming back. Straight away if you notice swelling, numbness, pain at night or one bony spot that hurts to press.</p>
             </section>

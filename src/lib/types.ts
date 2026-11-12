@@ -275,7 +275,7 @@ export interface LogEntry {
 }
 export interface StrengthLog {
   title: string; source: 'ritmo' | 'manual'; sessionId?: string; type?: 'home' | 'gym' | 'class';
-  exercises: { id: string; name: string; sets: { reps?: number; load?: number; seconds?: number }[] }[];
+  exercises: { id: string; name: string; sets: { reps?: number; load?: number; seconds?: number }[]; /** Sets planned, for progression */ planned?: number }[];
   avgHr?: number;
   /** The Hub post made for it, if any */
   postId?: string;

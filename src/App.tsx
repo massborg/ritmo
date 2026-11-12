@@ -27,6 +27,8 @@ const ActivityPage = lazyPage(() => import('./pages/Activity'));
 const PlannedPage = lazyPage(() => import('./pages/Planned'));
 const StrengthPlayerPage = lazyPage(() => import('./pages/StrengthPlayer'));
 const ProfileStrengthPage = lazyPage(() => import('./pages/ProfileStrength'));
+const StrengthPlanPage = lazyPage(() => import('./pages/StrengthPlan'));
+const CarePlanPage = lazyPage(() => import('./pages/CarePlan'));
 const RacePage = lazyPage(() => import('./pages/Race'));
 const RaceDay = lazyPage(() => import('./pages/RaceDay'));
 const Setup = lazyPage(() => import('./pages/Setup'));
@@ -278,6 +280,8 @@ function Shell() {
               <Route path="/readiness" element={<ReadinessPage />} />
               <Route path="/session/:id" element={<PlannedPage />} />
               <Route path="/strength/:id" element={<StrengthPlayerPage />} />
+              <Route path="/strength-plan" element={<StrengthPlanPage />} />
+              <Route path="/care" element={<CarePlanPage />} />
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/race/:id/day" element={<RaceDay />} />

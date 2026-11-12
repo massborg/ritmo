@@ -31,6 +31,10 @@ export interface BodyState {
   prehab?: Record<string, number>;
   /** The check-in the runner chose to be more careful with than the rule (one step stricter) */
   careful?: string;
+  /** The check-in whose running change the runner undid ("Undo" on Training): the plan stays as it was */
+  undone?: string;
+  /** A care plan for the area (update 3, §10) */
+  care?: import('./care').CareState;
 }
 
 const label = (c: Pick<BodyCheckin, 'area' | 'side'>) => `${c.side ? `${c.side[0].toUpperCase()}${c.side.slice(1)} ` : ''}${c.side ? c.area.toLowerCase() : c.area}`;
@@ -135,6 +139,8 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
     const where = label(active);
     const area = active.area;
     const rule = painRule(active, b?.careful === active.id);
+    // "Undo" on Training: the runner keeps their plan for this check-in (red flags are never undone)
+    if (b?.undone === active.id) { log(`body-undone:${active.id}`, `${where} pain ${active.pain}/10: you chose to keep your plan as it was. Check in again tomorrow.`); return { ...plan, sessions, changes }; }
     const settle = ymd(addDays(parseYmd(active.at.slice(0, 10)), rule.days));
     if (rule.level === 'rest') {
       // 6+: rest from running, and see a physio

@@ -25,6 +25,7 @@ import { explainWeek } from '../training/explain';
 import { shoeAlert, shoeTotals } from '../training/shoes';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
+import { CARE_DISCLAIMER, careAreaFor } from '../training/care';
 import { plannedNum } from '../training/session-view';
 import { EditSession } from '../components/EditSession';
 import { StrengthCard } from '../components/StrengthSession';
@@ -57,17 +58,51 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
       <h2 id="body-card" className="label">{paused ? 'Training paused: get checked first' : n ? `${areaLabel(n)} · day ${dayN} · ${trend} · ${n.pain}/10` : `Return to run · step ${b!.rtrStep} of 6`}</h2>
       {paused ? <p>You reported a warning sign. See a doctor or physio, then confirm here to resume training.</p>
         : b?.rtrStep ? <p>Each step unlocks when pain stays at 2/10 or lower during the run and the next morning. Check in after each step.</p>
-        : n && <p className="body-rule">{painRule(n, b?.careful === n.id).short} Check in each day so Ritmo can bring you back at the right pace.</p>}
+        : n && <p className="body-rule">{b?.undone === n.id ? 'You kept your plan as it was for this check-in.' : painRule(n, b?.careful === n.id).short} Check in each day so Ritmo can bring you back at the right pace.</p>}
       <div className="row wrap">
         {paused ? <button className="btn btn-primary btn-small" onClick={() => updateBody({ checkedAt: new Date().toISOString() })}>I have been checked by a professional</button>
           : <button className="btn btn-primary btn-small" onClick={onCheckIn}>Check in</button>}
         {!paused && n && n.pain <= 2 && !b?.rtrStep && <button className="btn btn-small" onClick={() => updateBody({ rtrStep: 1 })}>Start return to run</button>}
+        {!paused && n && !b?.rtrStep && (b?.undone === n.id
+          ? <button className="btn btn-ghost btn-small" onClick={() => updateBody({ undone: undefined })}>Use Ritmo's change again</button>
+          : <button className="btn btn-ghost btn-small" onClick={() => updateBody({ undone: n.id })}>Undo the change to my runs</button>)}
+        {!paused && n && !b?.care && careAreaFor(n.area) && <Link to="/care" className="btn btn-small">Start a care plan</Link>}
         {!paused && n && !b?.rtrStep && painRule(n).level !== 'rest' && (b?.careful === n.id
           ? <button className="btn btn-ghost btn-small" onClick={() => updateBody({ careful: undefined })}>Back to Ritmo's advice</button>
           : <button className="btn btn-small" onClick={() => updateBody({ careful: n.id })}>Be more careful</button>)}
         {!paused && <Link to="/coach?mode=body" className="btn btn-ghost btn-small">Ask about it</Link>}
       </div>
       <p className="caption">{DISCLAIMER}</p>
+    </section>
+  );
+}
+
+/** A care plan in progress (update 3, §10), or the offer of one after pain logged on a run */
+function CareCard() {
+  const { data, today } = useApp();
+  const care = data.profile.body?.care;
+  const t = ymd(today);
+  const recentPain = data.feedback.filter((f) => f.pain.length && (today.getTime() - new Date(f.loggedAt).getTime()) / 86400000 <= 3).flatMap((f) => f.pain.map((p) => p.area)).find((a) => careAreaFor(a));
+  if (care) {
+    const checked = care.checks.some((c) => c.date === t);
+    const done = care.done.includes(t);
+    return (
+      <section className="card stack-sm care-card" aria-labelledby="care-card">
+        <h2 id="care-card" className="label">Care plan · stage {care.stage + 1} of 3</h2>
+        <p className="caption">{checked ? 'Pain check done for today.' : 'How does it feel this morning? A quick pain check decides the next step.'} {done ? 'Exercises done today.' : ''}</p>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <Link to="/care" className={`btn btn-small${checked ? '' : ' btn-primary'}`}>{checked ? 'Open the care plan' : 'Morning pain check'}</Link>
+        </div>
+        <p className="caption">{CARE_DISCLAIMER}</p>
+      </section>
+    );
+  }
+  if (!recentPain || activeNiggle(data.profile.body, today)) return null;
+  return (
+    <section className="card stack-sm care-card" aria-label="Care plan">
+      <p className="label">You logged {recentPain.toLowerCase()} pain after a run</p>
+      <p className="caption">A care plan gives you exercises in three stages, with a short pain check each morning. {CARE_DISCLAIMER}</p>
+      <Link to="/care" className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Start a care plan</Link>
     </section>
   );
 }
@@ -225,6 +260,7 @@ export default function Today() {
         return <Link to="/profile/shoes" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
       })()}
       {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
+      {hasFlag('body') && isToday && <CareCard />}
       {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
         <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
