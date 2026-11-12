@@ -50,9 +50,12 @@ const check = (ok, name, detail) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${na
   const sel = await page.getByRole('tab', { selected: true }).innerText();
   check(sel === 'Intervals' && await page.getByRole('tab', { name: 'Intervals' }).evaluate((e) => e === document.activeElement), 'run page tabs move with the arrow keys and keep focus', `selected ${sel}`);
   await page.keyboard.press('End'); await page.waitForTimeout(150);
+  const last = await page.getByRole('tab', { selected: true }).innerText();
   await page.keyboard.press('ArrowRight'); await page.waitForTimeout(150);
   const wrapped = await page.getByRole('tab', { selected: true }).innerText();
-  check(['Overview', 'Shoes'].includes(wrapped), 'the tab row wraps or stops at the end without losing focus', wrapped);
+  await page.keyboard.press('Home'); await page.waitForTimeout(150);
+  const first = await page.getByRole('tab', { selected: true }).innerText();
+  check(last === 'Shoes' && wrapped === 'Overview' && first === 'Overview', 'End jumps to the last tab, the arrow wraps round, Home jumps to the first', `${last} → ${wrapped} → ${first}`);
 
   // ---- Every update 2 screen × theme × size ----
   const tabUrl = (t) => [`Run · ${t}`, `/activity/${run.id}`, t.toLowerCase()];

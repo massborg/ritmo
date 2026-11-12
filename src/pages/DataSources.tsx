@@ -192,7 +192,7 @@ export default function DataSources() {
                         <img src="/brand/strava/btn_strava_connect_with_orange.svg" width={237} height={48} alt="" />
                       </button>)
                   : s.availability === 'stage-2' ? <span className="tag">Coming soon</span>
-                  : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="tag">In the phone app</Link>)
+                  : s.availability === 'stage-3' ? (s.kind === healthKind() ? <Link to="/profile/health" className="btn btn-small btn-primary">{st?.connected ? 'Manage' : `Connect ${s.label}`}</Link> : <Link to="/profile/health" className="btn btn-small btn-ghost">In the phone app</Link>)
                   : <span className="tag">Planned</span>}
                 {st?.connected && s.kind !== 'upload' && s.availability !== 'stage-3' && <button className="btn btn-small" onClick={() => disconnectSource(s.kind)}>Disconnect</button>}
               </li>

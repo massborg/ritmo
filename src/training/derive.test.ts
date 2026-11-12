@@ -28,6 +28,16 @@ describe('best efforts inside runs', () => {
     const pb = personalBests([run('a', s)]).find((p) => p.m === 5000)!;
     expect(Math.round(pb.timeS)).toBe(951);
   });
+  it('PBs get slower as the distance gets longer (15K under the half)', () => {
+    // A half marathon at an even 4:15/km and a separate, slower 15K: the best 15K is the stretch inside the half
+    const half = run('h', stream([[21097.5, 21097.5 * 0.255]]));
+    const slow15 = run('f', stream([[15000, 15000 * 0.3]]));
+    const pbs = personalBests([half, slow15]);
+    const t = (m: number) => pbs.find((p) => p.m === m)!.timeS;
+    expect(t(15000)).toBeLessThan(t(21097.5));
+    const ordered = pbs.slice().sort((a, b) => a.m - b.m);
+    for (let i = 1; i < ordered.length; i++) expect(ordered[i].timeS).toBeGreaterThan(ordered[i - 1].timeS);
+  });
   it('the stored summary gives the same best efforts without the streams', () => {
     const s = stream([[2500, 675], [5000, 951], [2500, 675]]);
     const derived = deriveCore(s, undefined)!;
