@@ -84,6 +84,9 @@ export function adaptPlan(opts: {
   const repsDone = (g: RunGroup) => g.parts.some((p) => p.reps?.some((r) => r.kind === 'work' && r.timeS));
   const fits = (s: PlannedSession, g: RunGroup) => repsDone(g) || sessionOutcome(s.type, typeOf(g.main)).status === 'done';
   const best = (s: PlannedSession, gs: RunGroup[]) => [...gs].sort((x, y) => Number(fits(s, y)) - Number(fits(s, x)) || Math.abs(x.totalM - s.distanceM) - Math.abs(y.totalM - s.distanceM))[0];
+  // A strength-only day is done once its workout is saved (update 3, §5): it counts toward sessions done
+  const strengthDone = new Set((profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength?.sessionId).map((e) => e.strength!.sessionId!));
+  for (const s of plan.sessions) if (s.type === 'rest' && s.strengthPlan && strengthDone.has(s.id)) s.status = 'done';
   for (const s of plan.sessions) {
     if (s.type === 'rest' || s.date > t) continue;
     // A run logged against this session ("I've done this run", or "Change plan" on the day) completes it

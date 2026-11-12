@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity as Pulse, Camera, ChevronRight, Database, Footprints, HeartPulse, KeyRound, LogOut, Shield, Target, Thermometer, UserRound, Users, Volume2 } from 'lucide-react';
+import { Activity as Pulse, Camera, ChevronRight, Database, Dumbbell, Footprints, HeartPulse, KeyRound, LogOut, Shield, Target, Thermometer, UserRound, Users, Volume2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Logo, Segmented, StatusLine } from '../components/ui';
 import { AppHeader, SampleChip } from '../components/app';
@@ -69,6 +69,7 @@ export default function Profile() {
         <div className="group">
           <Row to="/goals" icon={<Target size={18} strokeWidth={2} />} title="Goals and availability" sub={goalText || 'Not set'} />
           <Row to="/profile/shoes" icon={<Footprints size={18} strokeWidth={2} />} title="Shoes" sub={shoeLine} />
+          <Row to="/profile/strength" icon={<Dumbbell size={18} strokeWidth={2} />} title="Strength" sub={`${({ none: 'No equipment', light: 'Light weights', gym: 'Gym' } as const)[data.profile.strength?.equipment ?? 'none']}${data.profile.strength?.never?.length ? ` · ${data.profile.strength.never.length} left out` : ''}`} />
           {hasFlag('body') && <Row to="/profile/body" icon={<Pulse size={18} strokeWidth={2} />} title="Body" sub={bodyLine} />}
           <Row to="/run?settings=1" icon={<Volume2 size={18} strokeWidth={2} />} title="Run settings" sub="Voice, cues, countdown, auto-pause, screen on" />
           <Row to="/profile#hr" icon={<HeartPulse size={18} strokeWidth={2} />} title="Heart rate and zones" sub={`Max ${p.maxHr ?? hr.max} · resting ${p.restHr ?? hr.rest} bpm`} />

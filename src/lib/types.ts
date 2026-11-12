@@ -210,6 +210,8 @@ export interface Profile {
   gearMap?: Record<string, string>;
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
+  /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */
+  strength?: import('../training/strength').StrengthPrefs & { rest?: number };
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
   pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[]; sessions?: { from: string; to: string; sessions: { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }[] } };
   /** PBs on the Hub profile (off by default, up to 4 distances) */
@@ -232,6 +234,8 @@ export interface HubPrefs {
   autoSince?: string;
   /** Runs the runner asked to share by uploading the original file (posted whatever their date) */
   shareIds?: string[];
+  /** Post strength sessions automatically (update 3, §6; on by default, to followers) */
+  autoPostStrength?: boolean;
 }
 
 export interface TrainingSettings {
@@ -264,7 +268,18 @@ export interface TrainingSettings {
 export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string; until: string; at: string }
 
 /** Things logged that are not runs */
-export interface LogEntry { id: string; date: string; kind: 'cross' | 'note'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string }
+export interface LogEntry {
+  id: string; date: string; kind: 'cross' | 'note' | 'strength'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string;
+  /** Strength (update 3, §5): what was done, recorded in Ritmo or logged by hand */
+  strength?: StrengthLog;
+}
+export interface StrengthLog {
+  title: string; source: 'ritmo' | 'manual'; sessionId?: string; type?: 'home' | 'gym' | 'class';
+  exercises: { id: string; name: string; sets: { reps?: number; load?: number; seconds?: number }[] }[];
+  avgHr?: number;
+  /** The Hub post made for it, if any */
+  postId?: string;
+}
 
 export type ShoeUse = 'everyday' | 'fast' | 'long' | 'trail';
 export interface Shoe { id: string; name: string; startDate: string; startKm: number; retireKm: number; retired?: boolean; /** From the shoe finder: brand, model and colour (for the picture) */ brand?: string; model?: string; colour?: string; /** A photo of the runner's own pair, in their private storage folder */ photo?: string; /** What the shoe is for, used to assign runs automatically (default everyday) */ use?: ShoeUse; /** When it was retired (YYYY-MM-DD); runs after that never count for it */ retiredAt?: string }
@@ -340,8 +355,10 @@ export interface PlannedSession {
   second?: { distanceM: number; durationS: number; title: string; detail: string };
   /** The runner changed this session (update 3, §8): when, and what the plan had, for "Reset to plan" */
   edited?: { at: string; original: Pick<PlannedSession, 'type' | 'title' | 'distanceM' | 'durationS' | 'steps' | 'paceTarget' | 'purpose' | 'focus' | 'hrZones'> };
-  /** Strength and mobility added to this day */
+  /** Strength and mobility added to this day (a one-line summary) */
   strength?: string;
+  /** The strength session (update 3, §4): routine, intensity and why; the exercises are worked out when shown */
+  strengthPlan?: import('../training/strength').StrengthPlan;
 }
 
 export type Phase = 'base' | 'build' | 'peak' | 'taper' | 'recovery' | 'race';

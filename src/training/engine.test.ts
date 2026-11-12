@@ -291,11 +291,16 @@ describe('training style settings', () => {
     expect(t('harder')).toBeLessThan(t('normal'));
     expect(t('easier')).toBeGreaterThan(t('normal'));
   });
-  it('strength goes on hard days first', () => {
+  it('strength goes away from hard days, never heavy the day before one (update 3, §4)', () => {
     const plan = ok(gen({ training: { strengthPerWeek: 2 } }, 70));
-    const wk = fullWeek(plan.sessions, '2026-11-09').filter((s) => s.strength);
+    const week = fullWeek(plan.sessions, '2026-11-09');
+    const wk = week.filter((s) => s.strengthPlan);
     expect(wk).toHaveLength(2);
-    expect(wk.every((s) => ['threshold', 'vo2max', 'hills', 'tempo'].includes(s.type))).toBe(true);
+    expect(wk.every((s) => !['threshold', 'vo2max', 'hills', 'tempo', 'long'].includes(s.type))).toBe(true);
+    for (const s of wk) {
+      const next = week.find((x) => x.date > s.date);
+      if (next && ['threshold', 'vo2max', 'hills', 'tempo', 'long'].includes(next.type)) expect(s.strengthPlan!.intensity).toBe('light');
+    }
   });
   it('a plan without a race follows the chosen length', () => {
     const plan = ok(gen({ training: { planWeeks: 6 } }, 50, { race: undefined }));

@@ -1149,3 +1149,26 @@ button.list-item { background: none; border: 0; color: inherit; font: inherit; c
 .edit-delta { font-weight: 700; color: var(--ink); }
 .edit-impact { border-left: 4px solid var(--success, #2f9e5b); }
 .edit-impact.warn { border-left-color: var(--warning, #c77700); }
+
+/* ---- Update 3, stage 4: strength ---- */
+.strength-card .strength-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.strength-card .strength-list li { display: flex; justify-content: space-between; gap: 8px; }
+.strength-card.compact { padding: var(--s3); }
+.daychip-strength { color: var(--ink); }
+.daychip-strength-extra { position: absolute; top: 4px; right: 4px; color: var(--ink); opacity: 0.8; }
+.daychip { position: relative; }
+.exercise-demo { flex: none; background: var(--surface-sunken); border-radius: 12px; }
+.strength-edit { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.strength-edit-row { display: grid; gap: 6px; padding-bottom: var(--s3); border-bottom: 1px solid var(--hairline); }
+.mini-step { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 0 4px; }
+.mini-step .icon-btn { min-width: 40px; min-height: 40px; font-size: 20px; }
+.mini-step .stat { min-width: 2ch; text-align: center; }
+.set-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.set-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--surface-sunken); }
+.set-row.now { outline: 2px solid var(--brand); background: var(--surface-raised); }
+.set-row.done { opacity: 0.6; }
+.rest-timer { border-left: 4px solid var(--brand); }
+.strength-set-done { min-height: 56px; font-size: 17px; }
+.hub-strength-box { list-style: none; margin: 0; padding: var(--s3); display: grid; gap: 4px; border-radius: 12px; background: var(--surface-sunken); }
+.hub-strength-box li { display: flex; justify-content: space-between; gap: 8px; }
+.swap-list .list-item { min-height: 72px; }

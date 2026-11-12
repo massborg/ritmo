@@ -27,6 +27,7 @@ import { InstallPrompt } from '../components/InstallPrompt';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
 import { plannedNum } from '../training/session-view';
 import { EditSession } from '../components/EditSession';
+import { StrengthCard } from '../components/StrengthSession';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions, swapLine } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
@@ -344,9 +345,11 @@ export default function Today() {
           </div>
           <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
           {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
-          {s.strength && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
+          {s.strength && !s.strengthPlan && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
         </section>
       )}
+      {/* Strength on this day (update 3, §4): after the run, or on its own */}
+      {s?.strengthPlan && <StrengthCard session={s} />}
 
       <NextRaceCard />
       <RestOfWeek from={isToday ? t : selected < t ? t : selected} />

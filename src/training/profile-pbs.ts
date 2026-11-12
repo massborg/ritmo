@@ -71,8 +71,9 @@ export function parseTime(s: string): number | undefined {
 }
 
 /** Weeks in a row (Monday to Sunday) with at least one run, up to this week; this week counts once it has a run */
-export function weekStreak(acts: Activity[], today: Date): number {
-  const weeks = new Set(shareableRuns(acts).map((a) => ymd(startOfWeek(parseYmd(a.startTime.slice(0, 10))))));
+/** Weeks in a row with a run (or a strength session: update 3, §5) */
+export function weekStreak(acts: Activity[], today: Date, strengthDates: string[] = []): number {
+  const weeks = new Set([...shareableRuns(acts).map((a) => a.startTime.slice(0, 10)), ...strengthDates].map((d) => ymd(startOfWeek(parseYmd(d)))));
   let w = startOfWeek(today);
   if (!weeks.has(ymd(w))) w = addDays(w, -7);
   let n = 0;
