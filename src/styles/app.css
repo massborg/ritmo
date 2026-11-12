@@ -1191,3 +1191,7 @@ button.list-item { background: none; border: 0; color: inherit; font: inherit; c
 .care-stage span.done { opacity: 0.6; }
 .care-safety { border-left: 4px solid var(--warning, #c77700); }
 .care-urgent { border-left: 4px solid var(--danger); }
+
+/* Tap targets on a post's author (checklist, update 3 §11): 44 px without moving the layout */
+.hub-post-head > a:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; margin: -2px; }
+.hub-post-who .runner-link { display: inline-block; padding: 12px 0; margin: -12px 0; }
