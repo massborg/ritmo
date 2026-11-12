@@ -58,7 +58,8 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   check(rb.x + rb.width > 360, 'your message sits on the right');
   check(await runner.evaluate((el) => getComputedStyle(el).backgroundColor) === await page.evaluate(() => { const d = document.createElement('div'); d.style.color = 'var(--graphite)'; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; }), 'in a graphite bubble');
   const based = page.locator('.bubble-coach details').last();
-  check(await based.locator('summary').innerText().then((x) => /^Based on: /.test(x)) && !(await based.getAttribute('open')), 'the answer ends with a collapsed "Based on" line');
+  // Update 3, §1.3: a visible "Based on" line (niggle, readiness, target), with all the facts collapsed below it
+  check(/^Based on: .*readiness/.test(await page.locator('.bubble-coach .based-on-line').last().innerText()) && !(await based.getAttribute('open')), 'the answer has a "Based on" line, with the facts collapsed');
 
   // Menu: AI setting and Clear
   await page.getByRole('button', { name: 'Past chats and settings' }).click();
