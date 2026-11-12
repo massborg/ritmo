@@ -14,6 +14,7 @@ export function PbStrip({ pbs }: { pbs?: ShownPb[] | null }) {
           <span className="caption">{p.label}</span>
           <span className="stat pb-time">{duration(p.timeS)}</span>
           <span className="caption pb-meta">{p.self ? <span className="row" style={{ gap: 3 }}><Info size={12} strokeWidth={2} aria-hidden="true" />Self-reported</span> : p.race ?? (p.date ? new Date(`${p.date}T12:00:00`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '')}</span>
+          {!p.self && p.basis && <span className="caption pb-basis">{p.basis === 'official' ? 'Official race time' : 'Best effort'}</span>}
         </li>
       ))}
     </ul>

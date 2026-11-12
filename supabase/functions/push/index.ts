@@ -10,7 +10,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { generateKeyPair, sendPush, type KeyPair } from '../_shared/webpush.ts';
 import { catchUpAll } from '../_shared/strava.ts';
-import { localNow, planPush, withDefaults, type PushHubGroup, type PushMessage, type PushRace, type PushRun, type PushSession, type PushShoe, type Reminders, type Sent } from '../_shared/push-core.ts';
+import { localNow, planPush, withAdapted, withDefaults, type PushAdapted, type PushHubGroup, type PushMessage, type PushRace, type PushRun, type PushSession, type PushShoe, type Reminders, type Sent } from '../_shared/push-core.ts';
 
 const SUBJECT = 'https://app.ritmorunning.run';
 const cors = {
@@ -47,7 +47,7 @@ interface ProfileData {
   reminders?: Partial<Reminders>; units?: 'km' | 'mi'; illnessUntil?: string;
   body?: { redFlagAt?: string; checkedAt?: string };
   /** What the app works out and the server can't: today's readiness and how worn each pair of shoes is */
-  pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: PushShoe[] };
+  pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: PushShoe[]; sessions?: PushAdapted };
 }
 interface UserData { p: ProfileData; sessions: PushSession[]; races: PushRace[]; runs: { id: string; name: string; start: string; endMs: number; source: string; distanceM: number }[]; feelIds: Set<string>; hub: PushHubGroup[]; hubIds: number[] }
 
@@ -92,7 +92,8 @@ async function loadUser(db: SupabaseClient, uid: string, now: Date): Promise<Use
   }
   return {
     p: ((prof.data?.data as { profile?: ProfileData } | null)?.profile ?? {}),
-    sessions: ((plan.data?.data as { sessions?: PushSession[] } | null)?.sessions ?? []),
+    // The app's adapted sessions for the coming days win over the stored plan, so reminders say what Training says
+    sessions: withAdapted(((plan.data?.data as { sessions?: PushSession[] } | null)?.sessions ?? []), ((prof.data?.data as { profile?: ProfileData } | null)?.profile ?? {}).pushHints?.sessions),
     races: ((races.data ?? []) as { id: string; data: { name?: string; date?: string } }[]).filter((x) => x.data?.date).map((x) => ({ id: x.id, name: x.data.name ?? 'Your race', date: x.data.date as string })),
     runs, feelIds: new Set(((fb.data ?? []) as { activity_id: string }[]).map((x) => x.activity_id)),
     hub: [...groups.values()], hubIds: nrows.map((n) => n.id),

@@ -93,7 +93,7 @@ describe('races, gear, summary and how it felt', () => {
   it('weekly summary on Sunday at 19:00', () => {
     const p = planPush(base({ date: '2026-11-15', minutes: at('19:05'), lastRunDate: '2026-11-15', week: { km: 42.3, runs: 5, done: 4, planned: 5 }, sessions: [S({ date: '2026-11-18', type: 'tempo', title: 'Tempo 6 km' })] }));
     expect(p.messages[0]).toMatchObject({ title: 'Your week', url: '/you' });
-    expect(p.messages[0].body).toBe("42 km in 5 runs · 4 of 5 sessions done. Next week's key session: Tempo 6 km on Wednesday.");
+    expect(p.messages[0].body).toBe("42.3 km in 5 runs · 4 of 5 sessions done. Next week's key session: Tempo 6 km on Wednesday.");
   });
   it('how did it feel? about an hour after a synced run without a feeling', () => {
     const now = Date.parse('2026-11-12T10:00:00Z');

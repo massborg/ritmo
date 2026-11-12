@@ -13,12 +13,14 @@ import { QUALITY_TYPES, SESSION_SHORT } from '../training/analysis';
 import { Link } from 'react-router-dom';
 import { AppHeader, SampleChip } from '../components/app';
 import { suggestions } from '../coach/coach';
+import { activeNiggle, areaLabel } from '../training/body';
+import { plannedNum } from '../training/session-view';
 import { localise } from '../lib/format';
 import { Sheet } from '../components/inputs';
 
 
 export default function Coach() {
-  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal, hasFlag, updateBody, ready, plan, readinessToday, today, aRace, athlete } = useApp();
+  const { data, sendCoach, coachBusy, clearCoach, todaySession, updateProfile, applyCoachProposal, hasFlag, updateBody, ready, plan, readinessToday, today, aRace, athlete, weekTarget } = useApp();
   const [menu, setMenu] = useState(false);
   const ai = data.profile.consents?.aiCoach;
   const [params, setParams] = useSearchParams();
@@ -39,13 +41,14 @@ export default function Coach() {
   const t = ymd(today);
   const ws = ymd(startOfWeek(today)), we = ymd(addDays(startOfWeek(today), 6));
   const weekSessions = (plan?.sessions ?? []).filter((x) => x.date >= ws && x.date <= we && x.type !== 'rest');
-  const plannedM = weekSessions.reduce((x, y) => x + y.distanceM, 0);
+  const plannedM = weekTarget.m;
   const doneSessions = weekSessions.filter((x) => x.status === 'done' || x.status === 'swapped').length;
   const daysToRace = aRace ? Math.round((parseYmd(aRace.date).getTime() - parseYmd(t).getTime()) / 86400000) : undefined;
   const U = data.profile.units;
+  const niggleNow = data.mode === 'real' ? activeNiggle(data.profile.body, today) : undefined;
   const nextQ = plan?.sessions.find((x) => x.date > t && x.status === 'planned' && QUALITY_TYPES.includes(x.type));
   const SUGGESTIONS = body ? ['Can I run with sore calves after intervals?', 'My knee hurts on downhills, what should I change?', 'How do I come back after 2 weeks off?']
-    : suggestions(todaySession, data.activities.length > 0, { race: aRace?.name, nextQuality: nextQ ? { day: DAY_NAMES[weekday(parseYmd(nextQ.date))], short: SESSION_SHORT[nextQ.type] ?? nextQ.title.toLowerCase() } : undefined });
+    : suggestions(todaySession, data.activities.length > 0, { race: aRace?.name, nextQuality: nextQ ? { day: DAY_NAMES[weekday(parseYmd(nextQ.date))], short: SESSION_SHORT[nextQ.type] ?? nextQ.title.toLowerCase() } : undefined, niggle: niggleNow ? areaLabel(niggleNow) : undefined });
   const r = readinessToday;
   const chip = r.score == null ? undefined : r.band === 'hard' ? { kind: 'success', word: 'Ready to train' } : r.band === 'easy' ? { kind: 'warning', word: 'Take it easy' } : { kind: 'danger', word: 'Recover today' };
   const [text, setText] = useState('');
@@ -99,7 +102,7 @@ export default function Coach() {
             </>
           )}
           <div className="coach-week">
-            <div><span className="stat">{toUnit(athlete.weekM, U).toFixed(1)}{plannedM > 0 ? <small> / {toUnit(plannedM, U).toFixed(0)}</small> : null}</span><span className="caption">{U} this week</span></div>
+            <div><span className="stat">{toUnit(athlete.weekM, U).toFixed(1)}{plannedM > 0 ? <small> / {plannedNum(plannedM, U)}</small> : null}</span><span className="caption">{U} this week</span></div>
             <div><span className="stat">{doneSessions}<small> / {weekSessions.length}</small></span><span className="caption">sessions</span></div>
             <div><span className="stat">{daysToRace ?? '–'}</span><span className="caption">{aRace ? `days to ${aRace.name}` : 'no race yet'}</span></div>
           </div>
@@ -125,9 +128,10 @@ export default function Coach() {
             {m.proposal && (m.proposal.applied
               ? <p className="caption" style={{ marginTop: 6 }}>Done. Your plan is updated.</p>
               : <button className="btn btn-small btn-primary" style={{ marginTop: 8 }} onClick={() => applyCoachProposal(m.id)}>{m.proposal.label}</button>)}
+            {m.basedOn && <p className="caption based-on-line">Based on: {m.basedOn.join(' · ')}</p>}
             {m.facts && m.facts.length > 0 && (
               <details style={{ marginTop: 8 }}>
-                <summary className="caption based-on">Based on: {m.facts.slice(0, 2).map((f) => f.split(/[.:]/)[0]).join(', ')}{m.facts.length > 2 ? '…' : ''}{m.source === 'ai' ? ' · AI coach' : m.source === 'local' ? ' · built-in coach' : ''}</summary>
+                <summary className="caption based-on">{m.basedOn ? 'All the facts used' : <>Based on: {m.facts.slice(0, 2).map((f) => f.split(/[.:]/)[0]).join(', ')}{m.facts.length > 2 ? '…' : ''}</>}{m.source === 'ai' ? ' · AI coach' : m.source === 'local' ? ' · built-in coach' : ''}</summary>
                 <ul className="bullets caption" style={{ marginTop: 4 }}>{m.facts.slice(0, 8).map((f) => <li key={f}>{f}</li>)}</ul>
               </details>
             )}

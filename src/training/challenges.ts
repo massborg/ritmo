@@ -142,3 +142,25 @@ export function badgeOf(c: Pick<Challenge, 'kind' | 'id'>): BadgeId {
   return 'challenge-generic';
 }
 export const badgeSrc = (id: BadgeId | 'locked') => `/brand/badges/badge-${id}.svg`;
+
+/**
+ * One challenge state everywhere (update 3, §1.8): a challenge the runner posted as completed is joined and completed,
+ * even if this device's copy of the profile lost it. Matched by the challenge id in the post, or, for older posts, by
+ * its title among the challenges offered when it was posted. Returns undefined if nothing changed.
+ */
+export function restoreFromPosts(joined: JoinedChallenge[], posts: { title: string; created_at: string; stats: { type?: string; challengeId?: string; badges?: string[] } }[], units: Units = 'km'): JoinedChallenge[] | undefined {
+  let next = joined;
+  for (const p of posts) {
+    if (p.stats?.type !== 'challenge') continue;
+    const title = p.stats.badges?.[0] ?? p.title.replace(/^Completed: /, '');
+    const c = catalogue(new Date(p.created_at), units).find((x) => (p.stats.challengeId ? x.id === p.stats.challengeId : x.title === title))
+      ?? next.find((j) => j.challenge.id === p.stats.challengeId || j.challenge.title === title)?.challenge;
+    if (!c) continue;
+    const have = next.find((j) => j.challenge.id === c.id);
+    if (have?.completedAt && have.sharedAt) continue;
+    next = have
+      ? next.map((j) => (j.challenge.id === c.id ? { ...j, completedAt: j.completedAt ?? p.created_at, sharedAt: j.sharedAt ?? p.created_at } : j))
+      : [...next, { challenge: c, joinedAt: p.created_at, completedAt: p.created_at, sharedAt: p.created_at }];
+  }
+  return next === joined ? undefined : next;
+}

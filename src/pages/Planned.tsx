@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Check, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { sessionAmount } from '../training/session-view';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
@@ -69,7 +70,7 @@ export default function Planned() {
           <h2 className="title">The session</h2>
           {s.type !== 'rest' && (
             <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-              <div><p className="caption">Distance</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{s.distanceM > 0 ? `${(s.distanceM / (U === 'km' ? 1000 : 1609.344)).toFixed(1)} ${U}` : 'By time'}</p></div>
+              <div><p className="caption">Distance</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{s.distanceM > 0 ? sessionAmount(s, U) : 'By time'}</p></div>
               <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{durationWords(s.durationS)}</p></div>
             </div>
           )}

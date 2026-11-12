@@ -37,8 +37,10 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   // Make today's session 6 x 1 km intervals, then add the easy run done instead
   const planRow = mock.state.tables.plans[mock.state.tables.plans.length - 1];
   check(!!planRow, 'a plan was saved');
-  const today = ymd(new Date());
+  // Yesterday: since update 3 (§1.6) a run today that doesn't match isn't judged until the day is over
+  const today = ymd(new Date(Date.now() - 86400000));
   const plan = planRow.data;
+  if (plan.startDate > today) plan.startDate = today;
   let s = plan.sessions.find((x) => x.date === today);
   if (!s) { s = { ...plan.sessions[0], id: 'today-intervals', date: today }; plan.sessions.unshift(s); }
   Object.assign(s, { type: 'vo2max', title: 'Intervals: 6 x 1 km', focus: 'VO2 max', status: 'planned', distanceM: 16000, durationS: 4200,
@@ -46,8 +48,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   delete s.completedActivityId; delete s.swappedTo;
   // Only this run on today's date (the fixture has a session today too)
   mock.state.tables.activities = mock.state.tables.activities.filter((r) => ymd(new Date(r.start_time)) !== today);
-  const midnight = new Date(); midnight.setHours(0, 1, 0, 0);
-  const start = new Date(Math.max(midnight.getTime(), Date.now() - 2 * 3600000));
+  const start = new Date(Date.now() - 86400000); start.setHours(9, 0, 0, 0);
   mock.state.tables.activities.push({ id: 'easy-swap', user_id: uid, source: 'upload', source_ids: {}, start_time: start.toISOString(), name: 'Morning run',
     distance_m: 16290, duration_s: 5500, moving_s: 5400, elev_gain_m: 40, avg_hr: 144, max_hr: 177, avg_cadence: 168, is_race: false, detail_score: 2, laps: null, streams: null });
   // Drop the device cache so the app reads the edited plan from the server

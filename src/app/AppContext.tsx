@@ -24,7 +24,8 @@ import { asReadiness, readinessScore, type ReadinessScore } from '../training/re
 import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
-import { activeNiggle, applyBody, areaLabel, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
+import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
+import { activeNiggle, applyBody, areaLabel, painRule, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
@@ -70,6 +71,8 @@ interface Derived {
   readiness: Readiness;
   /** Today's readiness score with its factors (brief 4A) */
   readinessToday: ReadinessScore;
+  /** This week's target (the adapted sessions added up), and why it is lower than planned */
+  weekTarget: WeekTarget;
   plan?: Plan;
   todaySession?: PlannedSession;
   typeOf: (a: Activity) => SessionType;
@@ -276,7 +279,9 @@ function computeDerived(data: AppData): Derived {
   // Body (flagged): pain check-ins change the coming days; red flags pause running until checked
   // Body is open to every runner too: its plan changes apply whether or not the account has the old flag
   const bodyOn = data.mode === 'real' && (OPEN_TO_ALL.has('body') || !!data.flags?.includes('body'));
-  const plan = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
+  const bodied = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
+  // One session, one truth: steps always add up to the session's distance after every adaptation
+  const plan = bodied ? fitPlan(bodied) : bodied;
   const t = ymd(today);
   const todaySession = plan?.sessions.find((s) => s.date === t);
   const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
@@ -301,17 +306,25 @@ function computeDerived(data: AppData): Derived {
     planDoneSoFar: due.filter((x) => x.status === 'done').length,
     planStart: plan?.startDate,
   };
-  const groups = groupIndex(groupRuns(acts));
+  const groups = groupIndex(groupRuns(acts, new Set(data.profile.splitRuns ?? [])));
   const groupOf = (id: string) => groups.get(id);
+  const niggleNow = bodyOn ? activeNiggle(data.profile.body, today) : undefined;
+  const target = weekTarget(plan, data.plan, wkKey, ymd(addDays(startOfWeek(today), 6)), niggleNow ? areaLabel(niggleNow) : undefined);
   // One label per run, everywhere: its own type, plus what it replaced when it was a swapped session
-  const sessionByRun = new Map((plan?.sessions ?? []).filter((s) => s.completedActivityId).map((s) => [s.completedActivityId!, s]));
+  // Every part of a session in parts belongs to the session it completed
+  const sessionByRun = new Map((plan?.sessions ?? []).filter((s) => s.completedActivityId).flatMap((s) => (s.completedParts ?? [s.completedActivityId!]).map((id) => [id, s] as const)));
   const sessionOfRun = (id: string) => sessionByRun.get(id);
+  const plannedOn = new Map((plan?.sessions ?? []).filter((s) => s.type !== 'rest').map((s) => [s.date, s]));
   const labelOf = (a: Activity) => {
     const s = sessionByRun.get(a.id);
     const base = TYPE_LABEL[typeOf(a)];
-    return s?.status === 'swapped' ? `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}` : base;
+    if (s?.status === 'swapped') return `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}`;
+    // A run on a day whose planned session another run completed counts as extra ("Easy · extra")
+    const day = plannedOn.get(a.startTime.slice(0, 10));
+    if (!s && day?.completedActivityId) return `${base} · extra`;
+    return base;
   };
-  return { hrIssue, readinessToday, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf };
+  return { hrIssue, readinessToday, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf, weekTarget: target };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -964,32 +977,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pastFeedback: data.feedback.filter((f) => f.activityId !== a.id && daysBetween(new Date(f.loggedAt), new Date(a.startTime)) <= 30 && f.loggedAt < a.startTime),
         units: data.profile.units, typeOf: derived.typeOf,
       }));
-      const t = ymd(derived.today);
-      const wk = ymd(startOfWeek(derived.today));
-      const weekEnd = ymd(addDays(startOfWeek(derived.today), 6));
+      // The plan, today's session, this week's target and the niggle are always what Training shows (one truth).
+      // Only readiness and this week's distance, which include Strava runs, are left out for the AI.
+      const main = derivedState;
+      const stravaHidden = aiOn && derived !== derivedState;
+      const t = ymd(main.today);
+      const wk = ymd(startOfWeek(main.today));
+      const weekEnd = ymd(addDays(startOfWeek(main.today), 6));
       const last = derived.athlete.lastRun;
-      const weekSessions = (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= weekEnd && s.type !== 'rest');
+      const weekSessions = (main.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= weekEnd && s.type !== 'rest');
+      const bodyOn = data.mode === 'real';
+      const n = bodyOn ? activeNiggle(data.profile.body, main.today) : undefined;
+      const niggle = n ? { label: areaLabel(n), pain: n.pain, rule: painRule(n, data.profile.body?.careful === n.id).short } : undefined;
+      const r = main.readinessToday;
+      const basedOn = [
+        niggle ? `${niggle.label} ${niggle.pain}/10` : 'no niggle logged',
+        r.score != null && !r.unavailable ? `readiness ${Math.round(r.score)}${stravaHidden ? ' (shown here, not sent to the AI)' : ''}` : 'readiness not available',
+        `this week's target ${plannedNum(main.weekTarget.m, data.profile.units)} ${data.profile.units}`,
+      ];
       const ctx: CoachContext = {
-        today: derived.today, profile: data.profile, units: data.profile.units, readiness: derived.readiness, stage: derived.stage,
-        todaySession: derived.todaySession, nextSessions: (derived.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
+        today: main.today, profile: data.profile, units: data.profile.units, readiness: main.readiness, stage: derived.stage,
+        todaySession: main.todaySession, nextSessions: (main.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
         race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.stage.predictions ? derived.fitness : undefined, paces: derived.paces,
-        weekDoneM: derived.athlete.weekM,
-        weekPlannedM: weekSessions.reduce((x, s) => x + s.distanceM, 0),
+        weekDoneM: stravaHidden ? 0 : main.athlete.weekM,
+        weekPlannedM: main.weekTarget.m,
         weekSessionsDone: weekSessions.filter((s) => s.status === 'done').length,
         weekSessionsPlanned: weekSessions.length,
         // Only sessions dated today or earlier count: a plan that starts next week is not "0 of 25 done"
-        planSessionsDone: derived.athlete.planDoneSoFar,
-        planSessionsTotal: derived.athlete.planDueSoFar,
-        planStart: derived.athlete.planStart,
+        planSessionsDone: main.athlete.planDoneSoFar,
+        planSessionsTotal: main.athlete.planDueSoFar,
+        planStart: main.athlete.planStart,
         runCount: derived.athlete.runCount,
         last: last ? { activity: last, analysis: lastAnalysis(last) } : undefined,
-        hasData: coachActs.length > 0 || !!derived.plan,
-        weekAhead: (derived.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= ymd(addDays(derived.today, 7))),
-        weekTargetKm: derived.plan?.weeks?.find((w) => w.start === wk)?.targetKm,
+        hasData: coachActs.length > 0 || !!main.plan,
+        weekAhead: (main.plan?.sessions ?? []).filter((s) => s.date >= wk && s.date <= ymd(addDays(main.today, 7))),
+        weekTargetKm: main.weekTarget.m ? plannedNum(main.weekTarget.m, 'km') : undefined,
         maxEasyMin: data.profile.training?.maxEasyMin ?? 90,
+        niggle, stravaHidden,
       };
       const reply = await ask(text, ctx, data.coach.filter((m) => (m.mode ?? 'real') === mode && m.topic !== 'body').map((m) => ({ role: m.role, text: m.text })), aiOn);
-      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, mode, proposal: reply.proposal, source: reply.source, fallback: reply.fallback }] }));
+      setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: reply.text, at: new Date().toISOString(), facts: reply.facts, basedOn, mode, proposal: reply.proposal, source: reply.source, fallback: reply.fallback }] }));
     } catch {
       setData((d) => ({ ...d, coach: [...d.coach, { id: uid(), role: 'coach', text: 'Sorry, I could not answer that just now. Please try again in a moment.', at: new Date().toISOString(), mode }] }));
     } finally {

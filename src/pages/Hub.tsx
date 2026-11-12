@@ -291,7 +291,8 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
   const [done, setDone] = useState<string>();
   const s = p.stats;
   const challenge = s.type === 'challenge';
-  const z = s.type ? ZONE_OF[s.type as SessionType] : undefined;
+  // A race is just "Race": no training zone next to it
+  const z = s.type && s.type !== 'race' && s.type !== 'challenge' ? ZONE_OF[s.type as SessionType] : undefined;
   const meta = [hub.whenLine(s.startedAt ?? p.created_at), s.device].filter(Boolean).join(' · ');
   const posted = s.startedAt && s.startedAt.slice(0, 10) !== p.created_at.slice(0, 10) ? `Posted ${ago(p.created_at)}` : undefined;
   const share = async () => {
@@ -325,13 +326,13 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
         <h2 id={`post-${p.id}`} className="hub-post-title">{p.title}</h2>
         <div className="row wrap" style={{ gap: 6 }}>
           {challenge ? <span className="tag tag-accent"><Award size={14} strokeWidth={2} aria-hidden="true" />Challenge complete</span>
-            : s.typeLabel && <span className="zone-chip">{z && <span className={`zone-dot z${z}`} aria-hidden="true" />}{s.typeLabel}{z ? <span className="sr-only">, Z{z} {ZONE_NAMES[z - 1]}</span> : null}</span>}
+            : s.typeLabel && <span className="zone-chip">{z && <span className={`zone-dot z${z}`} aria-hidden="true" />}{s.typeLabel}{z ? <span className="sr-only"> (Z{z} {ZONE_NAMES[z - 1]})</span> : null}</span>}
           {s.compliance && <span className="tag tag-accent">{s.compliance}</span>}
           {!challenge && (s.badges ?? []).map((b) => <span key={b} className="tag">{b}</span>)}
         </div>
         {p.body && <p>{p.body}</p>}
         {challenge ? (
-          <div className="hub-badge-post">{s.badgeId && (BADGES as readonly string[]).includes(s.badgeId) ? <img className="badge-img badge-img-lg" src={badgeSrc(s.badgeId as BadgeId)} alt="" width={72} height={72} /> : <span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span>}<span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span>{s.distanceM > 0 && <span className="caption">{dist(s.distanceM, U)} run for it</span>}</span></div>
+          <div className="hub-badge-post">{s.badgeId && (BADGES as readonly string[]).includes(s.badgeId) ? <img className="badge-img badge-img-lg" src={badgeSrc(s.badgeId as BadgeId)} alt="" width={72} height={72} /> : <span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span>}<span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span><span className="caption">Completed</span></span></div>
         ) : (
           <div className="hub-stats">
             <div><span className="caption">Distance</span><span className="stat">{dist(s.distanceM, U)}</span></div>
@@ -459,12 +460,12 @@ function ChallengesTab({ canPost }: { canPost: boolean }) {
   const [msg, setMsg] = useState<string>();
   const set = (list: JoinedChallenge[]) => updateProfile({ challenges: list });
   const share = async (j: JoinedChallenge) => {
-    const p = progress(j.challenge, data.activities, U);
     try {
       await hub.createPost({
         id: crypto.randomUUID(), user_id: session!.user.id, activity_id: null, title: `Completed: ${j.challenge.title}`, body: null, visibility: 'followers',
         show_map: false, show_hr: false, route: null, city: null,
-        stats: { distanceM: p.distanceM, movingS: p.movingS, paceS: p.distanceM ? p.movingS / (p.distanceM / 1000) : 0, type: 'challenge', typeLabel: 'Challenge complete', badges: [j.challenge.title], badgeId: badgeOf(j.challenge) },
+        // Only the badge and "Completed" are shared: the totals can include Strava runs, which others may never see
+        stats: { distanceM: 0, movingS: 0, paceS: 0, type: 'challenge', typeLabel: 'Challenge complete', badges: [j.challenge.title], badgeId: badgeOf(j.challenge), challengeId: j.challenge.id },
       });
       set(joined.map((x) => (x.challenge.id === j.challenge.id ? { ...x, sharedAt: new Date().toISOString() } : x)));
       setMsg('Shared with your followers.');
@@ -474,7 +475,7 @@ function ChallengesTab({ canPost }: { canPost: boolean }) {
     <div className="stack-lg">
       <section className="stack" aria-labelledby="ch-yours">
         <h2 id="ch-yours" className="title">Your challenges</h2>
-        {!active.length && <p className="muted">You have not joined a challenge yet. Pick one below: your runs count automatically, including runs imported from Strava.</p>}
+        {!active.length && <p className="muted">{joined.some((j) => j.completedAt) ? 'No challenge running right now. Your finished ones are under Badges. Pick a new one below.' : 'You have not joined a challenge yet. Pick one below: your runs count automatically, including runs imported from Strava.'}</p>}
         {msg && <StatusLine kind="info">{msg}</StatusLine>}
         {active.map((j) => {
           const p = progress(j.challenge, data.activities, U);

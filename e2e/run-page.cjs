@@ -13,7 +13,7 @@ const day = new Date(Date.now() - 4 * 86400000); day.setUTCHours(5, 3, 0, 0);
 const pts = (lat0, lon0, metres, secs) => Array.from({ length: 12 }, (_, i) => ({ t: Math.round((secs * i) / 11), d: Math.round((metres * i) / 11), lat: lat0 + (i * metres) / 11 / 111195, lon: lon0 }));
 const runs = (uid) => [
   { id: 'piece-strides', user_id: uid, source: 'ritmo_gps', source_ids: { ritmo_gps: 'piece-strides', weather: { c: 'cloudy', h: 74, t: 19.6, fl: 19.6, ws: 10.1, wd: 209, dp: 14.8, at: day.toISOString(), src: 'met.no' } }, start_time: day.toISOString(), name: 'Morning run', distance_m: 345, duration_s: 317, moving_s: 316, elev_gain_m: 25, is_race: false, detail_score: 6, laps: null, streams: pts(35.8725, 14.5036, 345, 316), derived: { v: 1 } },
-  { id: 'piece-main', user_id: uid, source: 'ritmo_gps', source_ids: { ritmo_gps: 'piece-main' }, start_time: new Date(day.getTime() + 64 * 60000).toISOString(), name: 'Morning run', distance_m: 414, duration_s: 256, moving_s: 254, elev_gain_m: 10, is_race: false, detail_score: 6, laps: null, streams: pts(35.8718, 14.5046, 414, 254), derived: { v: 1 } },
+  { id: 'piece-main', user_id: uid, source: 'ritmo_gps', source_ids: { ritmo_gps: 'piece-main' }, start_time: new Date(day.getTime() + 20 * 60000).toISOString(), name: 'Morning run', distance_m: 414, duration_s: 256, moving_s: 254, elev_gain_m: 10, is_race: false, detail_score: 6, laps: null, streams: pts(35.8718, 14.5046, 414, 254), derived: { v: 1 } },
 ];
 
 (async () => {
