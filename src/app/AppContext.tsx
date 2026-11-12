@@ -26,7 +26,7 @@ import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
-import type { StrengthPlan } from '../training/strength';
+import { nextAfter, type StrengthPlan } from '../training/strength';
 import { activeNiggle, applyBody, areaLabel, painRule, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
@@ -678,7 +678,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const step = prev.rtrStep;
     // Return to run: a check-in at 2/10 or lower unlocks the next step; pain above that holds the step
     const rtrStep = flags.length ? undefined : step ? (stepUnlocked(entry) ? Math.min(step + 1, 7) : step) : undefined;
-    setData((d) => ({ ...d, profile: { ...d.profile, body: { ...prev, checkins: [...prev.checkins, entry], ...(flags.length ? { redFlagAt: entry.at } : {}), rtrStep: rtrStep && rtrStep > 6 ? undefined : rtrStep } } }));
+    // Merged into the body state as it is now (a care plan may have just been updated in the same tap)
+    setData((d) => { const cur = d.profile.body ?? { checkins: [] }; return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], ...(flags.length ? { redFlagAt: entry.at } : {}), rtrStep: rtrStep && rtrStep > 6 ? undefined : rtrStep } } }; });
     return flags;
   };
   /** What Body answers may use: logged pain, recent load and plan changes (never shared on the Hub) */
@@ -973,8 +974,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = uid();
     setData((d) => {
       const last = { ...(d.profile.strength?.last ?? {}) };
-      for (const x of e.strength.exercises) { const s0 = x.sets[x.sets.length - 1]; if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds }; }
-      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, last }, log: [...(d.profile.log ?? []), { id, date: e.date, kind: 'strength', minutes: e.minutes, rpe: e.rpe, at: new Date().toISOString(), strength: e.strength }] } };
+      const progress = { ...(d.profile.strength?.progress ?? {}) };
+      const at = new Date().toISOString();
+      for (const x of e.strength.exercises) {
+        const s0 = x.sets[x.sets.length - 1];
+        if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds };
+        // Session to session (update 3, §9): progress after a good session, repeat after a hard one or missed sets
+        if (s0 && x.planned) progress[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds, next: nextAfter(x.sets, x.planned, e.rpe), at };
+      }
+      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, last, progress }, log: [...(d.profile.log ?? []), { id, date: e.date, kind: 'strength', minutes: e.minutes, rpe: e.rpe, at: new Date().toISOString(), strength: e.strength }] } };
     });
     return id;
   };

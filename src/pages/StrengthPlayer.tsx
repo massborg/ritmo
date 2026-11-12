@@ -9,6 +9,7 @@ import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { ExerciseDemo } from '../components/ExerciseDemo';
 import { resolveStrength, type Routine } from '../training/strength';
+import { useStrengthAt } from '../components/StrengthSession';
 import { duration, ymd } from '../lib/format';
 
 interface SetRow { reps?: number; load?: number; seconds?: number; done: boolean }
@@ -21,14 +22,18 @@ export default function StrengthPlayer() {
   const session = plan?.sessions.find((s) => s.id === id);
   const sp = session?.strengthPlan ?? (id === 'free' ? { routine: (params.get('routine') as Routine) || 'A', intensity: 'moderate' as const, why: '' } : undefined);
   const prefs = data.profile.strength;
-  const workout = useMemo(() => (sp ? resolveStrength(sp, prefs) : undefined), [sp?.routine, sp?.intensity, sp?.custom]); // eslint-disable-line react-hooks/exhaustive-deps
+  const at = useStrengthAt(session?.date ?? ymd(new Date()));
+  // With progression (update 3, §9): this block's versions, and each exercise's target from its last session
+  const workout = useMemo(() => (sp ? resolveStrength(sp, prefs, at) : undefined), [sp?.routine, sp?.intensity, sp?.custom, at.block, at.week, at.skips]); // eslint-disable-line react-hooks/exhaustive-deps
   const [startedAt] = useState(() => Date.now());
   const [now, setNow] = useState(Date.now());
   const [idx, setIdx] = useState(0);
   // Pre-filled with the reps and load used last time for each exercise
   const initSets = () => (workout?.items ?? []).map((x) => {
     const last = prefs?.last?.[x.id];
-    return Array.from({ length: x.sets }, (): SetRow => ({ reps: x.seconds ? undefined : last?.reps ?? x.reps, seconds: x.seconds ? last?.seconds ?? x.seconds : undefined, load: last?.load, done: false }));
+    // The progression target first (from the last session); otherwise what was done last time
+    const hasTarget = !!prefs?.progress?.[x.id];
+    return Array.from({ length: x.sets }, (): SetRow => ({ reps: x.seconds ? undefined : hasTarget ? x.reps : last?.reps ?? x.reps, seconds: x.seconds ? (hasTarget ? x.seconds : last?.seconds ?? x.seconds) : undefined, load: hasTarget ? x.load : last?.load, done: false }));
   });
   const [sets, setSets] = useState<SetRow[][]>(initSets);
   // The plan may still be loading on the first render: fill the sets in once the workout is there
@@ -72,7 +77,7 @@ export default function StrengthPlayer() {
   };
   const save = () => {
     setStrengthPrefs({ rest: restLen });
-    const exercises = items.map((x, i) => ({ id: x.id, name: x.ex.name, sets: sets[i].filter((y) => y.done).map(({ done: _d, ...y }) => y) })).filter((x) => x.sets.length); // eslint-disable-line @typescript-eslint/no-unused-vars
+    const exercises = items.map((x, i) => ({ id: x.id, name: x.ex.name, planned: sets[i].length, sets: sets[i].filter((y) => y.done).map(({ done: _d, ...y }) => y) })).filter((x) => x.sets.length); // eslint-disable-line @typescript-eslint/no-unused-vars
     saveStrength({ date: ymd(new Date(startedAt)), minutes: Math.max(1, Math.round(elapsed / 60)), rpe, strength: { title: workout.title, source: 'ritmo', sessionId: session?.id, exercises } });
     nav(session ? `/session/${session.id}` : '/');
   };
@@ -107,6 +112,7 @@ export default function StrengthPlayer() {
             <h2 className="title">{cur.ex.name}</h2>
             <p className="caption">{cur.ex.cues[0]}{cur.ex.perSide ? ' · each side' : ''}</p>
             {cur.ex.load && <p className="caption">Load: {cur.ex.load}</p>}
+            {cur.note && <p className="caption progress-note">Today: {cur.note}</p>}
           </div>
         </div>
         <ol className="set-list">

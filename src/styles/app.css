@@ -1172,3 +1172,22 @@ button.list-item { background: none; border: 0; color: inherit; font: inherit; c
 .hub-strength-box { list-style: none; margin: 0; padding: var(--s3); display: grid; gap: 4px; border-radius: 12px; background: var(--surface-sunken); }
 .hub-strength-box li { display: flex; justify-content: space-between; gap: 8px; }
 .swap-list .list-item { min-height: 72px; }
+
+/* ---- Update 3, stage 5: strength progression, injury care ---- */
+.block-bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); height: 120px; align-items: end; }
+.block-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; }
+.block-bar > span:first-child { width: 100%; max-width: 56px; border-radius: 8px 8px 4px 4px; background: var(--surface-sunken); border: 1px solid var(--border); }
+.block-bar.now > span:first-child { background: var(--brand); border-color: var(--brand); }
+.block-bar.now .caption { color: var(--ink); font-weight: 700; }
+.table-wrap { overflow-x: auto; }
+.ladder-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ladder-table th, .ladder-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.ladder-table td.now { font-weight: 700; color: var(--ink); background: var(--surface-sunken); }
+.progress-note { color: var(--ink); font-weight: 600; }
+.strength-block-link { color: inherit; text-decoration: underline; }
+.care-stage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.care-stage span { padding: 8px; border-radius: 10px; background: var(--surface-sunken); text-align: center; font-size: 13px; }
+.care-stage span.now { background: var(--brand); color: var(--on-brand); font-weight: 700; }
+.care-stage span.done { opacity: 0.6; }
+.care-safety { border-left: 4px solid var(--warning, #c77700); }
+.care-urgent { border-left: 4px solid var(--danger); }

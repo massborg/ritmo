@@ -9,8 +9,15 @@ import { ArrowDown, ArrowUp, Check, Dumbbell, Play, Plus, Repeat, Trash2 } from 
 import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { ExerciseDemo } from './ExerciseDemo';
-import { alternatives, doseText, EQUIPMENT_LABEL, EXERCISES, excluded, exById, resolveStrength, ROUTINE_TITLE, type Routine, type StrengthItem } from '../training/strength';
+import { alternatives, blockOf, doseText, EQUIPMENT_LABEL, EXERCISES, excluded, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, WEEK_FOCUS, type BlockWeek, type Routine, type StrengthItem } from '../training/strength';
 import type { PlannedSession } from '../lib/types';
+
+/** The strength block and week of a session, and how many planned sessions in a row were skipped before it */
+export function useStrengthAt(date: string): { block: number; week: BlockWeek; skips: number } {
+  const { plan, data } = useApp();
+  const logged = new Set((data.profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength?.sessionId).map((e) => e.strength!.sessionId!));
+  return { ...blockOf(plan?.weeks, date), skips: skippedInARow(plan?.sessions ?? [], logged, date) };
+}
 
 const dayWord = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
 
@@ -18,8 +25,9 @@ export function StrengthCard({ session, compact }: { session: PlannedSession; co
   const { data } = useApp();
   const [editing, setEditing] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const at = useStrengthAt(session.date);
   if (!session.strengthPlan) return null;
-  const r = resolveStrength(session.strengthPlan, data.profile.strength);
+  const r = resolveStrength(session.strengthPlan, data.profile.strength, at);
   const done = (data.profile.log ?? []).some((e) => e.kind === 'strength' && e.strength?.sessionId === session.id);
   const only = session.type === 'rest';
   return (
@@ -28,7 +36,8 @@ export function StrengthCard({ session, compact }: { session: PlannedSession; co
         <span className="label row" style={{ gap: 8 }}><Dumbbell size={18} strokeWidth={2} aria-hidden="true" />{r.title}{only ? '' : ' · after the run'}</span>
         {done ? <span className="tag tag-accent"><Check size={14} strokeWidth={2.5} aria-hidden="true" />Done</span> : session.strengthPlan.custom ? <span className="tag">Your version</span> : null}
       </div>
-      <p className="caption strength-meta">{r.minutes} min · {r.items.length} exercises · {EQUIPMENT_LABEL[r.equipment]}</p>
+      <p className="caption strength-meta">{r.minutes} min · {r.items.length} exercises · {EQUIPMENT_LABEL[r.equipment]} · <Link to="/strength-plan" className="strength-block-link">Block {at.block}, week {at.week}: {WEEK_FOCUS[at.week].name}</Link></p>
+      {at.skips >= 2 && <p className="caption">Two sessions were skipped, so this one is a step back: a little easier, to pick up again.</p>}
       <ul className="strength-list">
         {r.items.slice(0, 4).map((x) => <li key={x.id}><span>{x.ex.name}</span><span className="caption">{doseText(x)}</span></li>)}
         {r.items.length > 4 && <li className="caption">+ {r.items.length - 4} more</li>}
@@ -73,8 +82,9 @@ function RoutineSwap({ session, onClose }: { session: PlannedSession; onClose: (
 export function StrengthEdit({ session, onClose }: { session: PlannedSession; onClose: () => void }) {
   const { data, editStrength, setStrengthPrefs } = useApp();
   const prefs = data.profile.strength ?? {};
-  const resolved = resolveStrength(session.strengthPlan!, prefs);
-  const [items, setItems] = useState<StrengthItem[]>(resolved.items.map(({ ex: _e, ...x }) => x)); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const at = useStrengthAt(session.date);
+  const resolved = resolveStrength(session.strengthPlan!, prefs, at);
+  const [items, setItems] = useState<StrengthItem[]>(resolved.items.map((x) => ({ id: x.id, sets: x.sets, ...(x.reps != null ? { reps: x.reps } : {}), ...(x.seconds != null ? { seconds: x.seconds } : {}) })));
   const [swapIdx, setSwapIdx] = useState<number>();
   const [adding, setAdding] = useState(false);
   const set = (i: number, patch: Partial<StrengthItem>) => setItems((xs) => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)));
