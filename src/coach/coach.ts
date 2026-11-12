@@ -8,6 +8,7 @@ import type { Readiness } from '../training/load';
 import type { RaceReadiness } from '../training/insights';
 import type { Analysis } from '../training/analysis';
 import { PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
+import { isCrossTraining, plannedNum, sessionAmount } from '../training/session-view';
 import { supabase } from '../data/supabase';
 
 export interface CoachContext {
@@ -38,7 +39,14 @@ export interface CoachContext {
   weekTargetKm?: number;
   /** Longest easy run allowed, minutes */
   maxEasyMin?: number;
+  /** The niggle from Body check-ins (what Training shows), with what the rule does about it */
+  niggle?: { label: string; pain: number; rule: string };
+  /** The AI is answering and the runner has Strava runs: readiness and week totals (which include them) are not told */
+  stravaHidden?: boolean;
 }
+
+/** What the coach can't see when Strava runs are left out, said the same way every time */
+export const STRAVA_HIDDEN = "I can't see your Strava runs; your totals on Training include them.";
 
 export interface CoachProposal { kind: 'move' | 'swap'; sessionId: string; toDate?: string; swap?: 'shorter' | 'easy'; label: string }
 export interface CoachReply { text: string; facts: string[]; proposal?: CoachProposal }
@@ -52,14 +60,16 @@ export function buildFacts(c: CoachContext): string[] {
   if (c.profile.experience === 'new') f.push(`New runner on a run/walk starter plan. Sessions done so far: ${c.planSessionsDone} of ${c.planSessionsTotal} due.`);
   if (c.planStart && c.planStart > ymd(c.today)) f.push(`The training plan starts ${longDate(parseYmd(c.planStart))}; no plan sessions are due yet.`);
   else if (c.planSessionsTotal) f.push(`Plan sessions due so far: ${c.planSessionsDone} of ${c.planSessionsTotal} done.`);
-  f.push(`Readiness: ${c.readiness.label}. ${c.readiness.summary} Based on: ${c.readiness.basedOn.join('; ')}.`);
+  if (c.stravaHidden) f.push(`The runner's Strava runs are not shared with you, so their readiness score and this week's distance are not given here. If asked about either, say: "${STRAVA_HIDDEN}" and point them to Training. Never guess a readiness score or a weekly total.`);
+  else f.push(`Readiness: ${c.readiness.label}. ${c.readiness.summary} Based on: ${c.readiness.basedOn.join('; ')}.`);
+  if (c.niggle) f.push(`Current niggle (from the runner's Body check-ins): ${c.niggle.label}, pain ${c.niggle.pain}/10. What the plan does: ${c.niggle.rule} The runner can always choose to be more careful than this.`);
   if (c.todaySession) {
     const s = c.todaySession;
-    f.push(`Today's planned session: ${s.title} (${s.focus}), ${s.distanceM ? `${(s.distanceM / 1000).toFixed(1)} km` : s.durationS ? `${Math.round(s.durationS / 60)} minutes` : 'no running'}, phase ${PHASE_LABEL[s.phase]}. Purpose: ${s.purpose} Steps: ${s.steps.map((x) => `${x.label} ${x.detail}`).join('; ')}.`);
+    f.push(`Today's planned session: ${s.title} (${s.focus}), ${sessionAmount(s, 'km') || 'no running'}, phase ${PHASE_LABEL[s.phase]}. Purpose: ${s.purpose} Steps: ${s.steps.map((x) => `${x.label} ${x.detail}`).join('; ')}.`);
   }
-  if (c.weekAhead?.length) f.push(`This week and next days: ${c.weekAhead.map((x) => `${longDate(parseYmd(x.date))}: ${x.type === 'rest' ? 'rest' : `${x.title}, ${(x.distanceM / 1000).toFixed(1)} km`}${x.status === 'done' ? ' (done)' : x.status === 'missed' ? ' (missed)' : ''}`).join('; ')}.`);
+  if (c.weekAhead?.length) f.push(`This week and next days: ${c.weekAhead.map((x) => `${longDate(parseYmd(x.date))}: ${x.type === 'rest' ? 'rest' : `${x.title}${x.distanceM || x.durationS ? `, ${sessionAmount(x, 'km')}` : ''}`}${x.status === 'done' ? ' (done)' : x.status === 'missed' ? ' (missed)' : ''}`).join('; ')}.`);
   if (c.nextSessions.length) f.push(`Next sessions: ${c.nextSessions.map((s) => `${longDate(parseYmd(s.date))} ${s.title}`).join('; ')}.`);
-  if (c.weekPlannedM > 0) f.push(`This week so far: ${(c.weekDoneM / 1000).toFixed(1)} km of ${(c.weekPlannedM / 1000).toFixed(1)} km planned.`);
+  if (c.weekPlannedM > 0) f.push(c.stravaHidden ? `This week's target: ${plannedNum(c.weekPlannedM, 'km')} km.` : `This week so far: ${(c.weekDoneM / 1000).toFixed(1)} km of a ${plannedNum(c.weekPlannedM, 'km')} km target.`);
   if (c.weekSessionsPlanned) f.push(`Sessions this week: ${c.weekSessionsDone} of ${c.weekSessionsPlanned} done.`);
   if (c.fitness && c.paces) {
     f.push(`Fitness estimate VDOT ${c.fitness.vdot.toFixed(1)}, based on ${c.fitness.basedOn} (confidence ${c.fitness.confidence}).`);
@@ -74,8 +84,9 @@ export function buildFacts(c: CoachContext): string[] {
     const a = c.last.activity, an = c.last.analysis;
     f.push(`Last run ${shortDate(new Date(a.startTime))}: ${(a.distanceM / 1000).toFixed(1)} km in ${duration(a.movingS)}, ${an.type}, score ${an.score}. ${an.scoreReason}`);
   }
-  const injuries = c.profile.injuries.filter((i) => i.status === 'current');
-  if (injuries.length) f.push(`Current injuries: ${injuries.map((i) => i.area).join(', ')}.`);
+  // Body check-ins are the current picture; injuries typed in at setup only count when there is no check-in
+  const injuries = c.niggle ? [] : c.profile.injuries.filter((i) => i.status === 'current');
+  if (injuries.length) f.push(`Injuries noted in the runner's profile: ${injuries.map((i) => i.area).join(', ')}.`);
   return f;
 }
 
@@ -115,8 +126,8 @@ export function localReply(q: string, c: CoachContext): CoachReply {
       lead = `Nothing was planned on ${dayName}. `;
       dayName = longDate(next);
     }
-    if (ses.type === 'rest') return { text: `${lead}${dayName} is a rest day. ${ses.purpose}`, facts: [...facts, `${dayName}: rest day.`] };
-    const km = (ses.distanceM / 1000).toFixed(1);
+    if (ses.type === 'rest') return isCrossTraining(ses) ? { text: `${lead}${dayName} is a cross-training day instead of a run. ${ses.purpose}`, facts: [...facts, `${dayName}: cross-training.`] } : { text: `${lead}${dayName} is a rest day. ${ses.purpose}`, facts: [...facts, `${dayName}: rest day.`] };
+    const km = String(plannedNum(ses.distanceM, 'km'));
     const parts = ses.steps.filter((x) => x.label !== 'Rest').map((x) => `${x.label} ${x.detail}`).join('; ');
     const wkShare = c.weekTargetKm ? ` That is ${Math.round(ses.distanceM / 10 / c.weekTargetKm)}% of this week's ${c.weekTargetKm} km.` : '';
     const limits = /(km|long|far|distance|so much|big)/.test(lower) && (ses.type === 'easy' || ses.type === 'recovery')
@@ -126,9 +137,13 @@ export function localReply(q: string, c: CoachContext): CoachReply {
       facts: [...facts, `${dayName}: ${ses.title}, ${km} km, ${Math.round(ses.durationS / 60)} min. Steps: ${parts}.`],
     };
   }
+  if (PAIN.test(lower) && c.niggle) {
+    // The same rule and words as Training and Plan changes
+    return { text: `Your ${c.niggle.label.toLowerCase()} is at ${c.niggle.pain}/10 in your last check-in. ${c.niggle.rule} You can always choose to be more careful than this on Training. Check in each day so the plan can follow how it feels. I can give coaching guidance, not medical advice: see a physio if it is not clearly better within a week or it changes how you run.`, facts };
+  }
   if (PAIN.test(lower)) {
     return {
-      text: `I am sorry you are dealing with that. I can give coaching guidance, not medical advice. Stop running if the pain is sharp, makes you limp or gets worse as you go, and see a physio or doctor if it lasts more than a few days. In the meantime, log it on your last session so I can keep the next days easy. ${s && s.type !== 'rest' ? `For today, swap ${s.title.toLowerCase()} for rest or a walk.` : 'Today is already a rest day, which helps.'}`,
+      text: `I am sorry you are dealing with that. I can give coaching guidance, not medical advice. Stop running if the pain is sharp, makes you limp or gets worse as you go, and see a physio or doctor if it lasts more than a few days. In the meantime, log it on your last session so I can keep the next days easy. ${s && s.type !== 'rest' ? `For today, swap ${s.title.toLowerCase()} for rest or a walk.` : 'Today is already a rest day, which helps.'} You can also check in under Body, so Training, the plan and I all work from the same picture.`,
       facts,
     };
   }
@@ -303,15 +318,19 @@ export async function askBody(q: string, facts: string[], history: { role: strin
 }
 
 /** Suggested questions that match today's session and what data exists. */
-export function suggestions(s: PlannedSession | undefined, hasRuns: boolean, o: { race?: string; nextQuality?: { day: string; short: string } } = {}): string[] {
+export function suggestions(s: PlannedSession | undefined, hasRuns: boolean, o: { race?: string; nextQuality?: { day: string; short: string }; niggle?: string } = {}): string[] {
+  // Written from today's real session, after every change (a cross-training day is not a rest day)
   const why = !s ? 'What should I do today?'
+    : isCrossTraining(s) ? 'Why cross-training today?'
     : s.type === 'rest' ? 'Why is today a rest day?'
     : s.type === 'easy' || s.type === 'recovery' ? 'Why is today easy?'
     : s.type === 'long' ? 'Why does the long run matter?'
     : s.type === 'runwalk' ? 'Why run/walk instead of running?'
     : s.type === 'race' ? 'How should I pace today?'
     : `Why is today ${s.focus.toLowerCase()}?`;
-  const out = [why, o.race ? `Am I on track for ${o.race}?` : 'Am I on track?'];
+  const out = [why];
+  if (o.niggle) out.push(`What can I do with my ${o.niggle.toLowerCase()}?`);
+  out.push(o.race ? `Am I on track for ${o.race}?` : 'Am I on track?');
   if (s && s.type !== 'rest') out.push('I only have 30 minutes, what should I do?');
   if (o.nextQuality) out.push(`Why ${o.nextQuality.short} on ${o.nextQuality.day}?`);
   if (hasRuns) out.push('How did my last run go?');

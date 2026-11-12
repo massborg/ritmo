@@ -7,7 +7,7 @@ import type { Analysis } from './analysis';
 import { TYPE_LABEL, STEADY_TYPES, EASY_FAMILY } from './analysis';
 import { predictTime, type TrainingPaces, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
-import { PB_DISTANCES, pbHistory } from './insights';
+import { PB_BASIS_LABEL, PB_DISTANCES, pbHistory } from './insights';
 import { weatherNote } from './weather';
 
 export interface RepStat { label: string; timeS: number; distanceM?: number; paceS?: number; avgHr?: number; inTarget?: boolean }
@@ -139,10 +139,10 @@ export function buildReport(o: {
   // ---- Badges and trend ----
   const badges: string[] = [];
   for (const d of PB_DISTANCES) {
-    if (a.distanceM < d.m) continue;
-    const h = pbHistory(all.filter((x) => x.startTime <= a.startTime), d.m);
+    if (a.distanceM < d.m * 0.98) continue;
+    const h = pbHistory(all.filter((x) => x.startTime <= a.startTime), d.m, o.race ? [o.race] : []);
     const last = h[h.length - 1];
-    if (last?.activityId === a.id && h.length > 1) badges.push(`New ${d.label} best effort: ${duration(last.timeS)}`);
+    if (last?.activityId === a.id && h.length > 1) badges.push(`New ${d.label} PB: ${duration(last.timeS)} (${PB_BASIS_LABEL[last.basis]})`);
   }
   const year = a.startTime.slice(0, 4);
   const sameType = all.filter((x) => x.id !== a.id && x.distanceM >= 2000 && o.typeOf(x) === type && x.startTime < a.startTime);

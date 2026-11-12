@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBody, redFlags, stepUnlocked, textRedFlags, type BodyCheckin } from './body';
+import { applyBody, painLevel, painRule, redFlags, stepUnlocked, textRedFlags, type BodyCheckin } from './body';
 import type { Plan, PlannedSession } from '../lib/types';
 
 const today = new Date('2026-11-09T09:00:00');
@@ -49,5 +49,30 @@ describe('Body plan changes', () => {
     expect(stepUnlocked(checkin({ pain: 1, when: ['worse-running'] }))).toBe(false);
     const p = applyBody(plan, { checkins: [], rtrStep: 2 }, today);
     expect(p.sessions.find((s) => /Return to run · step 2 of 6/.test(s.title))).toBeTruthy();
+  });
+  it('one rule set (update 3, §1.5): 0–2 easy running, 3–5 cross-train, 6+ rest and see a physio', () => {
+    expect([0, 1, 2, 3, 5, 6, 9].map((n) => painLevel(n))).toEqual(['easy', 'easy', 'easy', 'cross', 'cross', 'rest', 'rest']);
+    // Pain 1/10 keeps today's easy run (not cross-training), and this week's hard sessions become easy runs
+    const one = applyBody(plan, { checkins: [checkin({ pain: 1, area: 'Ankle', side: 'right', when: ['after'] })] }, today);
+    expect(one.sessions.some((s) => /Cross-training/.test(s.title))).toBe(false);
+    expect(one.sessions.find((s) => s.id === 's0')!.type).toBe('easy');
+    expect(one.sessions.find((s) => s.id === 's1')!.type).toBe('easy');
+    expect(one.sessions.find((s) => s.id === 's3')!.type).toBe('easy');
+    expect(one.changes.find((c) => c.reason === 'pain')!.summary).toBe(painRule(checkin({ pain: 1, area: 'Ankle', side: 'right' })).summary);
+    // 4/10: cross-training first
+    const four = applyBody(plan, { checkins: [checkin({ pain: 4 })] }, today);
+    expect(four.sessions.find((s) => s.id === 's0')!.title).toBe('Cross-training instead of running');
+    // 6/10: rest and see a physio
+    const six = applyBody(plan, { checkins: [checkin({ pain: 6 })] }, today);
+    expect(six.sessions.find((s) => s.id === 's0')!.title).toBe('Rest: see a physio');
+    expect(six.changes.find((c) => c.reason === 'pain')!.summary).toMatch(/see a physio/);
+  });
+  it('the runner can always choose to be more careful (one step stricter, never looser)', () => {
+    const c = checkin({ id: 'c1', pain: 1 });
+    expect(painLevel(1, true)).toBe('cross');
+    expect(painLevel(8, true)).toBe('rest');
+    const p = applyBody(plan, { checkins: [c], careful: 'c1' }, today);
+    expect(p.sessions.find((s) => s.id === 's0')!.title).toBe('Cross-training instead of running');
+    expect(painRule(c, true).summary).toMatch(/you chose to be more careful/);
   });
 });

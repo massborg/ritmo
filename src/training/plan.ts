@@ -1,5 +1,6 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
 import { QUALITY_TYPES, SESSION_SHORT, sessionOutcome } from './analysis';
+import { groupIndex, groupRuns, type RunGroup } from './sessions';
 import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
 import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 
@@ -73,25 +74,33 @@ export function adaptPlan(opts: {
   }
   const used = new Set<string>();
 
-  // 1) Match completed runs to planned sessions (same day first, then the day after)
+  // 1) Match completed runs to planned sessions (update 3, §1.6). Runs less than 30 minutes apart are one session in
+  // parts (Strava runs too). The planned session is matched to the best-fitting part or session of its day: one that
+  // does what was planned first, then the closest distance. Other runs that day are extra. Today, a run that doesn't
+  // match yet is not judged until the day is over (another run may still come).
+  const units = groupRuns(activities, new Set(profile.splitRuns ?? []));
+  const unitOf = groupIndex(units);
+  const unitsOn = (d: string) => units.filter((g) => g.date === d && !used.has(g.id));
+  const repsDone = (g: RunGroup) => g.parts.some((p) => p.reps?.some((r) => r.kind === 'work' && r.timeS));
+  const fits = (s: PlannedSession, g: RunGroup) => repsDone(g) || sessionOutcome(s.type, typeOf(g.main)).status === 'done';
+  const best = (s: PlannedSession, gs: RunGroup[]) => [...gs].sort((x, y) => Number(fits(s, y)) - Number(fits(s, x)) || Math.abs(x.totalM - s.distanceM) - Math.abs(y.totalM - s.distanceM))[0];
   for (const s of plan.sessions) {
     if (s.type === 'rest' || s.date > t) continue;
-    // A run logged against this session ("I've done this run") completes it; otherwise the day's main run
-    // (the longest piece) does, not a warm-up or strides file
-    const longestFirst = (xs: Activity[]) => [...xs].sort((x, y) => y.distanceM - x.distanceM);
+    // A run logged against this session ("I've done this run", or "Change plan" on the day) completes it
     const linked = activities.find((a) => a.plannedSessionId === s.id && !used.has(a.id));
-    const pick = linked ?? longestFirst(byDate.get(s.date) ?? []).find((a) => !used.has(a.id))
-      ?? (byDate.get(ymd(addDays(parseYmd(s.date), 1))) ?? []).find((a) => !used.has(a.id) && !plan.sessions.some((o) => o.date === a.startTime.slice(0, 10) && o.type !== 'rest'));
+    const pick = (linked && unitOf.get(linked.id)) ?? best(s, unitsOn(s.date))
+      ?? unitsOn(ymd(addDays(parseYmd(s.date), 1))).find(() => !plan.sessions.some((o) => o.date === ymd(addDays(parseYmd(s.date), 1)) && o.type !== 'rest'));
+    if (pick && !linked && s.date === t && !fits(s, pick)) continue; // wait until the end of the day
     if (pick) {
       used.add(pick.id);
-      const ran = typeOf(pick);
+      const ran = typeOf(pick.main);
       // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
       // even if the average pace over the whole run (warm-up and jogs included) looks easy
-      const repsDone = !!pick.reps?.some((r) => r.kind === 'work' && r.timeS);
-      const outcome = repsDone ? { status: 'done' as const } : sessionOutcome(s.type, ran);
+      const outcome = repsDone(pick) ? { status: 'done' as const } : sessionOutcome(s.type, ran);
       s.status = outcome.status;
       s.swappedTo = outcome.status === 'swapped' ? ran : undefined;
-      s.completedActivityId = pick.id;
+      s.completedActivityId = pick.main.id;
+      s.completedParts = pick.parts.length > 1 ? pick.parts.map((a) => a.id) : undefined;
     } else if (s.date < t && s.status === 'planned') {
       s.status = 'missed';
     }

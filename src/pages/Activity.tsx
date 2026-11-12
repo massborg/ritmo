@@ -51,7 +51,8 @@ const AREAS = ['Foot', 'Ankle', 'Achilles', 'Left calf', 'Right calf', 'Shin', '
 
 function FeedbackForm({ activityId, existing, onSave }: { activityId: string; existing?: SessionFeedback; onSave: (f: SessionFeedback) => void }) {
   const [feel, setFeel] = useState<number | undefined>(existing?.feel);
-  const [rpe, setRpe] = useState<number>(existing?.rpe ?? 5);
+  // Empty until the runner chooses (never a pre-filled 5)
+  const [rpe, setRpe] = useState<number | undefined>(existing?.rpe);
   const [pain, setPain] = useState<SessionFeedback['pain']>(existing?.pain ?? []);
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [saved, setSaved] = useState(false);
@@ -63,8 +64,10 @@ function FeedbackForm({ activityId, existing, onSave }: { activityId: string; ex
         <div className="row wrap">{FEELS.map((f, i) => <button type="button" key={f} className="chip" aria-pressed={feel === i + 1} onClick={() => setFeel(i + 1)}>{f}</button>)}</div>
       </fieldset>
       <div className="field">
-        <label htmlFor="rpe">Effort, 1 to 10: <span className="stat">{rpe}</span></label>
-        <input id="rpe" type="range" min={1} max={10} value={rpe} onChange={(e) => setRpe(Number(e.target.value))} style={{ minHeight: 44, accentColor: 'var(--brand)' }} />
+        <span className="label" id="rpe-label">Effort, 1 easy to 10 all out{rpe ? <>: <span className="stat">{rpe}</span></> : <span className="caption"> (not chosen)</span>}</span>
+        <div className="row wrap effort-chips" role="group" aria-labelledby="rpe-label" style={{ gap: 6 }}>
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <button type="button" key={n} className="chip effort-chip" aria-pressed={rpe === n} onClick={() => setRpe(rpe === n ? undefined : n)}>{n}</button>)}
+        </div>
       </div>
       <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="label">Any pain or niggles?</legend>
@@ -138,6 +141,8 @@ export default function ActivityPage() {
   const easyLike = EASY_FAMILY.includes(an.type);
   // What happens to the plan: the plan-change entry for a swapped session, otherwise the tip for the next one
   const swapped = an.swappedFrom && plan?.sessions.find((x) => x.id === an.swappedFrom!.id);
+  // "Next session" belongs to recent runs only (the last 2 days), not to a race from September
+  const recentRun = Math.abs(today.getTime() - new Date(a.startTime).getTime()) <= 2 * 86400000 + 12 * 3600000;
   const planLine = (swapped && plan ? swapLine({ ...swapped, swappedTo: swapped.swappedTo ?? an.type }, a, plan.sessions) : undefined) || rep.nextTip;
   // The max heart rate check (section 8.2): only on runs with heart rate, when the settings look too low
   const showHrCheck = !!hrIssue && !!a.avgHr && data.mode === 'real';
@@ -227,8 +232,8 @@ export default function ActivityPage() {
       {a.streams?.some((p) => p.lat != null && p.lon != null) && <RouteMap points={a.streams} byPace weather={weatherChip} />}
       <div className="stack-sm">
         <p className="caption row" style={{ gap: 6 }}><CalendarClock size={14} strokeWidth={2} aria-hidden="true" />{dateline}</p>
-        <label className="sr-only" htmlFor="run-title">Run title</label>
-        <input id="run-title" className="run-title-input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)}
+        {/* The field is named by the run itself ("Morning run"), not by the word "Run title" */}
+        <input id="run-title" className="run-title-input" aria-label={title || a.name} title="Tap to rename" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)}
           onBlur={() => { if (title.trim() && title !== a.name) renameRun(a.id, title); else setTitle(a.name); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
         <div className="row wrap" style={{ gap: 6 }}>
           {planTag ? <span className={`plan-tag ${planTag.cls}`}>{planTag.icon}{planTag.text}</span> : <span className="tag">{labelOf(a)}</span>}
@@ -323,7 +328,7 @@ export default function ActivityPage() {
             </div>
           )}
           {aRace && !easyLike && rep.goalNote && <><h2 className="label">What this means for your goal</h2><p>{rep.goalNote}</p></>}
-          {planLine && <><h2 className="label">{an.swappedFrom ? 'Your plan' : 'Next session'}</h2><p>{planLine}</p></>}
+          {planLine && recentRun && <><h2 className="label">{an.swappedFrom ? 'Your plan' : 'Next session'}</h2><p>{planLine}</p></>}
         </section>
       )}
 
@@ -367,7 +372,7 @@ export default function ActivityPage() {
         route: a.streams ? shareableRoute(a.streams) : null,
         splits: rep.reps.filter((r) => r.paceS).length >= 2 ? rep.reps.filter((r) => r.paceS).map((r, i) => ({ label: String(i + 1), paceS: r.paceS!, inTarget: r.inTarget })) : an.splits.slice(0, 20).map((x) => ({ label: String(x.index), paceS: x.paceS })),
         target: rep.target, splitsCaption: rep.reps.length >= 2 ? rep.verdict.split(':')[1]?.split(',')[0]?.trim() : `Splits per ${U}`,
-        pb: (() => { const b = rep.badges.find((x) => /best effort/.test(x)); const m = b?.match(/New (.+) best effort: (.+)$/); return m ? { label: m[1], time: m[2], race: a.isRace ? a.name : undefined } : undefined; })(),
+        pb: (() => { const b = rep.badges.find((x) => / PB: /.test(x)); const m = b?.match(/New (.+) PB: (\S+)/); return m ? { label: m[1], time: m[2], race: a.isRace ? a.name : undefined } : undefined; })(),
       }} /></Suspense>}
       {posting && !isStravaRun(a) && <PostToHub run={a} type={an.type} badges={rep.badges} compliance={rep.breakdown.find((b) => b.key === 'pace' && b.value === 100) ? 'All reps on target' : undefined} onClose={() => setPosting(false)} />}
 

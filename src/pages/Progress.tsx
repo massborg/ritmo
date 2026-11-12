@@ -11,7 +11,7 @@ import { Empty, Segmented } from '../components/ui';
 import { Sheet } from '../components/inputs';
 import { QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_SHORT, distanceLabel, duration, MONTHS, MONTHS_LONG, pace, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
-import { personalBests, raceReadiness } from '../training/insights';
+import { PB_BASIS_LABEL, personalBests, raceReadiness } from '../training/insights';
 import { predictRace } from '../training/fitness';
 import { TYPE_LABEL } from '../training/analysis';
 import { forStats } from '../data/quality';
@@ -188,6 +188,7 @@ function ProgressTab() {
               <span className="row-between"><span className="label">{short}</span>{pb && recent(pb.date) && <span className="tag-new">New</span>}</span>
               <span className="stat">{pb ? duration(pb.timeS) : '–'}</span>
               <span className="caption">{pb ? `${parseYmd(pb.date).getDate()} ${MONTHS[parseYmd(pb.date).getMonth()]} ${pb.date.slice(0, 4)}` : 'Not yet'}</span>
+              {pb && <span className="caption pb-basis">{PB_BASIS_LABEL[pb.basis]}</span>}
             </Link>
           ))}
         </div>

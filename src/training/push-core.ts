@@ -39,6 +39,14 @@ export const withDefaults = (r?: Partial<Reminders> | null): Reminders => ({ ...
 
 export interface PushSession { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }
 export interface PushMessage { title: string; body: string; url: string; tag: string }
+/** The app's adapted sessions for the coming days (after pain check-ins, a lighter week, travel...), saved with the profile */
+export interface PushAdapted { from: string; to: string; sessions: PushSession[] }
+
+/** The stored plan with the app's adapted sessions in place for the days they cover, so reminders match Training. */
+export function withAdapted(stored: PushSession[], hint?: PushAdapted): PushSession[] {
+  if (!hint?.sessions || !hint.from || !hint.to) return stored;
+  return [...stored.filter((s) => s.date < hint.from || s.date > hint.to), ...hint.sessions].sort((a, b) => a.date.localeCompare(b.date));
+}
 
 /** A reminder sent up to this long after its time (the server checks every 15 minutes), never twice a day. */
 export const LATE_WINDOW_MIN = 60;
@@ -65,7 +73,8 @@ export function isDue(time: string | null | undefined, minutes: number, today: s
   return minutes >= start && minutes < start + LATE_WINDOW_MIN;
 }
 
-const dist = (m: number, u: 'km' | 'mi') => { const v = u === 'mi' ? m / 1609.344 : m / 1000; return `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10} ${u}`; };
+// Same rounding as every screen in the app (one decimal, no trailing .0), so a reminder says what Training says
+const dist = (m: number, u: 'km' | 'mi') => { const v = u === 'mi' ? m / 1609.344 : m / 1000; return `${Math.round(v * 10) / 10} ${u}`; };
 const amount = (s: PushSession, u: 'km' | 'mi') => (s.distanceM > 0 ? dist(s.distanceM, u) : s.durationS > 0 ? `${Math.round(s.durationS / 60)} min` : '');
 
 /** Today's sessions that count for reminders: planned training, not rest. */

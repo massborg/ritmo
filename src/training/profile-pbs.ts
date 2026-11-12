@@ -15,7 +15,7 @@ export const MAX_PROFILE_PBS = 4;
 export interface PbChoice { m: number; mode: 'ritmo' | 'own'; timeS?: number; race?: string; date?: string }
 export interface HubPbSettings { show: boolean; items: PbChoice[] }
 /** A PB as other runners see it */
-export interface ShownPb { label: string; m: number; timeS: number; date?: string; race?: string; self?: boolean }
+export interface ShownPb { label: string; m: number; timeS: number; date?: string; race?: string; self?: boolean; basis?: 'official' | 'effort' }
 
 const near = (a: number, b: number) => Math.abs(a - b) / b < 0.005;
 export const labelOf = (m: number) => PROFILE_PB_DISTANCES.find((d) => near(d.m, m))?.label ?? `${Math.round(m / 100) / 10} km`;
@@ -45,7 +45,7 @@ export function resolvePbs(s: HubPbSettings | undefined, bests: Map<number, PB &
     const label = labelOf(c.m);
     if (c.mode === 'own') { if (c.timeS) out.push({ label, m: c.m, timeS: c.timeS, date: c.date || undefined, race: c.race || undefined, self: true }); continue; }
     const b = bests.get(c.m);
-    if (b) out.push({ label, m: c.m, timeS: Math.round(b.timeS), date: b.date, race: b.race });
+    if (b) out.push({ label, m: c.m, timeS: Math.round(b.timeS), date: b.date, race: b.race, basis: b.basis });
   }
   return out.length ? out : null;
 }

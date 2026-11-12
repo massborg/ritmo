@@ -1096,3 +1096,21 @@ li + li > .profile-run, li.profile-run + li.profile-run { border-top: 1px solid 
 .note-kind { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-raised); border: 1px solid var(--hairline); color: var(--ink); }
 .note-kind.note-ritmo { color: var(--brand); }
 .reminder-group { margin: var(--s3) 0 0; padding-top: var(--s3); border-top: 1px solid var(--hairline); }
+
+/* ---- Update 3, stage 1: one truth on every screen ---- */
+/* Quick run: a small outline button in the header (today's session card stays the only orange block) */
+.quick-run-btn { min-height: 44px; padding: 0 14px; gap: 6px; border-color: var(--ink); color: var(--ink); white-space: nowrap; }
+.quick-run-btn svg { color: var(--brand); }
+@media (max-width: 360px) { .quick-run-btn { padding: 0 10px; font-size: 13px; } }
+/* Weekly bar: anything over the target in words, and why a target was lowered */
+.week-over { color: var(--ink); font-weight: 600; margin-top: 4px; }
+.week-why { margin-top: 2px; }
+.week-why a { color: var(--brand-strong); font-weight: 600; }
+.week-target-line { margin: 0; }
+.body-rule { font-weight: 500; }
+/* Coach: what the answer used, as Training shows it */
+.based-on-line { margin-top: 8px; color: var(--ink); opacity: 0.85; }
+.pb-basis { font-size: 12px; }
+.effort-chip { min-width: 44px; }
+button.list-item { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.day-run-actions { margin-top: var(--s2); }

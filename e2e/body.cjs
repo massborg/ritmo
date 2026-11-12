@@ -50,7 +50,7 @@ const tap = (page, name) => page.getByRole('radio', { name, exact: true }).or(pa
   await tap(page, 'Gradually');
   await page.getByRole('button', { name: 'See what to do' }).click();
   await page.getByText('What Ritmo changes in your plan').waitFor();
-  check(await page.getByText(/Left calf pain 5\/10: running is replaced with cross-training/).filter({ visible: true }).first().isVisible(), 'a 5/10 calf check-in replaces runs with cross-training, with the reason');
+  check(await page.getByText(/Left calf pain 5\/10: cross-train instead of running for 3 days/).filter({ visible: true }).first().isVisible(), 'a 5/10 calf check-in replaces runs with cross-training, with the reason (the 3–5 rule)');
   check(await page.getByText(/no hills, spikes or fast strides/).filter({ visible: true }).first().isVisible(), 'and removes hills and strides');
   await page.getByRole('button', { name: 'Done' }).click();
   await page.goto(`${APP}/`); await page.waitForTimeout(800);

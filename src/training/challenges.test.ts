@@ -76,3 +76,17 @@ describe('challenges', () => {
     expect(badgeOf({ kind: 'distance', id: 'dist-150km-2026-11' })).toBe('challenge-generic');
   });
 });
+
+import { restoreFromPosts, catalogue as cat2 } from './challenges';
+describe('one challenge state (update 3, §1.8)', () => {
+  it('a challenge posted as completed is joined and completed, by id or by title for older posts', () => {
+    const nov = new Date('2026-11-20T10:00:00');
+    const c = cat2(nov).find((x) => x.kind === 'distance')!;
+    const byTitle = restoreFromPosts([], [{ title: `Completed: ${c.title}`, created_at: nov.toISOString(), stats: { type: 'challenge', badges: [c.title] } }]);
+    expect(byTitle?.[0].challenge.id).toBe(c.id);
+    expect(byTitle?.[0].completedAt).toBeTruthy();
+    const byId = restoreFromPosts([{ challenge: c, joinedAt: nov.toISOString() }], [{ title: 'x', created_at: nov.toISOString(), stats: { type: 'challenge', challengeId: c.id } }]);
+    expect(byId?.[0].completedAt).toBe(nov.toISOString());
+    expect(restoreFromPosts(byTitle!, [{ title: `Completed: ${c.title}`, created_at: nov.toISOString(), stats: { type: 'challenge', badges: [c.title] } }])).toBeUndefined();
+  });
+});

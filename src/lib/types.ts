@@ -203,8 +203,10 @@ export interface Profile {
   hub?: HubPrefs;
   /** Strava shoes matched to Ritmo shoes: Strava gear id → shoe id, or 'ignore' (not tracked) */
   gearMap?: Record<string, string>;
+  /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
+  splitRuns?: string[];
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
-  pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[] };
+  pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[]; sessions?: { from: string; to: string; sessions: { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }[] } };
   /** PBs on the Hub profile (off by default, up to 4 distances) */
   hubPbs?: import('../training/profile-pbs').HubPbSettings;
 }
@@ -322,6 +324,8 @@ export interface PlannedSession {
   /** done: run as planned. swapped: a quality session run easy instead (judged as what was run, not added back) */
   status: 'planned' | 'done' | 'swapped' | 'missed' | 'moved' | 'skipped';
   completedActivityId?: string;
+  /** All parts of a session in parts that completed it (runs less than 30 minutes apart) */
+  completedParts?: string[];
   /** For a swapped session: the type that was actually run */
   swappedTo?: SessionType;
   movedFrom?: string;
@@ -380,6 +384,8 @@ export interface CoachMessage {
   text: string;
   at: string;
   facts?: string[]; // data the answer is grounded on
+  /** The niggle, readiness and target the answer used, as Training shows them (update 3, §1.3) */
+  basedOn?: string[];
   /** Chats with sample data are kept apart from the runner's own */
   mode?: 'sample' | 'real';
   /** Body mode (injury and recovery chat), kept apart from the coach chat */

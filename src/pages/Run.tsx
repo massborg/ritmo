@@ -7,6 +7,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, ChevronRight, Flag, History, Lock, MapPin, Pause, Play, Settings2, Square, Unlock, Volume2, VolumeX } from 'lucide-react';
 import { get, set, del } from 'idb-keyval';
 import { useApp } from '../app/AppContext';
+import { plannedNum, structureLine } from '../training/session-view';
 import { fitView, mapsOn, prefetchTiles, setMapsOn, TILE } from '../lib/maptiles';
 import { AppHeader, WorkoutGraph, ZONE_OF } from '../components/app';
 import { Chips, Sheet } from '../components/inputs';
@@ -321,12 +322,12 @@ export default function RunPage() {
                 <div className="row-between"><span className="caption">{dayCaption(shown.date)}</span>{zone(shown) && <span className="zone-chip"><span className={`zone-dot z${zone(shown)}`} aria-hidden="true" />Z{zone(shown)} {ZONE_NAMES[zone(shown)! - 1]}</span>}</div>
                 <h2 className="title">{shown.title}</h2>
                 <div className="run-card-stats">
-                  <div><span className="caption">Distance</span><span className="stat">{shown.distanceM > 0 ? <>{(shown.distanceM / unitM).toFixed(1)}<small> {U}</small></> : '–'}</span></div>
+                  <div><span className="caption">Distance</span><span className="stat">{shown.distanceM > 0 ? <>{plannedNum(shown.distanceM, U)}<small> {U}</small></> : '–'}</span></div>
                   <div><span className="caption">{workStep(shown) ? 'Rep pace' : 'Target pace'}</span><span className="stat">{targetPace(shown)}<small>/{U}</small></span></div>
                   <div><span className="caption">Time</span><span className="stat">{durationWords(shown.durationS)}</span></div>
                 </div>
                 <WorkoutGraph session={shown} height={36} />
-                <p className="caption">{shown.steps.map((x) => x.label).join(' · ')}</p>
+                <p className="caption run-structure">{structureLine(shown)}</p>
                 <p className="run-tip"><strong>Coach tip: </strong>{shown.howItHelps || shown.purpose}</p>
               </section>
               {cards.length > 1 && (

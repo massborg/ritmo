@@ -24,7 +24,8 @@ import { weekReview } from '../training/report';
 import { explainWeek } from '../training/explain';
 import { shoeAlert, shoeTotals } from '../training/shoes';
 import { InstallPrompt } from '../components/InstallPrompt';
-import { activeNiggle, areaLabel, DISCLAIMER } from '../training/body';
+import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
+import { plannedNum } from '../training/session-view';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions, swapLine } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
@@ -54,11 +55,14 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
       <h2 id="body-card" className="label">{paused ? 'Training paused: get checked first' : n ? `${areaLabel(n)} · day ${dayN} · ${trend} · ${n.pain}/10` : `Return to run · step ${b!.rtrStep} of 6`}</h2>
       {paused ? <p>You reported a warning sign. See a doctor or physio, then confirm here to resume training.</p>
         : b?.rtrStep ? <p>Each step unlocks when pain stays at 2/10 or lower during the run and the next morning. Check in after each step.</p>
-        : <p>Your plan is adjusted. Check in each day so Ritmo can bring you back at the right pace.</p>}
+        : n && <p className="body-rule">{painRule(n, b?.careful === n.id).short} Check in each day so Ritmo can bring you back at the right pace.</p>}
       <div className="row wrap">
         {paused ? <button className="btn btn-primary btn-small" onClick={() => updateBody({ checkedAt: new Date().toISOString() })}>I have been checked by a professional</button>
           : <button className="btn btn-primary btn-small" onClick={onCheckIn}>Check in</button>}
         {!paused && n && n.pain <= 2 && !b?.rtrStep && <button className="btn btn-small" onClick={() => updateBody({ rtrStep: 1 })}>Start return to run</button>}
+        {!paused && n && !b?.rtrStep && painRule(n).level !== 'rest' && (b?.careful === n.id
+          ? <button className="btn btn-ghost btn-small" onClick={() => updateBody({ careful: undefined })}>Back to Ritmo's advice</button>
+          : <button className="btn btn-small" onClick={() => updateBody({ careful: n.id })}>Be more careful</button>)}
         {!paused && <Link to="/coach?mode=body" className="btn btn-ghost btn-small">Ask about it</Link>}
       </div>
       <p className="caption">{DISCLAIMER}</p>
@@ -103,6 +107,8 @@ export default function Today() {
   const swipe = useRef<number | undefined>(undefined);
   const latest = data.activities.length ? data.activities.reduce((m, x) => (x.startTime > m.startTime ? x : m)) : undefined;
   const { run: last } = useRunDetail(latest, data.mode === 'real');
+  // Quick run: a small outline button in the header, so today's session card is the only orange block
+  const quickButton = <Link to="/run?quick=1" className="btn btn-small btn-outline quick-run-btn" onClick={primeSpeech} aria-label="Quick run: start recording now, no plan needed"><Zap size={16} strokeWidth={2.2} aria-hidden="true" />Quick run</Link>;
   const logButton = <button className="icon-btn" aria-label="Add a run, cross-training, a note or a race" onClick={() => setAdding(true)}><Plus size={24} strokeWidth={2} /></button>;
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
@@ -168,12 +174,12 @@ export default function Today() {
   const insight = recentChange?.summary ?? lastRunNote;
 
   const sessionAmount = (x: PlannedSession) => x.distanceM > 0
-    ? <div><span className="stat-xl">{toUnit(x.distanceM, U).toFixed(x.distanceM % 1000 ? 1 : 0)}</span><span className="label"> {U}</span></div>
+    ? <div><span className="stat-xl">{plannedNum(x.distanceM, U)}</span><span className="label"> {U}</span></div>
     : <div><span className="stat-xl">{Math.round(x.durationS / 60)}</span><span className="label"> min</span></div>;
 
   return (
     <div className="stack-lg">
-      <AppHeader title="Training" eyebrow={subtitle} avatar right={<><SampleChip />{logButton}</>} />
+      <AppHeader title="Training" eyebrow={subtitle} avatar right={<><SampleChip />{data.mode === 'real' && quickButton}{logButton}</>} />
 
       {(plan || data.activities.length > 0) && (
         <div className="stack-sm"
@@ -201,17 +207,11 @@ export default function Today() {
             );
           })()}
           <SyncNote />
-          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} />}
+          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} />}
         </div>
       )}
       {/* Strava shoes not matched to a Ritmo shoe yet: asked once (also on Profile › Shoes) */}
       {isToday && (data.profile.shoes?.length ?? 0) > 0 && <GearQuestion />}
-      {isToday && data.mode === 'real' && (
-        <Link to="/run?quick=1" className="btn btn-primary btn-block quick-run" onClick={primeSpeech}>
-          <Zap size={22} strokeWidth={2.2} aria-hidden="true" />
-          <span className="quick-run-text"><span>Quick run</span><small>Start recording now, no plan needed</small></span>
-        </Link>
-      )}
       {isToday && (() => {
         const shoes = data.profile.shoes ?? [];
         if (!shoes.length) return null;
@@ -305,7 +305,7 @@ export default function Today() {
       {runsHere.length > 0 && (
         <section className="card stack-sm" aria-labelledby="ran-here">
           <h2 id="ran-here" className="label">{isToday ? 'Your runs today' : `Your runs on ${longDate(parseYmd(selected))}`}: {dist(runsHere.reduce((x, a) => x + a.distanceM, 0), U)}</h2>
-          <DayRuns runs={runsHere} unplanned={!s || s.type === 'rest'} />
+          <DayRuns runs={runsHere} unplanned={!s || s.type === 'rest'} session={s} />
         </section>
       )}
 

@@ -17,19 +17,25 @@ import { canRestore } from '../training/rebuild';
 import { findDuplicates } from '../data/quality';
 import { relTime } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
+import { plannedNum, sessionAmount } from '../training/session-view';
 
 const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'var(--success)' } as const;
 const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
 
 /** "This week  16.3 / 100 km" with a bar */
-export function WeekBar({ doneM, plannedM }: { doneM: number; plannedM: number }) {
-  const { data } = useApp();
+export function WeekBar({ doneM, plannedM, thisWeek }: { doneM: number; plannedM: number; thisWeek?: boolean }) {
+  const { data, weekTarget: wt } = useApp();
   const U = data.profile.units;
+  // Never past 100%: anything over the target is said in words
   const pct = plannedM > 0 ? Math.min(100, (doneM / plannedM) * 100) : 0;
+  const over = plannedM > 0 ? doneM - plannedM : 0;
+  const n = (m: number) => plannedNum(m, U);
   return (
     <div className="week-bar" aria-label="This week">
-      <div className="row-between"><span className="label">This week</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${toUnit(plannedM, U).toFixed(0)}` : ''} <small>{U}</small></span></div>
+      <div className="row-between"><span className="label">This week</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${n(plannedM)}` : ''} <small>{U}</small></span></div>
       {plannedM > 0 && <div className="week-bar-track" role="progressbar" aria-label="Distance this week" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: `${pct}%` }} /></div>}
+      {over >= 100 && <p className="caption week-over">+{n(over)} {U} over this week's target</p>}
+      {thisWeek && wt.lowered && plannedM > 0 && <p className="caption week-why">Lowered from {n(wt.originalM)} {U} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}. <a href="#changes" onClick={(e) => { e.preventDefault(); const el = document.getElementById('changes'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.closest('section')?.querySelector('details')?.setAttribute('open', ''); }}>Why?</a></p>}
     </div>
   );
 }
@@ -202,7 +208,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
           {s ? (
             <div className="stack-sm">
               <div className="row-between"><h3 className="title">{s.title}</h3><StatusChip s={s} /></div>
-              {s.type !== 'rest' && <p className="caption">{s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`} · {s.focus}{phase ? ` · ${PHASE_LABEL[phase.phase]} phase` : ''}</p>}
+              {s.type !== 'rest' && <p className="caption">{sessionAmount(s, U)} · {s.focus}{phase ? ` · ${PHASE_LABEL[phase.phase]} phase` : ''}</p>}
               <p>{s.purpose}</p>
               {s.type !== 'rest' && s.steps.length > 0 && <ol className="ol-steps caption">{s.steps.map((st, i) => <li key={i}><strong style={{ color: 'var(--ink)' }}>{localise(st.label, U)}</strong> {localise(st.detail ?? '', U)}</li>)}</ol>}
             </div>
@@ -268,7 +274,7 @@ export function RestOfWeek({ from }: { from: string }) {
             <li key={d} data-drop-date={d} className={dropClass(d) || undefined}>
               <button className="rw-row" onClick={() => setOpen(d)} {...(canDrag ? handle(s!.id, s!.title) : {})}>
                 <span className="rw-day"><span className="label">{DAY_SHORT[weekday(parseYmd(d))]}</span><span className="caption">{parseYmd(d).getDate()}</span></span>
-                <span className="rw-main"><span className="label">{s ? s.title : 'Nothing planned'}</span>{s && s.type !== 'rest' && <span className="caption">{s.distanceM > 0 ? dist(s.distanceM, U, 0) : `${Math.round(s.durationS / 60)} min`}</span>}</span>
+                <span className="rw-main"><span className="label">{s ? s.title : 'Nothing planned'}</span>{s && s.type !== 'rest' && <span className="caption">{sessionAmount(s, U)}</span>}</span>
                 {z ? <span className="zone-chip"><span className={`zone-dot z${z}`} aria-hidden="true" />Z{z}</span> : s?.type === 'rest' ? <span className="caption">Rest</span> : null}
                 <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
               </button>
@@ -339,7 +345,7 @@ const REASON: Record<string, string> = { missed: 'Missed session', harder: 'Hard
 
 /** Plan changes: collapsed, with the latest change visible. Also the plan itself (phases, races, rebuild). */
 export function PlanChanges() {
-  const { data, plan, today, rebuildMyPlan, restorePreviousPlan } = useApp();
+  const { data, plan, today, rebuildMyPlan, restorePreviousPlan, weekTarget: wt } = useApp();
   const [msg, setMsg] = useState<string>();
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
@@ -353,6 +359,7 @@ export function PlanChanges() {
     <section className="card stack-sm plan-changes" aria-labelledby="changes">
       <h2 id="changes" className="title">Plan changes</h2>
       <p className="caption">Every change Ritmo makes is explained here.</p>
+      {wt.m > 0 && <p className="week-target-line"><span className="label">This week's target: {plannedNum(wt.m, data.profile.units)} {data.profile.units}</span>{wt.lowered && <span className="caption"> · lowered from {plannedNum(wt.originalM, data.profile.units)} {data.profile.units} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}</span>}</p>}
       {latest && <p><span className="caption">{shortDate(new Date(latest.at))} · {REASON[latest.reason] ?? ''}</span><br />{latest.summary}</p>}
       {canRestore(data.plan) && <div className="row wrap" style={{ gap: 8 }}><button className="btn btn-small" onClick={restorePreviousPlan}>Restore previous plan</button><span className="caption">Available for 24 hours after a rebuild.</span></div>}
       <details className="plan-more">

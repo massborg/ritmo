@@ -29,6 +29,8 @@ export interface BodyState {
   aiChat?: boolean;
   /** Prehab routine levels the runner set with too easy / just right / too hard */
   prehab?: Record<string, number>;
+  /** The check-in the runner chose to be more careful with than the rule (one step stricter) */
+  careful?: string;
 }
 
 const label = (c: Pick<BodyCheckin, 'area' | 'side'>) => `${c.side ? `${c.side[0].toUpperCase()}${c.side.slice(1)} ` : ''}${c.side ? c.area.toLowerCase() : c.area}`;
@@ -89,6 +91,26 @@ export const stepUnlocked = (c: BodyCheckin | undefined) => !!c && c.pain <= 2 &
 const HARD = ['threshold', 'vo2max', 'speed', 'hills', 'tempo', 'race', 'timetrial'];
 const isRun = (s: PlannedSession) => s.type !== 'rest';
 
+export type PainLevel = 'easy' | 'cross' | 'rest';
+const LEVELS: PainLevel[] = ['easy', 'cross', 'rest'];
+/** The one rule set (update 3, §1.5): 0–2 keep easy running, 3–5 cross-train, 6+ rest and see a physio. Being more
+ *  careful moves one step stricter, never looser. */
+export function painLevel(pain: number, careful = false): PainLevel {
+  const i = pain >= 6 ? 2 : pain >= 3 ? 1 : 0;
+  return LEVELS[Math.min(2, i + (careful ? 1 : 0))];
+}
+/** What the rule does for a check-in, in the words Training, the Coach and Plan changes all use. */
+export function painRule(c: BodyCheckin, careful = false): { level: PainLevel; days: number; summary: string; short: string } {
+  const where = label(c);
+  const level = painLevel(c.pain, careful);
+  const days = level === 'rest' ? 5 : level === 'cross' ? (c.pain >= 5 ? 3 : 2) : 0;
+  const by = careful ? ' (you chose to be more careful)' : '';
+  const short = level === 'easy' ? 'Keep running easy and flat: no hills or intervals.'
+    : level === 'cross' ? `Cross-train instead of running for ${days} days, then easy, flat running.`
+      : `Rest from running for ${days} days, and see a physio before you run again.`;
+  return { level, days, short, summary: `${where} pain ${c.pain}/10${by}: ${short.charAt(0).toLowerCase()}${short.slice(1)}${level === 'easy' ? ' Hard sessions this week become easy runs.' : ' The week after is lighter, with no hard sessions.'}` };
+}
+
 /** The plan with Body changes applied for the active niggle. Every change is logged with its reason. */
 export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Plan {
   const active = activeNiggle(b, today);
@@ -112,21 +134,23 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
   if (active) {
     const where = label(active);
     const area = active.area;
-    if (active.pain >= 4 || active.when.includes('worse-running') || active.when.includes('after')) {
-      // 4–6, or worse with running: cross-training for 2–5 days, then less volume
-      const days = active.pain >= 6 ? 5 : active.pain === 5 ? 3 : 2;
-      const until = ymd(addDays(parseYmd(active.at.slice(0, 10)), days));
-      for (const s of upcoming.filter((x) => x.date < until && isRun(x))) rest(s, 'Cross-training instead of running', `Bike, pool running or the elliptical for ${Math.min(45, Math.round(s.durationS / 60) || 40)} minutes at an easy effort, as long as it does not hurt. This keeps your fitness while the ${where.toLowerCase()} settles.`);
-      for (const s of upcoming.filter((x) => x.date >= until && x.date < ymd(addDays(parseYmd(until), 7)) && isRun(x))) {
-        if (HARD.includes(s.type)) easy(s, `An easy run instead of a hard session while your ${where.toLowerCase()} recovers.`, 0.6);
-        else Object.assign(s, { distanceM: Math.round(s.distanceM * 0.6), durationS: Math.round(s.durationS * 0.6) });
-      }
-      log(`body-cross:${active.id}`, `${where} pain ${active.pain}/10: running is replaced with cross-training for ${days} days, then the next week is about 40% lighter with no hard sessions.`);
-    } else {
-      // 1–3 and easing: keep easy runs, drop the next hard session, recheck tomorrow
-      const next = upcoming.find((x) => HARD.includes(x.type));
-      if (next) { easy(next, `Your ${where.toLowerCase()} is a little sore, so this hard session is an easy run. Check in again tomorrow.`); log(`body-easy:${active.id}`, `${where} pain ${active.pain}/10: the next hard session is an easy run. Check in again tomorrow.`); }
+    const rule = painRule(active, b?.careful === active.id);
+    const settle = ymd(addDays(parseYmd(active.at.slice(0, 10)), rule.days));
+    if (rule.level === 'rest') {
+      // 6+: rest from running, and see a physio
+      for (const s of upcoming.filter((x) => x.date < settle && isRun(x))) rest(s, 'Rest: see a physio', `Rest from running while your ${where.toLowerCase()} settles. Gentle walking is fine if it does not hurt. Please see a physio before you run again.`);
+    } else if (rule.level === 'cross') {
+      // 3–5: cross-training instead of running for a few days
+      for (const s of upcoming.filter((x) => x.date < settle && isRun(x))) rest(s, 'Cross-training instead of running', `Bike, pool running or the elliptical for ${Math.min(45, Math.round(s.durationS / 60) || 40)} minutes at an easy effort, as long as it does not hurt. This keeps your fitness while the ${where.toLowerCase()} settles.`);
     }
+    // Every level: easy, flat running only (no hard sessions, hills or intervals) for a week after that, and lighter after cross-training or rest
+    const easyUntil = ymd(addDays(parseYmd(rule.level === 'easy' ? active.at.slice(0, 10) : settle), 7));
+    for (const s of upcoming.filter((x) => x.date >= (rule.level === 'easy' ? t : settle) && x.date < easyUntil && isRun(x))) {
+      const k = rule.level === 'easy' ? 1 : 0.6;
+      if (HARD.includes(s.type)) easy(s, `An easy, flat run instead of a hard session while your ${where.toLowerCase()} settles.`, k === 1 ? 0.8 : k);
+      else if (k < 1) Object.assign(s, { distanceM: Math.round(s.distanceM * k), durationS: Math.round(s.durationS * k) });
+    }
+    log(`body-rule:${active.id}:${rule.level}`, rule.summary);
     // Location-aware: what each area should avoid for now
     const two = upcoming.filter((x) => parseYmd(x.date) <= addDays(today, 13));
     for (const s of two) {

@@ -94,7 +94,7 @@ describe('races and PB labels', () => {
 });
 
 describe('same-day sessions', () => {
-  it('groups warm-up, strides, race and cool-down files within 90 minutes; the race is the main run', async () => {
+  it('groups warm-up, strides, race and cool-down files less than 30 minutes apart; the race is the main run', async () => {
     const { groupRuns } = await import('./sessions');
     const at = (h: number, m: number) => `2026-11-01T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`;
     const part = (id: string, start: string, km: number, s: number) => ({ id, source: 'upload', sourceIds: {}, startTime: start, name: 'Run', sport: 'run', distanceM: km * 1000, durationS: s, movingS: s, detailScore: 3, importedAt: '' }) as Activity;

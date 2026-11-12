@@ -39,7 +39,7 @@ async function account(mock, ctx, email, flagged) {
   check(await other.page.locator('.tabbar a[href="/run"]').count() === 1, 'every runner has the Run tab (no flag needed)');
   const fitO = other.page.getByRole('button', { name: /Train 6 days a week/ });
   if (await fitO.isVisible().catch(() => false)) { await fitO.click(); await other.page.waitForTimeout(800); }
-  check(await other.page.locator('a.quick-run').isVisible(), 'Quick run is shown to every runner, not only flagged accounts');
+  check(await other.page.locator('a.quick-run-btn').isVisible(), 'Quick run is shown to every runner, not only flagged accounts');
   await other.page.goto(`${APP}/run`); await other.page.waitForTimeout(500);
   check(await other.page.getByText(/GPS ready|Searching for GPS|waiting for a better signal/).first().isVisible() && await other.page.getByText('Not available yet').count() === 0, 'and every runner can record (the Run page works without the flag)');
   await other.page.close();
@@ -108,7 +108,7 @@ async function account(mock, ctx, email, flagged) {
   check(!!row && err <= 0.02, `saved distance ${row?.distance_m} m vs ${counted} m run while recording (${(err * 100).toFixed(1)}% off)`);
   check(!!row?.streams?.length && row.streams.every((p) => p.lat != null), 'the route is saved with the run');
   check(errors.length === 0, `no errors ${errors.slice(0, 2).join(' | ')}`);
-  // Quick run on the Training page: orange, opens Run as a free run that starts by itself once GPS is ready
+  // Quick run on the Training page: a small outline button in the header, opens Run as a free run that starts by itself once GPS is ready
   const ctx3 = await b.newContext({ ...devices['Pixel 7'], geolocation: { latitude: LAT0, longitude: LON0, accuracy: 5 }, permissions: ['geolocation'] });
   await ctx3.addInitScript(() => { try { sessionStorage.setItem('ritmo:splash-shown', '1'); } catch { /* */ } });
   await mock.install(ctx3, SUPA);
@@ -116,19 +116,12 @@ async function account(mock, ctx, email, flagged) {
   await q.page.goto(`${APP}/`); await q.page.waitForTimeout(1200);
   const fit = q.page.getByRole('button', { name: /Train 6 days a week/ });
   if (await fit.isVisible().catch(() => false)) { await fit.click(); await q.page.waitForTimeout(800); }
-  const btn = q.page.locator('a.quick-run');
-  check(await btn.isVisible() && /Quick run/.test(await btn.innerText()), 'Training page shows a Quick run button');
-  const colours = await btn.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, brand: getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() }));
-  const rgb = (c) => { const m = c.match(/\d+/g); return m ? m.slice(0, 3).map(Number) : []; };
-  const [r, g, bl] = rgb(colours.bg);
-  check(r > 200 && g > 50 && g < 140 && bl < 60, `Quick run is orange (${colours.bg}, brand ${colours.brand})`);
-  // Orange in every theme, including dark and high contrast (whose brand colour is a dark red-brown)
-  for (const theme of ['dark', 'sole']) {
-    const c = await btn.evaluate((el, t) => { document.documentElement.dataset.theme = t; return getComputedStyle(el).backgroundColor; }, theme);
-    const [r2, g2, b2] = rgb(c);
-    check(r2 > 200 && g2 > 60 && g2 < 140 && b2 < 70, `Quick run stays orange in the ${theme === 'sole' ? 'high-contrast' : 'dark'} theme (${c})`);
-  }
-  await btn.evaluate(() => { delete document.documentElement.dataset.theme; });
+  const btn = q.page.locator('.appbar a.quick-run-btn').first();
+  check(await btn.isVisible() && /Quick run/.test(await btn.innerText()), 'Training page shows a Quick run button in the header');
+  // Update 3, §1.12: a small outline button, so today's session card is the only orange block
+  const colours = await btn.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, h: el.getBoundingClientRect().height }));
+  check(/rgba\(0, 0, 0, 0\)|transparent/.test(colours.bg) && colours.h <= 48, `Quick run is a small outline button, not an orange block (${colours.bg}, ${Math.round(colours.h)} px)`);
+  check(await q.page.locator('a.quick-run').count() === 0, 'the orange Quick run banner is gone');
   const top = await btn.boundingBox();
   check(top && top.y < (await q.page.viewportSize()).height * 0.6, 'Quick run is near the top of the page, without scrolling');
   await btn.click();
