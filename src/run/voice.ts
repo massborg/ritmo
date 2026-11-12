@@ -56,7 +56,13 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-export interface SpeakOptions { voiceURI?: string; rate?: number; /** Called when speech starts, or with the reason it failed */ onStart?: () => void; onError?: (why: string) => void }
+export interface SpeakOptions {
+  voiceURI?: string; rate?: number;
+  /** Called when speech starts, when it ends, or with the reason it failed */
+  onStart?: () => void; onEnd?: () => void; onError?: (why: string) => void;
+  /** Use the device's default voice (after the chosen voice failed) */
+  defaultVoice?: boolean;
+}
 
 /** Ask the device for its voices early (the Run screen calls this when it opens), so the first cue already has
  *  them: on iPhone the list is often empty for a moment, and anything spoken then uses the default voice. */
@@ -66,27 +72,54 @@ export function primeVoices(): void {
   void loadVoices();
 }
 
-/** Speak with the chosen voice (or the best one on the device when none is chosen). If the device has not listed
- *  its voices yet, never fall back to its default voice: unlock speech now (inside the tap) and speak as soon as the
- *  chosen voice is there. */
+/** The voice to use: the runner's choice, or the best English voice on the device */
+export function pickVoice<T extends VoiceLike>(all: T[], voiceURI?: string): T | undefined {
+  return (voiceURI && all.find((v) => v.voiceURI === voiceURI))
+    || (() => { const top = rankVoices(all, (typeof navigator !== 'undefined' && navigator.language) || 'en-GB')[0]; return top && all.find((v) => v.voiceURI === top.uri); })();
+}
+
+// Utterances being spoken are kept here: Chrome drops the events of an utterance that is garbage-collected
+// mid-sentence, and then a cue looks as if it never started.
+const live = new Set<SpeechSynthesisUtterance>();
+export const liveUtterances = () => live.size;
+
+/**
+ * Speak with the chosen voice (or the best one on the device). On iPhone speech only works if something is spoken
+ * inside a tap, and the voice list can be empty for a moment. Then a silent word is spoken now (inside the tap, which
+ * unlocks speech) and the cue as soon as the chosen voice is listed, never in the device's default voice unless it
+ * has no voice list at all. resume() first: iPhone can leave speech paused after the page was in the background,
+ * and then every cue queues up silently.
+ */
 let noVoiceList = false;
 export function speak(text: string, o: SpeakOptions = {}, waited = false): void {
   if (!('speechSynthesis' in window)) { o.onError?.('no speechSynthesis'); return; }
-  const all = window.speechSynthesis.getVoices();
-  if (!all.length && !waited && !noVoiceList) {
-    try { const unlock = new SpeechSynthesisUtterance(''); unlock.volume = 0; window.speechSynthesis.speak(unlock); } catch { /* */ }
-    // Once listed (or if the device has no voice list at all), speak: better the default voice than silence
+  const ss = window.speechSynthesis;
+  const all = ss.getVoices();
+  if (!all.length && !waited && !noVoiceList && !o.defaultVoice) {
+    unlockSpeech();
     void loadVoices().then((v) => { if (!v.length) noVoiceList = true; speak(text, o, true); });
     return;
   }
-  const chosen = (o.voiceURI && all.find((v) => v.voiceURI === o.voiceURI))
-    || (() => { const top = rankVoices(all, navigator.language || 'en-GB')[0]; return top && all.find((v) => v.voiceURI === top.uri); })();
+  const chosen = o.defaultVoice ? undefined : pickVoice(all, o.voiceURI);
   const u = new SpeechSynthesisUtterance(text);
-  if (chosen) { u.voice = chosen; u.lang = chosen.lang; } else u.lang = 'en-GB';
+  if (chosen) { u.voice = chosen; u.lang = chosen.lang; } else u.lang = (typeof navigator !== 'undefined' && /^en/i.test(navigator.language) && navigator.language) || 'en-GB';
   u.rate = o.rate ?? 1;
-  if (o.onStart) u.onstart = () => o.onStart?.();
-  if (o.onError) u.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled') o.onError?.(e.error || 'speech error'); };
-  try { window.speechSynthesis.speak(u); } catch (e) { o.onError?.((e as Error).message); }
+  u.onstart = () => o.onStart?.();
+  u.onend = () => { live.delete(u); o.onEnd?.(); };
+  u.onerror = (e) => { live.delete(u); if (e.error === 'interrupted' || e.error === 'canceled') o.onEnd?.(); else o.onError?.(e.error || 'speech error'); };
+  live.add(u);
+  try { ss.resume?.(); ss.speak(u); } catch (e) { live.delete(u); o.onError?.((e as Error).message); }
+}
+
+/** Inside a tap: a silent word, so the phone allows the cues that are spoken later from a timer */
+export function unlockSpeech(): void {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    window.speechSynthesis.resume?.();
+    window.speechSynthesis.speak(u);
+  } catch { /* cues are optional */ }
 }
 
 /** A short sample in the style of a real cue, for trying voices. */

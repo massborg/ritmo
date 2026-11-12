@@ -19,7 +19,9 @@ import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace,
 import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
 import { primeVoices, type SpeakOptions } from '../run/voice';
-import { cue, preloadClips, resetVoice, unlockClips } from '../run/cues';
+import { cue, resetVoice, unlockAudio } from '../run/cues';
+import { primeNativeVoice } from '../run/native-voice';
+import { hasBackgroundGps, watchGps } from '../run/native-gps';
 import { RunCheck } from '../components/RunCheck';
 import { PocketMode } from '../components/PocketMode';
 import { VoicePicker } from '../components/VoicePicker';
@@ -74,7 +76,8 @@ export default function RunPage() {
   const [locked, setLocked] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
   const [pocket, setPocket] = useState(false);
-  const [pocketNext, setPocketNext] = useState(() => { try { return localStorage.getItem('ritmo:run:pocket') !== 'off'; } catch { return true; } });
+  // Pocket mode is on by default in a browser (which stops when the screen locks); in the app locking is fine
+  const [pocketNext, setPocketNext] = useState(() => { const d = !hasBackgroundGps(); try { const v = localStorage.getItem('ritmo:run:pocket'); return v ? v === 'on' : d; } catch { return d; } });
   const [unfinished, setUnfinished] = useState<Saved>();
   const [stepIdx, setStepIdx] = useState(0);
   const stepStart = useRef({ s: 0, m: 0 });
@@ -100,21 +103,22 @@ export default function RunPage() {
   // An unfinished run saved on this device (the app closed or crashed mid-run)
   useEffect(() => { get(key).then((v) => { if (v) setUnfinished(v as Saved); }).catch(() => {}); }, [key]);
 
-  // GPS: watch position from the moment the tab opens, so the fix is ready by the time the runner starts
+  // GPS: watch position from the moment the tab opens, so the fix is ready by the time the runner starts. In the
+  // store app the watch switches to background tracking for the run, so it keeps going with the phone locked.
+  const recording = phase === 'running' || phase === 'countdown';
   useEffect(() => {
-    if (!('geolocation' in navigator)) { setGpsErr('This device has no GPS that Ritmo can use.'); return; }
-    const id = navigator.geolocation.watchPosition((p) => {
-      setAcc(p.coords.accuracy); setGpsErr(undefined);
-      if (!trackRef.current) setPos({ lat: p.coords.latitude, lon: p.coords.longitude });
+    if (!hasBackgroundGps() && !('geolocation' in navigator)) { setGpsErr('This device has no GPS that Ritmo can use.'); return; }
+    return watchGps((p) => {
+      setAcc(p.acc); setGpsErr(undefined);
+      if (!trackRef.current) setPos({ lat: p.lat, lon: p.lon });
       // While waiting to start, load the map around here so it is ready the moment the run begins
-      if (p.coords.accuracy <= 100) prefetchTiles(p.coords.latitude, p.coords.longitude);
+      if (p.acc <= 100) prefetchTiles(p.lat, p.lon);
       const t = trackRef.current;
       if (!t) return;
-      const next = addFix(t, { t: p.timestamp, lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, alt: p.coords.altitude, speed: p.coords.speed }, settings.autoPause);
+      const next = addFix(t, { t: p.t, lat: p.lat, lon: p.lon, acc: p.acc, alt: p.alt, speed: p.speed }, settings.autoPause);
       trackRef.current = next; setTrack(next);
-    }, (e) => setGpsErr(e.code === 1 ? 'Location is blocked. Allow location for Ritmo in your browser or phone settings.' : 'Searching for GPS…'), { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-    return () => navigator.geolocation.clearWatch(id);
-  }, [settings.autoPause]);
+    }, (e) => setGpsErr(e === 'denied' ? (hasBackgroundGps() ? 'Location is blocked. Allow location for Ritmo in your phone settings.' : 'Location is blocked. Allow location for Ritmo in your browser or phone settings.') : 'Searching for GPS…'), recording && hasBackgroundGps());
+  }, [settings.autoPause, recording]);
 
   // Keep the screen on while running (where the browser allows it)
   useEffect(() => {
@@ -166,7 +170,15 @@ export default function RunPage() {
   });
 
   // Load the device's voices as soon as the screen opens, so "5" at the start already uses the chosen voice
-  useEffect(() => { primeVoices(); }, []);
+  // A Quick run starts by itself once GPS is ready: check the voice afresh (the Quick run tap unlocked it), and
+  // let the first tap anywhere on this screen unlock speech and the clips too, whichever way the run starts
+  useEffect(() => {
+    primeVoices(); primeNativeVoice();
+    if (quick) resetVoice();
+    const first = () => { unlockAudio(); document.removeEventListener('click', first, true); document.removeEventListener('touchend', first, true); };
+    document.addEventListener('click', first, true); document.addEventListener('touchend', first, true);
+    return () => { document.removeEventListener('click', first, true); document.removeEventListener('touchend', first, true); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const begin = () => {
     // A later day's session started today is moved to today first (when the plan allows it), so the run links to it
     if (sessionPlan && sessionPlan.date !== t0 && plan && moveTargets(sessionPlan, today).includes(t0)) moveSession(sessionPlan.id, t0);
@@ -189,7 +201,7 @@ export default function RunPage() {
   // The Start tap: speak straight away (inside the tap), so the phone allows the cues that come later from a timer,
   // unlock the recorded clips, and show "Before you start"
   const openCheck = () => {
-    resetVoice(); unlockClips(); void preloadClips();
+    resetVoice(); unlockAudio();
     if (cues) void cue('Ready when you are.', voiceOpts);
     setCheckOpen(true);
   };
@@ -404,7 +416,7 @@ export default function RunPage() {
           : autoStart && !unfinished
           ? <div className="stack-sm" role="status">
               <StatusLine kind="info">Quick run: starts by itself as soon as GPS is ready.</StatusLine>
-              <button className="btn btn-primary btn-block run-start" onClick={() => { cancelQuick(); begin(); }}><Play size={24} strokeWidth={2} aria-hidden="true" />Start now</button>
+              <button className="btn btn-primary btn-block run-start" onClick={() => { cancelQuick(); resetVoice(); unlockAudio(); begin(); }}><Play size={24} strokeWidth={2} aria-hidden="true" />Start now</button>
               <button className="btn btn-ghost" onClick={cancelQuick}>Cancel</button>
             </div>
           : <div className="run-controls-row">

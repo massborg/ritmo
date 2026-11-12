@@ -7,7 +7,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   backgroundColor: '#E8480C',
   ios: { contentInset: 'never', backgroundColor: '#E8480C' },
-  android: { backgroundColor: '#E8480C' },
+  // useLegacyBridge: background location updates keep reaching the app after 5 minutes with the phone locked
+  android: { backgroundColor: '#E8480C', useLegacyBridge: true },
   plugins: {
     SplashScreen: {
       // The native splash shows the brand colour only; the animated "Run in" splash plays in the app.
