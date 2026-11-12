@@ -154,6 +154,8 @@ interface Ctx extends Derived {
   /** Bring back an imported run that was deleted ("Re-import" in Data sources) */
   restoreRun: (id: string) => void;
   setRunShoe: (id: string, shoeId: string | undefined) => void;
+  /** Which Ritmo shoe a pair of Strava shoes is (asked once), or 'ignore'; past and future runs with it follow */
+  answerGear: (gearId: string, choice: string) => void;
   renameRun: (id: string, name: string) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
@@ -445,7 +447,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const dv = byId.get(a.id);
           if (!dv) return a;
           const next = { ...a, derived: dv };
-          pushState.current.activities.set(a.id, actPrint(next)); // already saved by the server
+          // The server saved only the summary: the run counts as saved only if it already was, so a change made on
+          // this device in the meantime (a shoe, a name) is still sent
+          if (pushState.current.activities.get(a.id) === actPrint(a)) pushState.current.activities.set(a.id, actPrint(next));
           return next;
         }),
       }));
@@ -881,6 +885,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const patchRun = (id: string, patch: Partial<Activity>) => setData((d) => ({ ...d, activities: d.activities.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
   const setRunHidden = (id: string, hidden: boolean) => patchRun(id, { hidden: hidden || undefined });
   const setRunShoe = (id: string, shoeId: string | undefined) => patchRun(id, { shoeId });
+  const answerGear = (gearId: string, choice: string) => updateProfile({ gearMap: { ...(dataRef.current.profile.gearMap ?? {}), [gearId]: choice } });
+  // Runs logged with a pair of Strava shoes the runner matched count for that Ritmo shoe (unless they picked another)
+  useEffect(() => {
+    const map = data.profile.gearMap;
+    if (!map || !data.activities.some((a) => a.gear && !a.shoeId && map[a.gear.id] && map[a.gear.id] !== 'ignore')) return;
+    const shoes = new Set((data.profile.shoes ?? []).map((s) => s.id));
+    setData((d) => ({ ...d, activities: d.activities.map((a) => {
+      const to = a.gear && !a.shoeId ? map[a.gear.id] : undefined;
+      return to && to !== 'ignore' && shoes.has(to) ? { ...a, shoeId: to } : a;
+    }) }));
+  }, [data.activities, data.profile.gearMap, data.profile.shoes]);
   const renameRun = (id: string, name: string) => { const n = name.trim().slice(0, 120); if (n) patchRun(id, { name: n }); };
   /** Correct a run's time (a mistyped manual entry, e.g. 75 seconds for 75 minutes). Only for runs without a GPS track. */
   const fixRunTime = (run: Activity, seconds: number) => patchRun(run.id, { movingS: seconds, durationS: Math.max(seconds, run.durationS === run.movingS ? seconds : run.durationS) });
@@ -1226,7 +1241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

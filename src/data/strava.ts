@@ -15,6 +15,9 @@ const supabase = () => {
 /** Fields of a Strava DetailedActivity that Ritmo uses. */
 export interface StravaActivity {
   id?: number | string;
+  /** The shoes the run was logged with on Strava (detailed activity) */
+  gear?: { id?: string; name?: string } | null;
+  gear_id?: string | null;
   name?: string;
   sport_type?: string;
   type?: string;
@@ -78,6 +81,7 @@ export function stravaToActivity(a: StravaActivity, s: StravaStreams = {}): Acti
     ...(a.average_cadence ? { avgCadence: Math.round(a.average_cadence * 2) } : {}),
     ...(laps ? { laps } : {}), ...(streams ? { streams } : {}),
     ...(a.device_name ? { device: a.device_name } : {}),
+    ...(a.gear?.id || a.gear_id ? { gear: { id: String(a.gear?.id ?? a.gear_id), name: a.gear?.name?.trim() || '' } } : {}),
     detailScore: 0, importedAt: new Date().toISOString(),
   };
   run.detailScore = detailScore(run);

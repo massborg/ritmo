@@ -19,12 +19,20 @@ const loadRecent = (): string[] => { try { return JSON.parse(localStorage.getIte
 const saveRecent = (list: string[]) => { try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 6))); } catch { /* */ } };
 
 /** Why this runner is shown: the relationship, a shared club, or their club */
-function reasonFor(p: HubProfile, uid: string, follows: hub.Follow[], sharedClub: Map<string, string>): string | undefined {
+const shortDay = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+/** Why this runner is shown, most personal first: they follow you, runners you follow follow them, the same race,
+ *  the same club, the same area, or their club */
+function reasonFor(p: HubProfile, uid: string, follows: hub.Follow[], sharedClub: Map<string, string>, why: Map<string, hub.RunnerReason>, names: Map<string, HubProfile>, myArea?: string | null): string | undefined {
   if (follows.some((f) => f.follower_id === p.user_id && f.followee_id === uid && f.status === 'accepted')) return 'Follows you';
   if (follows.some((f) => f.follower_id === p.user_id && f.followee_id === uid && f.status === 'pending')) return 'Asked to follow you';
+  const r = why.get(p.user_id);
+  if (r?.mutuals === 1 && r.followed_by && names.get(r.followed_by)) return `Followed by ${names.get(r.followed_by)!.display_name}`;
+  if (r && r.mutuals > 1) return `${r.mutuals} mutual followers`;
+  if (r?.race_name && r.race_date) return `Also racing ${r.race_name} · ${shortDay(r.race_date)}`;
   const club = sharedClub.get(p.user_id);
   if (club) return `Also in ${club}`;
-  return p.club ?? undefined;
+  if (myArea && p.area && hub.searchName(p.area) === hub.searchName(myArea)) return `Runs near ${p.area}`;
+  return p.club ?? p.area ?? undefined;
 }
 
 function invite() {
@@ -46,8 +54,12 @@ export default function FindRunners() {
   const [suggested, setSuggested] = useState<HubProfile[]>([]);
   const [sharedClub, setSharedClub] = useState<Map<string, string>>(new Map());
   const [recent, setRecent] = useState<string[]>(loadRecent);
+  const [why, setWhy] = useState<Map<string, hub.RunnerReason>>(new Map());
+  const [whyNames, setWhyNames] = useState<Map<string, HubProfile>>(new Map());
+  const [myArea, setMyArea] = useState<string | null>();
   const input = useRef<HTMLInputElement>(null);
 
+  useEffect(() => { if (uid) void hub.myHubProfile(uid).then((p) => setMyArea(p?.area ?? null)).catch(() => undefined); }, [uid]);
   const loadFollows = useCallback(async () => { if (uid) setFollows(await hub.follows(uid).catch(() => [])); }, [uid]);
   useEffect(() => { void loadFollows(); }, [loadFollows]);
   useEffect(() => { input.current?.focus(); }, []);
@@ -88,6 +100,18 @@ export default function FindRunners() {
     return () => { live = false; clearTimeout(t); };
   }, [q, filter, uid]);
 
+  // Reasons for whoever is on screen (results and suggestions), with the names of runners you follow
+  const shownIds = useMemo(() => [...new Set([...res, ...suggested].map((p) => p.user_id))], [res, suggested]);
+  useEffect(() => {
+    if (!shownIds.length) return;
+    let live = true;
+    void hub.runnerReasons(shownIds).then(async (m) => {
+      const by = [...m.values()].map((r) => r.followed_by).filter((x): x is string => !!x);
+      const names = by.length ? await hub.profilesFor(by).catch(() => new Map<string, HubProfile>()) : new Map<string, HubProfile>();
+      if (live) { setWhy(m); setWhyNames(names); }
+    });
+    return () => { live = false; };
+  }, [shownIds.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const remember = (term: string) => { const t = term.trim(); if (!t) return; const next = [t, ...recent.filter((x) => x.toLowerCase() !== t.toLowerCase())]; setRecent(next.slice(0, 6)); saveRecent(next); };
   const row = (p: HubProfile) => (
     <li key={p.user_id} className="find-row">
@@ -95,7 +119,7 @@ export default function FindRunners() {
         <RunnerAvatar id={p.user_id} profile={p} />
         <span className="find-row-text">
           <span className="label">{p.display_name}</span>
-          {reasonFor(p, uid!, follows, sharedClub) && <span className="caption">{reasonFor(p, uid!, follows, sharedClub)}</span>}
+          {reasonFor(p, uid!, follows, sharedClub, why, whyNames, myArea) && <span className="caption">{reasonFor(p, uid!, follows, sharedClub, why, whyNames, myArea)}</span>}
         </span>
       </Link>
       <FollowStateButton other={p.user_id} name={p.display_name} follows={follows} onChange={() => { remember(q); void loadFollows(); }} />
