@@ -25,6 +25,7 @@ import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
+import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { activeNiggle, applyBody, areaLabel, painRule, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
@@ -130,7 +131,7 @@ interface Ctx extends Derived {
   deleteRace: (id: string) => void;
   logFeedback: (f: SessionFeedback) => void;
   buildMyPlan: () => string | undefined;
-  rebuildMyPlan: () => { ok: true } | { ok: false; message: string };
+  rebuildMyPlan: (o?: { from?: 'tomorrow'; why?: string }) => { ok: true } | { ok: false; message: string };
   restorePreviousPlan: () => void;
   markRebuildSeen: () => void;
   moveSession: (sessionId: string, toDate: string) => void;
@@ -162,6 +163,8 @@ interface Ctx extends Derived {
   renameRun: (id: string, name: string) => void;
   fixRunDistance: (run: Activity, distanceM: number) => void;
   resolveGap: (runId: string, index: number, addM?: number) => void;
+  editSession: (sessionId: string, e: SessionEdit) => void;
+  resetSession: (sessionId: string) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
   swap: (sessionId: string, kind: SwapKind) => void;
@@ -768,7 +771,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   /** "Save and rebuild my plan" when a plan exists: the past and (with "Next Monday") this week stay as they are,
    *  the old plan is kept 24 hours for "Restore previous plan", and the change is logged. On failure the old plan stays. */
-  const rebuildMyPlan = (): { ok: true } | { ok: false; message: string } => {
+  const rebuildMyPlan = (o: { from?: 'tomorrow'; why?: string } = {}): { ok: true } | { ok: false; message: string } => {
     const d = dataRef.current;
     if (!d.plan || (d.profile.experience === 'new' && !derived.stage.predictions)) {
       const m = buildMyPlan();
@@ -780,7 +783,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (r.problem) { setPlanProblem(r.problem); return { ok: false, message: 'Those settings do not fit safely yet. Your current plan is unchanged: choose one of the options below.' }; }
       if (!r.plan) return { ok: false, message: 'The plan could not be rebuilt. Your current plan is unchanged. Please try again.' };
       const today = d.mode === 'sample' ? new Date(`${SAMPLE_TODAY}T09:00:00`) : new Date();
-      const plan = mergeRebuild({ old: d.plan, fresh: r.plan, today, activities: d.activities, startMode: d.profile.training?.startMode ?? 'today' });
+      const plan = mergeRebuild({ old: d.plan, fresh: r.plan, today, activities: d.activities, startMode: o.from ?? d.profile.training?.startMode ?? 'today', why: o.why });
       setPlanProblem(undefined);
       setData((x) => ({ ...x, plan }));
       if (d.mode === 'real') void deleteOtherPlans(plan.id).catch(() => {});
@@ -927,6 +930,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const gpsGaps = x.gpsGaps.map((y, i) => (i === index ? { ...y, resolved: addM ? 'added' as const : 'kept' as const, ...(addM ? { addedM: Math.round(addM) } : {}) } : y));
     return addM && addM > 0 ? { ...x, gpsGaps, distanceM: Math.round(x.distanceM + addM), movingS: Math.round(x.movingS + gapS) } : { ...x, gpsGaps };
   }) }));
+  /** Change one session (update 3, §8): that day only, logged, with the plan's version kept for Reset to plan */
+  const editSession = (sessionId: string, e: SessionEdit) => setData((d) => {
+    if (!d.plan) return d;
+    const s = d.plan.sessions.find((x) => x.id === sessionId);
+    if (!s) return d;
+    const { session, summary } = applyEdit(s, e, derived.paces ?? trainingPaces(40));
+    return { ...d, plan: { ...d.plan, sessions: d.plan.sessions.map((x) => (x.id === sessionId ? session : x)), changes: [...d.plan.changes, { id: `edit:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary }] } };
+  });
+  const resetSession = (sessionId: string) => setData((d) => {
+    if (!d.plan) return d;
+    const s = d.plan.sessions.find((x) => x.id === sessionId);
+    if (!s?.edited) return d;
+    const back = resetEdit(s);
+    return { ...d, plan: { ...d.plan, sessions: d.plan.sessions.map((x) => (x.id === sessionId ? back : x)), changes: [...d.plan.changes, { id: `edit-reset:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary: `${back.title} on ${new Date(`${back.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} is back to the plan.` }] } };
+  });
   const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
   const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
@@ -1279,7 +1297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

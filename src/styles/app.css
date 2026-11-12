@@ -1137,3 +1137,15 @@ button.list-item { background: none; border: 0; color: inherit; font: inherit; c
 .pocket-unlock { position: absolute; bottom: calc(28px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 4px; color: #888; font: 500 15px/1.2 var(--font-body); }
 @media (max-width: 360px) { .pocket-big { font-size: 76px; } .pocket-mid { font-size: 32px; } }
 .gap-notice { border-left: 4px solid var(--warning, #c77700); }
+
+/* ---- Update 3, stage 3: choose your week, edit a session ---- */
+.week-days { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.week-day-row { display: grid; grid-template-columns: 96px 1fr auto; gap: var(--s2); align-items: center; }
+@media (max-width: 480px) { .week-day-row { grid-template-columns: 92px 1fr auto; } .week-plus-text { display: none; } .week-plus { min-width: 56px; padding: 0 10px; } }
+.week-day-row select { min-height: 44px; }
+.week-plus { white-space: nowrap; gap: 4px; }
+@media (max-width: 340px) { .week-day-row { grid-template-columns: 1fr auto; } .week-day-row label { grid-column: 1 / -1; } }
+.week-warnings { border-left: 4px solid var(--warning, #c77700); }
+.edit-delta { font-weight: 700; color: var(--ink); }
+.edit-impact { border-left: 4px solid var(--success, #2f9e5b); }
+.edit-impact.warn { border-left-color: var(--warning, #c77700); }

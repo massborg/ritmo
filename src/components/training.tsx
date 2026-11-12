@@ -18,6 +18,7 @@ import { findDuplicates } from '../data/quality';
 import { relTime } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
 import { plannedNum, sessionAmount } from '../training/session-view';
+import { EditSession } from './EditSession';
 
 const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'var(--success)' } as const;
 const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
@@ -191,6 +192,7 @@ function useMover() {
 export function SessionSheet({ date, onClose }: { date?: string; onClose: () => void }) {
   const { data, plan, today, swap } = useApp();
   const { tryMove, ui } = useMover();
+  const [editing, setEditing] = useState(false);
   const U = data.profile.units;
   if (!date) return ui;
   const s = plan?.sessions.find((x) => x.date === date);
@@ -208,12 +210,14 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
           {s ? (
             <div className="stack-sm">
               <div className="row-between"><h3 className="title">{s.title}</h3><StatusChip s={s} /></div>
+              {s.edited && <span className="tag edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
               {s.type !== 'rest' && <p className="caption">{sessionAmount(s, U)} · {s.focus}{phase ? ` · ${PHASE_LABEL[phase.phase]} phase` : ''}</p>}
               <p>{s.purpose}</p>
               {s.type !== 'rest' && s.steps.length > 0 && <ol className="ol-steps caption">{s.steps.map((st, i) => <li key={i}><strong style={{ color: 'var(--ink)' }}>{localise(st.label, U)}</strong> {localise(st.detail ?? '', U)}</li>)}</ol>}
             </div>
           ) : !runs.length && !race ? <p className="muted">Nothing planned.</p> : null}
           {runs.map((a) => <Link key={a.id} to={`/activity/${a.id}`} className="card card-link row-between"><span className="label">{a.name}</span><span className="stat">{dist(a.distanceM, U)}</span></Link>)}
+          {open && <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setEditing(true)}>Edit this session</button>}
           {open && targets.length > 0 && (
             <div className="stack-sm">
               <span className="label">Move to</span>
@@ -235,6 +239,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
           {plan && <p className="caption">Plan: {shortDate(parseYmd(plan.startDate))} to {shortDate(parseYmd(plan.endDate))}.</p>}
         </div>
       </Sheet>
+      {s && editing && <EditSession session={s} open onClose={() => { setEditing(false); onClose(); }} />}
     </>
   );
 }
@@ -341,7 +346,7 @@ export function MonthPlan({ initial }: { initial?: string }) {
   );
 }
 
-const REASON: Record<string, string> = { missed: 'Missed session', harder: 'Harder than planned', easier: 'Easier than planned', illness: 'Illness', 'race-date': 'Race date', moved: 'Moved', rebuilt: 'Plan update', pain: 'Pain logged', paces: 'Paces updated' };
+const REASON: Record<string, string> = { missed: 'Missed session', harder: 'Harder than planned', easier: 'Easier than planned', illness: 'Illness', 'race-date': 'Race date', moved: 'Moved', rebuilt: 'Plan update', pain: 'Pain logged', paces: 'Paces updated', edited: 'Your change' };
 
 /** Plan changes: collapsed, with the latest change visible. Also the plan itself (phases, races, rebuild). */
 export function PlanChanges() {

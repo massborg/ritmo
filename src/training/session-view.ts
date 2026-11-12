@@ -59,7 +59,7 @@ export const isCrossTraining = (s: Pick<PlannedSession, 'type' | 'title'>) => s.
 
 const REASON: Record<string, string> = {
   pain: 'of your niggle', illness: 'you were ill', missed: 'of missed sessions', easier: 'you asked for an easier week',
-  harder: 'you asked for a harder week', 'race-date': 'your race date changed', moved: 'sessions were moved', rebuilt: 'your plan was rebuilt', paces: 'your paces changed',
+  harder: 'you asked for a harder week', 'race-date': 'your race date changed', moved: 'sessions were moved', rebuilt: 'your plan was rebuilt', paces: 'your paces changed', edited: 'you changed a session',
 };
 
 export interface WeekTarget {

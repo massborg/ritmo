@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, MessageCircle, Play, Plus, Sparkles, Upload, Zap } from 'lucide-react';
+import { ArrowLeftRight, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, MessageCircle, Pencil, Play, Plus, Sparkles, Upload, Zap } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useRunDetail } from '../app/useRunDetail';
 import { DayRuns } from '../components/DayRuns';
@@ -26,6 +26,7 @@ import { shoeAlert, shoeTotals } from '../training/shoes';
 import { InstallPrompt } from '../components/InstallPrompt';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
 import { plannedNum } from '../training/session-view';
+import { EditSession } from '../components/EditSession';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
 import { missedKeySession, missedMoveOptions, swapLine } from '../training/plan';
 import type { PlannedSession } from '../lib/types';
@@ -90,6 +91,7 @@ export default function Today() {
   const [adding, setAdding] = useState(false);
   const [unwell, setUnwell] = useState(false);
   const [logSession, setLogSession] = useState<PlannedSession>();
+  const [editing, setEditing] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
   const [hurts, setHurts] = useState(false);
   const shiftDay = (n: number) => setSelected((d) => ymd(addDays(parseYmd(d), n)));
@@ -113,6 +115,7 @@ export default function Today() {
   const sheet = <>
     {logFor && <LogRunSheet open onClose={() => setLogFor(null)} session={logFor === 'free' ? undefined : logFor} />}
     {logSession && <LogSessionSheet session={logSession} onClose={() => setLogSession(undefined)} />}
+    {editing && <EditSession session={editing} open onClose={() => setEditing(undefined)} />}
     <QuickAdd open={adding} onClose={() => setAdding(false)} />
     {unwell && <NotFeeling onClose={() => setUnwell(false)} />}
   </>;
@@ -235,6 +238,7 @@ export default function Today() {
             <span className="label">{s.focus} · {PHASE_LABEL[s.phase]}</span>
           </div>
           <h2 id="session-title" className="display-lg">{s.title}</h2>
+          {s.edited && <span className="pill-on-brand edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
           {s.type !== 'rest' ? (
             <>
               <div className="row wrap" style={{ gap: 'var(--s5)', alignItems: 'flex-end' }}>
@@ -263,6 +267,7 @@ export default function Today() {
               : isToday && s.type !== 'rest' && s.status === 'planned'
                 ? <>
                     <Link to="/run" className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+                    <button className="btn" onClick={() => setEditing(s)}><Pencil size={18} strokeWidth={2} aria-hidden="true" />Edit</button>
                     <button className="btn" onClick={() => setSheetDay(s.date)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Swap</button>
                     <button className="btn btn-ghost" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I’ve done this run</button>
                   </>

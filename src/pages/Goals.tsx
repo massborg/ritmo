@@ -9,6 +9,7 @@ import { DAY_NAMES, DAY_SHORT, daysBetween, distanceLabel, shortDate, parseYmd, 
 import type { Injury, TrainingSettings } from '../lib/types';
 import { checkVolumeFit, resolveSettings, sessionCaps, splitWeek, weekRoles } from '../training/generator';
 import { forStats } from '../data/quality';
+import { WeekChooser, describeWeek } from '../components/WeekChooser';
 
 const MI = 1.609344;
 
@@ -64,7 +65,9 @@ export default function Goals() {
       // Rebuilding: say so, then show what changed on Training. On failure the old plan stays and the reason shows here.
       setBusy(true); setMsg(undefined);
       setTimeout(() => {
-        const r = rebuildMyPlan();
+        // A week of the runner's own rebuilds from tomorrow and says what they chose (update 3, §7)
+        const weekChanged = JSON.stringify(t.week ?? null) !== JSON.stringify(p.training?.week ?? null);
+        const r = weekChanged ? rebuildMyPlan({ from: 'tomorrow', why: t.week?.mode === 'custom' ? `You chose your week: ${describeWeek(t.week)}.` : 'Ritmo plans your week again.' }) : rebuildMyPlan();
         if (r.ok) nav('/?rebuilt=1');
         else { setBusy(false); setMsg(r.message); }
       }, 50);
@@ -119,6 +122,7 @@ export default function Goals() {
 
       <section className="card stack" aria-labelledby="days">
         <h2 id="days" className="title">Your week</h2>
+        <WeekChooser value={t.week} onChange={(w) => set({ week: w })} autoRoles={preview?.roles ?? weekRoles(resolved).roles} />
         <div className="preset">
           <div className="stack-sm" style={{ flex: 1 }}>
             <span className="label">{classic ? 'Preset in use: Classic week' : 'Apply preset: Classic week'}</span>
