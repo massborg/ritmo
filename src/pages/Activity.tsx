@@ -156,7 +156,8 @@ export default function ActivityPage() {
   const nextSession = plan?.sessions.find((x) => x.date > ymd(today) && x.type !== 'rest' && x.status === 'planned');
   const weatherChip = a.weather ? `${Math.round(a.weather.t)}°C · wind ${Math.round(a.weather.ws)} km/h` : undefined;
   const tabKeys = (e: KeyboardEvent, i: number) => {
-    const n = e.key === 'ArrowRight' ? (i + 1) % RUN_TABS.length : e.key === 'ArrowLeft' ? (i + RUN_TABS.length - 1) % RUN_TABS.length : -1;
+    // Arrow keys move between tabs (wrapping); Home and End jump to the first and last
+    const n = e.key === 'ArrowRight' ? (i + 1) % RUN_TABS.length : e.key === 'ArrowLeft' ? (i + RUN_TABS.length - 1) % RUN_TABS.length : e.key === 'Home' ? 0 : e.key === 'End' ? RUN_TABS.length - 1 : -1;
     if (n >= 0) { e.preventDefault(); setTab(RUN_TABS[n].id); document.getElementById(`run-tab-${RUN_TABS[n].id}`)?.focus(); }
   };
   const goFix = (anchor: string) => { setMenu(false); setTab('overview'); setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80); };
