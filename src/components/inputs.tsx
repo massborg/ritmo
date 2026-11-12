@@ -90,13 +90,17 @@ export function DateField({ label, value, onChange, min, id }: { label: string; 
 
 export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, unit, id, placeholder }: { label: string; value?: number; onChange: (v: number | undefined) => void; min?: number; max?: number; step?: number; unit?: string; id: string; placeholder?: string }) {
   const v = value ?? undefined;
-  const set = (n: number) => onChange(Math.min(max, Math.max(min, n)));
+  const dec = step % 1 !== 0;
+  // While typing a decimal ("8."), keep the text as typed
+  const [typed, setTyped] = useState<string>();
+  const set = (n: number) => onChange(Math.min(max, Math.max(min, dec ? Math.round(n * 10) / 10 : n)));
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <div className="stepper">
         <button type="button" className="icon-btn" aria-label={`Decrease ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) - step)}><Minus size={20} strokeWidth={2} /></button>
-        <input id={id} inputMode="numeric" className="stepper-input" value={v ?? ''} placeholder={placeholder} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value.replace(/\D/g, '')))} />
+        <input id={id} inputMode={dec ? 'decimal' : 'numeric'} className="stepper-input" value={typed ?? v ?? ''} placeholder={placeholder} onBlur={() => setTyped(undefined)}
+          onChange={(e) => { const x = dec ? e.target.value.replace(',', '.').replace(/[^\d.]/g, '') : e.target.value.replace(/\D/g, ''); if (dec) setTyped(x); onChange(x === '' || x === '.' ? undefined : Number(x)); }} />
         {unit && <span className="caption">{unit}</span>}
         <button type="button" className="icon-btn" aria-label={`Increase ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) + step)}><Plus size={20} strokeWidth={2} /></button>
       </div>

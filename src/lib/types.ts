@@ -256,6 +256,8 @@ export interface TrainingSettings {
   strengthPerWeek?: number;
   /** Plan length in weeks when there is no race */
   planWeeks?: number;
+  /** Choose your week (update 3, §7): Ritmo plans it, or the runner chooses each day */
+  week?: import('../training/week-choice').WeekChoice;
 }
 
 /** Temporary changes the runner asks for: easier sessions, no pace targets, or travel */
@@ -336,6 +338,8 @@ export interface PlannedSession {
   movedFrom?: string;
   /** A second, easy run the same day (doubles) */
   second?: { distanceM: number; durationS: number; title: string; detail: string };
+  /** The runner changed this session (update 3, §8): when, and what the plan had, for "Reset to plan" */
+  edited?: { at: string; original: Pick<PlannedSession, 'type' | 'title' | 'distanceM' | 'durationS' | 'steps' | 'paceTarget' | 'purpose' | 'focus' | 'hrZones'> };
   /** Strength and mobility added to this day */
   strength?: string;
 }
@@ -345,7 +349,7 @@ export type Phase = 'base' | 'build' | 'peak' | 'taper' | 'recovery' | 'race';
 export interface PlanChange {
   id: string;
   at: string; // ISO
-  reason: 'missed' | 'harder' | 'easier' | 'illness' | 'race-date' | 'moved' | 'rebuilt' | 'pain' | 'paces';
+  reason: 'missed' | 'harder' | 'easier' | 'illness' | 'race-date' | 'moved' | 'rebuilt' | 'pain' | 'paces' | 'edited';
   summary: string; // plain-English explanation shown to the runner
 }
 

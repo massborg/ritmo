@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Check, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { sessionAmount } from '../training/session-view';
+import { EditSession } from '../components/EditSession';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
@@ -28,7 +29,8 @@ const CONCEPTS: Record<string, string> = {
 export default function Planned() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { plan, data, moveSession, today, swap, readinessToday } = useApp();
+  const { plan, data, moveSession, today, swap, readinessToday, resetSession } = useApp();
+  const [editing, setEditing] = useState(false);
   const [params, setParams] = useSearchParams();
   const [warnMove, setWarnMove] = useState<string>();
   const s = plan?.sessions.find((x) => x.id === id);
@@ -62,7 +64,15 @@ export default function Planned() {
           {s.status === 'done' && <StatusLine kind="success">Completed</StatusLine>}
           {s.status === 'swapped' && <StatusLine kind="info">Swapped: run as an easy run instead</StatusLine>}
           {s.status === 'missed' && <StatusLine kind="warning">Missed</StatusLine>}
+          {s.edited && <span className="tag edited-tag">Your version</span>}
         </div>
+        {s.status === 'planned' && s.type !== 'rest' && s.type !== 'race' && (
+          <div className="row wrap" style={{ gap: 8 }}>
+            <button className="btn btn-small" onClick={() => setEditing(true)}>Edit</button>
+            {s.edited && <button className="btn btn-small btn-ghost" onClick={() => resetSession(s.id)}>Reset to plan</button>}
+          </div>
+        )}
+        {editing && <EditSession session={s} open onClose={() => setEditing(false)} />}
       </div>
 
       <div className="grid-2">

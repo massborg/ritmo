@@ -1,6 +1,7 @@
 // Plan generator: a weekly structure by role (long run, two quality sessions, easy days, rest), volume split
 // across sessions with hard caps, a check that the volume fits before anything is built, phases and tapers
 // by race distance, cutback weeks, and structured sessions whose distance and time always add up.
+import { applyWeekChoice, STRENGTH_ONLY, STRENGTH_PLUS, weekWarnings, type WeekChoice } from './week-choice';
 import type { Phase, Plan, PlannedSession, PlanWeek, Profile, Race, SessionStep, SessionType, TrainingSettings } from '../lib/types';
 import { addDays, DAY_NAMES, daysBetween, distanceLabel, duration, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 import type { TrainingPaces } from './fitness';
@@ -47,6 +48,8 @@ export interface Resolved {
   maxEasyMin: number; maxQualityMin: number; maxLongMin: number; startMode: 'today' | 'monday'; dc: DistanceClass;
   doubles: number[]; hardSessions: number; difficulty: 'easier' | 'normal' | 'harder'; longRunStyle: 'auto' | 'steady' | 'progressive' | 'fast-finish';
   strides: boolean; strengthPerWeek: number; planWeeks: number;
+  /** The week the runner chose (update 3, §7) */
+  week?: WeekChoice;
 }
 
 export function resolveSettings(profile: Profile, race: Race | undefined, recentWeeklyKm: number): Resolved {
@@ -68,6 +71,7 @@ export function resolveSettings(profile: Profile, race: Race | undefined, recent
     doubles: (t.doubles ?? []).filter((d) => available.includes(d) && d !== longDay), hardSessions: Math.max(0, Math.min(2, t.hardSessions ?? 2)),
     difficulty: t.difficulty ?? 'normal', longRunStyle: t.longRunStyle ?? 'auto', strides: t.strides ?? true,
     strengthPerWeek: Math.max(0, Math.min(3, t.strengthPerWeek ?? 0)), planWeeks: Math.max(4, Math.min(24, t.planWeeks ?? 12)),
+    week: t.week?.mode === 'custom' ? t.week : undefined,
   };
 }
 
@@ -276,6 +280,17 @@ function intervals(date: string, km: number, phase: Phase, ctx: Ctx, variant: nu
     'A higher ceiling makes race pace a smaller share of your maximum.', withWuCd(work, km, ctx), I, [5]);
 }
 
+/** A continuous tempo run: steady and strong, between marathon pace and threshold (chosen days, update 3 §7) */
+function tempo(date: string, km: number, phase: Phase, ctx: Ctx): PlannedSession {
+  const P: [number, number] = [ctx.paces.threshold[1], ctx.paces.marathon[0]];
+  const room = Math.max(2, km - 2 * wuMin(km));
+  const tk = Math.max(2, Math.min(phase === 'base' ? 6 : 10, Math.round(room)));
+  const work = st('work', tk, P, `${tk} km tempo`, `at ${PR(P)}, strong and steady, about the effort you could hold for 75 minutes`, [3, 4]);
+  return make(date, phase, 'tempo', `Tempo: ${tk} km`, 'Tempo',
+    'A sustained steady-hard run: teaches you to hold a strong rhythm for a long time.',
+    'Tempo running makes race pace feel more relaxed and builds stamina for the second half of a race.', withWuCd(work, km, ctx), P, [3, 4]);
+}
+
 function racePace(date: string, km: number, phase: Phase, ctx: Ctx, sharpener = false): PlannedSession {
   const pc = ctx.paces;
   const dc = ctx.dc;
@@ -382,8 +397,13 @@ export function generatePlan(input: GenInput): GenResult {
   const taperStart = raceDate ? addDays(raceDate, -TAPER_DAYS[r.dc]) : undefined;
   const preTaperWeeks = taperStart ? Math.max(0, Math.ceil(daysBetween(ws0, taperStart) / 7)) : totalWeeks;
   const weekPhases = phaseForWeeks(preTaperWeeks);
-  const { roles, warnings: roleWarn } = weekRoles(r);
-  warnings.push(...roleWarn);
+  const { roles: autoRoles, warnings: roleWarn } = weekRoles(r);
+  // The runner's own week, laid over Ritmo's (update 3, §7)
+  const chosen = applyWeekChoice(autoRoles, r.week);
+  const roles = chosen.roles;
+  const keepTypes = !!r.week && !r.week.adjustByPhase;
+  if (!r.week) warnings.push(...roleWarn);
+  else warnings.push(...weekWarnings(r.week, autoRoles));
   const caps = sessionCaps(r, paces);
   const counts = rolesCount(roles);
 
@@ -401,7 +421,7 @@ export function generatePlan(input: GenInput): GenResult {
     const vol = cutback ? normal * 0.8 : normal;
     if (cutback) phase = 'recovery';
     // One quality session in cutback weeks and for low-volume runners; the second slot becomes easy
-    const oneQ = cutback || vol < 25 || phase === 'base';
+    const oneQ = !keepTypes && (cutback || vol < 25 || phase === 'base');
     const nDoubles = r.doubles.filter((d) => roles[d] !== 'rest' && roles[d] !== 'long').length;
     const split = splitWeek(vol, oneQ ? Math.min(1, counts.nQ) : counts.nQ, counts.nEasy + nDoubles + (oneQ && counts.nQ > 1 ? 1 : 0), counts.hasLong, caps);
     const k = r.difficulty === 'easier' ? 1.02 : r.difficulty === 'harder' ? 0.99 : 1;
@@ -474,6 +494,7 @@ export function generatePlan(input: GenInput): GenResult {
       if (race && toRace === 0) s = raceDay(date, race, paces);
       else if (force === 'sharpener') s = racePace(date, Math.max(5, split.qKm * 0.7), 'taper', ctx, true);
       else if (race && toRace === 1) s = roles[d] !== 'rest' ? easyRun(date, Math.min(5, Math.max(3, split.easyKm * 0.4)), 'taper', ctx, { strides: true, title: 'Shakeout run with strides', why: 'A short, easy run with a few strides the day before the race keeps your legs fresh and loose.' }) : restDay(date, 'taper', 'The day before the race: rest, or a 15 minute walk.');
+      else if (role === 'rest' && chosen.strengthOnly[d] && !(raceDate && toRace <= 3)) s = { ...restDay(date, dayPhase, 'Strength only today, at a moderate effort. Treat the day as recovery.'), title: 'Strength (no run)', focus: 'Strength', strength: STRENGTH_ONLY };
       else if (role === 'rest') s = restDay(date, dayPhase);
       else if (role === 'long') {
         const km = dayPhase === 'taper' ? (toRace <= 6 ? Math.min(r.dc === 'M' ? 16 : 12, split.longKm * 0.55) : split.longKm * taperScale) : cutback ? split.longKm : split.longKm;
@@ -485,8 +506,14 @@ export function generatePlan(input: GenInput): GenResult {
         if (dayPhase === 'taper') {
           s = toRace <= 3 ? easyRun(date, Math.max(5, split.easyKm * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
             : toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true }); // race week has one sharpener (set above)
+        } else if (keepTypes && chosen.hardType[d]) {
+          // The runner chose this day's session: Ritmo fills in distance, reps and paces, and keeps the type
+          const kind = chosen.hardType[d], v = qVariant;
+          const mkC = (k: number) => (kind === 'intervals' ? intervals(date, k, phase, ctx, v) : kind === 'tempo' ? tempo(date, k, phase, ctx) : threshold(date, k, phase, ctx, v, phase === 'base'));
+          s = mkC(qKm);
+          rebuild.set(s.id, mkC);
         } else if (oneQ && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: !cutback && r.strides });
-        else if (phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: r.strides });
+        else if (!keepTypes && phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: r.strides });
         else {
           const v = qVariant, ww = w;
           const mkQ = (k: number) => (k < 5 ? easyRun(date, Math.max(2.5, k), phase, ctx, { strides: true, why: 'Your weekly volume is still small, so this is an easy run with a few relaxed strides instead of a hard session. Hard sessions come in as your weekly distance grows.' }) : phase === 'base' ? (ww % 2 === 0 ? threshold(date, k, phase, ctx, 0, true) : hills(date, k, phase, ctx))
@@ -517,8 +544,10 @@ export function generatePlan(input: GenInput): GenResult {
         if (km >= 4) x.second = { distanceM: Math.round(km * 1000), durationS: Math.round(km * mid(paces.easy)), title: 'Second run: easy', detail: `${km} km easy at ${PR(paces.easy)}, at least 4 hours after the first run` };
       }
     }
+    // Strength chosen as a second session on run days ("+ Strength"), never in the last 3 days before a race
+    if (r.week) for (const x of weekSessions) { const dw = weekday(parseYmd(x.date)); if (chosen.plusStrength[dw] && x.type !== 'rest' && x.type !== 'race' && !(raceDate && daysBetween(parseYmd(x.date), raceDate) <= 3)) x.strength = STRENGTH_PLUS; }
     // Strength and mobility: on hard days first, so easy days stay easy
-    if (r.strengthPerWeek > 0) {
+    if (r.strengthPerWeek > 0 && !r.week) {
       const order = [...weekSessions.filter((x) => ['threshold', 'vo2max', 'hills', 'tempo'].includes(x.type)), ...weekSessions.filter((x) => x.type === 'easy' || x.type === 'recovery')].filter((x) => x.phase !== 'taper');
       for (const x of order.slice(0, r.strengthPerWeek)) x.strength = '20 min strength and mobility after the run: squats, lunges, calf raises, hip bridges and a plank. Body weight is enough.';
     }
@@ -574,7 +603,8 @@ export function generatePlan(input: GenInput): GenResult {
   }
 
   // 3) Sanity checks: refuse to hand over a plan that breaks the rules
-  const issues = validatePlan(plan, paces);
+  // A week the runner chose may put hard days next to each other: that is a warning they saw, not a refusal
+  const issues = validatePlan(plan, paces).filter((x) => !(r.week && /two hard days back to back/.test(x)));
   if (issues.length) return { ok: false, problem: { kind: 'invalid', message: 'The plan did not pass its safety checks, so it was not saved. Please try different settings.', issues, options: [] } };
   return { ok: true, plan, warnings };
 }

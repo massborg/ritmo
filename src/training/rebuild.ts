@@ -33,14 +33,15 @@ const nextMonday = (d: Date) => addDays(startOfWeek(d), 7);
 const dayWord = (d: string) => parseYmd(d).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
 /** Combine the freshly generated plan with what must not change in the old one. */
-export function mergeRebuild(opts: { old?: Plan; fresh: Plan; today: Date; activities: Activity[]; startMode: 'today' | 'monday'; why?: string }): RebuiltPlan {
+export function mergeRebuild(opts: { old?: Plan; fresh: Plan; today: Date; activities: Activity[]; startMode: 'today' | 'monday' | 'tomorrow'; why?: string }): RebuiltPlan {
   const { old, fresh, activities } = opts;
   const today = parseYmd(ymd(opts.today));
   const t = ymd(today);
   const ranToday = activities.some((a) => !a.hidden && a.startTime.slice(0, 10) === t);
   // Where the new sessions begin
+  // "tomorrow": a changed week of the runner's own (update 3, §7) never touches today
   const start = opts.startMode === 'monday' && weekday(today) !== 0 ? ymd(nextMonday(today))
-    : ranToday ? ymd(addDays(today, 1)) : t;
+    : ranToday || opts.startMode === 'tomorrow' ? ymd(addDays(today, 1)) : t;
   const kept = (old?.sessions ?? []).filter((s) => s.date < start).map((s) => ({ ...s }));
   const added = fresh.sessions.filter((s) => s.date >= start);
   const sessions = [...kept, ...added].sort((a, b) => a.date.localeCompare(b.date));
