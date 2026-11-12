@@ -291,8 +291,9 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
   const [done, setDone] = useState<string>();
   const s = p.stats;
   const challenge = s.type === 'challenge';
+  const strength = s.type === 'strength';
   // A race is just "Race": no training zone next to it
-  const z = s.type && s.type !== 'race' && s.type !== 'challenge' ? ZONE_OF[s.type as SessionType] : undefined;
+  const z = s.type && s.type !== 'race' && s.type !== 'challenge' && s.type !== 'strength' ? ZONE_OF[s.type as SessionType] : undefined;
   const meta = [hub.whenLine(s.startedAt ?? p.created_at), s.device].filter(Boolean).join(' · ');
   const posted = s.startedAt && s.startedAt.slice(0, 10) !== p.created_at.slice(0, 10) ? `Posted ${ago(p.created_at)}` : undefined;
   const share = async () => {
@@ -315,7 +316,10 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
       </div>
       {menu && (
         <div className="row wrap hub-post-pad" style={{ gap: 6 }}>
-          {own ? <button className="btn btn-small" onClick={() => void onDelete()}>Delete post</button> : <>
+          {own ? <>
+            {(['followers', 'everyone', 'only_me'] as const).map((v) => <button key={v} className="btn btn-small" aria-pressed={p.visibility === v} onClick={() => { void hub.setPostVisibility(p.id, v).then(() => { setDone(v === 'only_me' ? 'Hidden: only you can see this post.' : `Now shown to ${v === 'everyone' ? 'everyone' : 'your followers'}.`); setMenu(false); }).catch(() => setDone('That did not work. Please try again.')); }}>{v === 'followers' ? 'Followers' : v === 'everyone' ? 'Everyone' : 'Only me (hide)'}</button>)}
+            <button className="btn btn-small" onClick={() => void onDelete()}>Delete post</button>
+          </> : <>
             <button className="btn btn-small" onClick={() => { void onReport('Reported from the feed'); setDone('Thanks, the post was reported.'); setMenu(false); }}>Report</button>
             <button className="btn btn-small" onClick={() => { void onBlock(); setMenu(false); }}>Block {author?.display_name ?? 'runner'}</button>
           </>}
@@ -331,7 +335,21 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
           {!challenge && (s.badges ?? []).map((b) => <span key={b} className="tag">{b}</span>)}
         </div>
         {p.body && <p>{p.body}</p>}
-        {challenge ? (
+        {strength ? (
+          <div className="stack-sm">
+            <div className="hub-stats">
+              <div><span className="caption">Time</span><span className="stat">{duration(Math.round(s.movingS))}</span></div>
+              <div><span className="caption">Exercises</span><span className="stat">{s.strength?.exercises ?? 0}</span></div>
+              <div><span className="caption">Sets</span><span className="stat">{s.strength?.sets ?? 0}</span></div>
+            </div>
+            {!!s.strength?.top.length && (
+              <ul className="hub-strength-box">
+                {s.strength.top.map((x) => <li key={x.name}><span>{x.name}</span><span className="caption">{x.dose}</span></li>)}
+                {s.strength.exercises > s.strength.top.length && <li className="caption">+ {s.strength.exercises - s.strength.top.length} more</li>}
+              </ul>
+            )}
+          </div>
+        ) : challenge ? (
           <div className="hub-badge-post">{s.badgeId && (BADGES as readonly string[]).includes(s.badgeId) ? <img className="badge-img badge-img-lg" src={badgeSrc(s.badgeId as BadgeId)} alt="" width={72} height={72} /> : <span className="badge-icon" aria-hidden="true"><Trophy size={26} strokeWidth={2} /></span>}<span className="stack-sm" style={{ gap: 2 }}><span className="label">{(s.badges ?? [])[0] ?? p.title}</span><span className="caption">Completed</span></span></div>
         ) : (
           <div className="hub-stats">

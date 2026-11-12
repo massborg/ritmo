@@ -25,6 +25,8 @@ const StravaCallback = lazyPage(() => import('./pages/StravaCallback'));
 const Privacy = lazyPage(() => import('./pages/Privacy'));
 const ActivityPage = lazyPage(() => import('./pages/Activity'));
 const PlannedPage = lazyPage(() => import('./pages/Planned'));
+const StrengthPlayerPage = lazyPage(() => import('./pages/StrengthPlayer'));
+const ProfileStrengthPage = lazyPage(() => import('./pages/ProfileStrength'));
 const RacePage = lazyPage(() => import('./pages/Race'));
 const RaceDay = lazyPage(() => import('./pages/RaceDay'));
 const Setup = lazyPage(() => import('./pages/Setup'));
@@ -275,6 +277,7 @@ function Shell() {
               <Route path="/calendar/:date" element={<ToDay />} />
               <Route path="/readiness" element={<ReadinessPage />} />
               <Route path="/session/:id" element={<PlannedPage />} />
+              <Route path="/strength/:id" element={<StrengthPlayerPage />} />
               <Route path="/activity/:id" element={<ActivityPage />} />
               <Route path="/race/:id" element={<RacePage />} />
               <Route path="/race/:id/day" element={<RaceDay />} />
@@ -294,6 +297,7 @@ function Shell() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/data" element={<DataSources />} />
               <Route path="/profile/shoes" element={<ProfileShoes />} />
+              <Route path="/profile/strength" element={<ProfileStrengthPage />} />
               <Route path="/profile/body" element={<ProfileBody />} />
               <Route path="/garmin/callback" element={<GarminCallback />} />
               <Route path="/strava/callback" element={<StravaCallback />} />

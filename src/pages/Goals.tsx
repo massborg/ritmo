@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
@@ -152,6 +152,7 @@ export default function Goals() {
         <Chips label="Long runs" value={t.longRunStyle ?? 'auto'} onChange={(v) => set({ longRunStyle: v })} options={[{ value: 'auto', label: 'By phase', sub: 'recommended' }, { value: 'steady', label: 'Steady' }, { value: 'progressive', label: 'Progressive' }, { value: 'fast-finish', label: 'Fast finish' }]} />
         <Chips label="Strides on easy days" value={t.strides === false ? 'off' : 'on'} onChange={(v) => set({ strides: v === 'on' })} options={[{ value: 'on', label: 'Yes' }, { value: 'off', label: 'No' }]} />
         <Chips label="Strength and mobility a week" value={t.strengthPerWeek ?? 0} onChange={(v) => set({ strengthPerWeek: v })} options={[0, 1, 2, 3].map((x) => ({ value: x, label: x ? `${x}` : 'None' }))} />
+        <p className="caption">{t.week?.mode === 'custom' ? 'You choose your strength days in "Your week" above.' : 'Placed away from hard days: more in the base phase, less near a race, none in the last 4 days before it.'} Equipment and exercises to leave out: <Link to="/profile/strength" className="label">Profile › Strength</Link>.</p>
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Second easy run on (doubles, for experienced high-volume runners)</legend>
           <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={(t.doubles ?? []).includes(i)} aria-label={`Double on ${DAY_NAMES[i]}`} disabled={i === longDay || !draft.daysAvailable.includes(i)} onClick={() => set({ doubles: (t.doubles ?? []).includes(i) ? (t.doubles ?? []).filter((x) => x !== i) : [...(t.doubles ?? []), i].sort() })}>{d}</button>)}</div>

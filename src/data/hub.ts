@@ -22,7 +22,7 @@ export interface HubProfile {
 
 /** "Żammit" → "zammit", "Ħal Far" → "hal far": lower case, no accents, single spaces */
 export const searchName = (s: string) => s.toLowerCase().replace(/ħ/g, 'h').replace(/ł/g, 'l').replace(/ø/g, 'o').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ').trim();
-export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string; /** Challenge posts: which medal to show */ badgeId?: string; /** Challenge posts: which challenge was completed */ challengeId?: string }
+export interface PostStats { distanceM: number; /** Watch or app that recorded it, e.g. "Garmin Forerunner 965" */ device?: string; movingS: number; paceS: number; /** When the run started (ISO), shown when it differs from the posting day */ startedAt?: string; elevGainM?: number; avgHr?: number; type?: string; typeLabel?: string; badges?: string[]; compliance?: string; /** Challenge posts: which medal to show */ badgeId?: string; /** Challenge posts: which challenge was completed */ challengeId?: string; /** Strength posts (update 3, §6) */ strength?: { exercises: number; sets: number; top: { name: string; dose: string }[] } }
 export interface Post {
   id: string; user_id: string; activity_id?: string | null; title: string; body?: string | null; visibility: Visibility;
   show_map: boolean; show_hr: boolean; stats: PostStats; route?: [number, number][] | null; city?: string | null;

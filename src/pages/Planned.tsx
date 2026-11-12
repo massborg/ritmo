@@ -4,6 +4,7 @@ import { Check, ArrowLeftRight } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { sessionAmount } from '../training/session-view';
 import { EditSession } from '../components/EditSession';
+import { StrengthCard } from '../components/StrengthSession';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
@@ -75,6 +76,7 @@ export default function Planned() {
         {editing && <EditSession session={s} open onClose={() => setEditing(false)} />}
       </div>
 
+      {s.strengthPlan && <StrengthCard session={s} />}
       <div className="grid-2">
         <section className="card stack">
           <h2 className="title">The session</h2>
@@ -86,7 +88,7 @@ export default function Planned() {
           )}
           <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
           {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
-          {s.strength && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
+          {s.strength && !s.strengthPlan && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
           {s.paceTarget && <div><p className="caption">Target pace</p><p className="stat">{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}
           {s.hrZones && <div className="stack-sm"><p className="caption">Heart rate</p><ZoneTag zones={s.hrZones} /></div>}
         </section>

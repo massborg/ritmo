@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import type { Activity, CoachMessage, Lap, LogEntry, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
+import type { Activity, CoachMessage, Lap, LogEntry, StrengthLog, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
 import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
@@ -26,6 +26,7 @@ import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
+import type { StrengthPlan } from '../training/strength';
 import { activeNiggle, applyBody, areaLabel, painRule, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
@@ -164,6 +165,10 @@ interface Ctx extends Derived {
   fixRunDistance: (run: Activity, distanceM: number) => void;
   resolveGap: (runId: string, index: number, addM?: number) => void;
   editSession: (sessionId: string, e: SessionEdit) => void;
+  updateLog: (id: string, patch: Partial<LogEntry>) => void;
+  saveStrength: (e: { date: string; minutes: number; rpe?: number; strength: StrengthLog }) => string;
+  setStrengthPrefs: (patch: Partial<NonNullable<Profile['strength']>>) => void;
+  editStrength: (sessionId: string, patch: Partial<StrengthPlan> | null, summary: string) => void;
   resetSession: (sessionId: string) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
   handleMissed: (sessionId: string, toDate?: string) => void;
@@ -961,6 +966,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateProfile({ adjust: { kind, from, until: ymd(addDays(derived.today, days - 1)), at: new Date().toISOString() } });
   };
   const addLog = (e: Omit<LogEntry, 'id' | 'at'>) => setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), { ...e, id: uid(), at: new Date().toISOString() }] } }));
+  const updateLog = (id: string, patch: Partial<LogEntry>) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).map((x) => (x.id === id ? { ...x, ...patch, strength: patch.strength ?? x.strength } : x)) } }));
+  /** A strength workout recorded in Ritmo or logged by hand (update 3, §5): saved with its sets, and the reps and load
+   *  of each exercise remembered for next time. Returns the log entry's id. */
+  const saveStrength = (e: { date: string; minutes: number; rpe?: number; strength: StrengthLog }): string => {
+    const id = uid();
+    setData((d) => {
+      const last = { ...(d.profile.strength?.last ?? {}) };
+      for (const x of e.strength.exercises) { const s0 = x.sets[x.sets.length - 1]; if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds }; }
+      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, last }, log: [...(d.profile.log ?? []), { id, date: e.date, kind: 'strength', minutes: e.minutes, rpe: e.rpe, at: new Date().toISOString(), strength: e.strength }] } };
+    });
+    return id;
+  };
+  const setStrengthPrefs = (patch: Partial<NonNullable<Profile['strength']>>) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, ...patch } } }));
+  /** Change one day's strength session (update 3, §8): its own exercise list, or another routine. Logged. */
+  const editStrength = (sessionId: string, patch: Partial<StrengthPlan> | null, summary: string) => setData((d) => {
+    if (!d.plan) return d;
+    const sessions = d.plan.sessions.map((x) => (x.id !== sessionId || !x.strengthPlan ? x : patch === null ? { ...x, strengthPlan: undefined, strength: undefined } : { ...x, strengthPlan: { ...x.strengthPlan, ...patch } }));
+    return { ...d, plan: { ...d.plan, sessions, changes: [...d.plan.changes, { id: `strength:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary }] } };
+  });
   const removeLog = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
@@ -1297,7 +1321,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

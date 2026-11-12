@@ -26,6 +26,8 @@ const CROSS_TRANSFER: Record<string, number> = { Bike: 0.7, Elliptical: 0.8, Swi
 /** Load for one cross-training entry from minutes and effort (1 easy, 10 all out), on the same scale
  *  as runs: an hour at effort 7 (about threshold) of running is about 100. */
 export function crossLoad(e: LogEntry): number {
+  // Strength counts as light load (update 3, §5): never as running
+  if (e.kind === 'strength' && e.minutes) return (e.minutes / 60) * 100 * (Math.min(10, Math.max(1, e.rpe ?? 5)) / 7) ** 2 * 0.4;
   if (e.kind !== 'cross' || !e.minutes) return 0;
   const rpe = Math.min(10, Math.max(1, e.rpe ?? 4));
   return (e.minutes / 60) * 100 * (rpe / 7) ** 2 * (CROSS_TRANSFER[e.sport ?? 'Other'] ?? 0.6);

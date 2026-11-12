@@ -19,6 +19,7 @@ import { relTime } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
 import { plannedNum, sessionAmount } from '../training/session-view';
 import { EditSession } from './EditSession';
+import { StrengthCard } from './StrengthSession';
 
 const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'var(--success)' } as const;
 const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
@@ -213,6 +214,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
               {s.edited && <span className="tag edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
               {s.type !== 'rest' && <p className="caption">{sessionAmount(s, U)} · {s.focus}{phase ? ` · ${PHASE_LABEL[phase.phase]} phase` : ''}</p>}
               <p>{s.purpose}</p>
+              {s.strengthPlan && <StrengthCard session={s} compact />}
               {s.type !== 'rest' && s.steps.length > 0 && <ol className="ol-steps caption">{s.steps.map((st, i) => <li key={i}><strong style={{ color: 'var(--ink)' }}>{localise(st.label, U)}</strong> {localise(st.detail ?? '', U)}</li>)}</ol>}
             </div>
           ) : !runs.length && !race ? <p className="muted">Nothing planned.</p> : null}

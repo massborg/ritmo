@@ -1,7 +1,8 @@
 // Plan generator: a weekly structure by role (long run, two quality sessions, easy days, rest), volume split
 // across sessions with hard caps, a check that the volume fits before anything is built, phases and tapers
 // by race distance, cutback weeks, and structured sessions whose distance and time always add up.
-import { applyWeekChoice, STRENGTH_ONLY, STRENGTH_PLUS, weekWarnings, type WeekChoice } from './week-choice';
+import { applyWeekChoice, weekWarnings, type WeekChoice } from './week-choice';
+import { ROUTINE_TITLE, type Intensity, type Routine } from './strength';
 import type { Phase, Plan, PlannedSession, PlanWeek, Profile, Race, SessionStep, SessionType, TrainingSettings } from '../lib/types';
 import { addDays, DAY_NAMES, daysBetween, distanceLabel, duration, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 import type { TrainingPaces } from './fitness';
@@ -413,6 +414,7 @@ export function generatePlan(input: GenInput): GenResult {
   const rate = RATE[r.progression];
   let normal = r.weeklyKm;
   let qVariant = 0;
+  let strengthN = 0;
   for (let w = 0; w < totalWeeks; w++) {
     const ws = addDays(ws0, w * 7);
     let phase: Phase = w < preTaperWeeks ? weekPhases[w] ?? 'peak' : 'taper';
@@ -494,7 +496,7 @@ export function generatePlan(input: GenInput): GenResult {
       if (race && toRace === 0) s = raceDay(date, race, paces);
       else if (force === 'sharpener') s = racePace(date, Math.max(5, split.qKm * 0.7), 'taper', ctx, true);
       else if (race && toRace === 1) s = roles[d] !== 'rest' ? easyRun(date, Math.min(5, Math.max(3, split.easyKm * 0.4)), 'taper', ctx, { strides: true, title: 'Shakeout run with strides', why: 'A short, easy run with a few strides the day before the race keeps your legs fresh and loose.' }) : restDay(date, 'taper', 'The day before the race: rest, or a 15 minute walk.');
-      else if (role === 'rest' && chosen.strengthOnly[d] && !(raceDate && toRace <= 3)) s = { ...restDay(date, dayPhase, 'Strength only today, at a moderate effort. Treat the day as recovery.'), title: 'Strength (no run)', focus: 'Strength', strength: STRENGTH_ONLY };
+      else if (role === 'rest' && chosen.strengthOnly[d] && !(raceDate && toRace <= 3)) s = { ...restDay(date, dayPhase, 'Strength only today, at a moderate effort. Treat the day as recovery.'), title: 'Strength (no run)', focus: 'Strength' };
       else if (role === 'rest') s = restDay(date, dayPhase);
       else if (role === 'long') {
         const km = dayPhase === 'taper' ? (toRace <= 6 ? Math.min(r.dc === 'M' ? 16 : 12, split.longKm * 0.55) : split.longKm * taperScale) : cutback ? split.longKm : split.longKm;
@@ -544,12 +546,49 @@ export function generatePlan(input: GenInput): GenResult {
         if (km >= 4) x.second = { distanceM: Math.round(km * 1000), durationS: Math.round(km * mid(paces.easy)), title: 'Second run: easy', detail: `${km} km easy at ${PR(paces.easy)}, at least 4 hours after the first run` };
       }
     }
-    // Strength chosen as a second session on run days ("+ Strength"), never in the last 3 days before a race
-    if (r.week) for (const x of weekSessions) { const dw = weekday(parseYmd(x.date)); if (chosen.plusStrength[dw] && x.type !== 'rest' && x.type !== 'race' && !(raceDate && daysBetween(parseYmd(x.date), raceDate) <= 3)) x.strength = STRENGTH_PLUS; }
-    // Strength and mobility: on hard days first, so easy days stay easy
-    if (r.strengthPerWeek > 0 && !r.week) {
-      const order = [...weekSessions.filter((x) => ['threshold', 'vo2max', 'hills', 'tempo'].includes(x.type)), ...weekSessions.filter((x) => x.type === 'easy' || x.type === 'recovery')].filter((x) => x.phase !== 'taper');
-      for (const x of order.slice(0, r.strengthPerWeek)) x.strength = '20 min strength and mobility after the run: squats, lunges, calf raises, hip bridges and a plank. Body weight is enough.';
+    // Strength (update 3, §4): on the days the runner chose, or placed automatically away from hard days. By phase:
+    // heavier in base, maintenance in build and peak, light in the taper, none in the last 4 days before the race.
+    // Never heavy leg work the day before intervals, threshold or the long run: that day gets core and hips instead.
+    {
+      const HARD_NEXT = ['threshold', 'vo2max', 'hills', 'tempo', 'long', 'race', 'timetrial'];
+      // The next day, also across the week boundary (Sunday before next Monday's session, from the week's roles)
+      const next = (x: PlannedSession): Pick<PlannedSession, 'type' | 'title'> | undefined => {
+        const n = weekSessions.find((y) => y.date === ymd(addDays(parseYmd(x.date), 1)));
+        if (n || weekday(parseYmd(x.date)) !== 6) return n;
+        const r0 = roles[0];
+        return r0 === 'long' ? { type: 'long', title: 'Long run' } : r0 === 'q1' || r0 === 'q2' ? { type: 'threshold', title: "Monday's hard session" } : undefined;
+      };
+      const nearRace = (x: PlannedSession) => !!raceDate && daysBetween(parseYmd(x.date), raceDate) <= 3;
+      const plan = (x: PlannedSession, only: boolean) => {
+        const toRace = raceDate ? daysBetween(parseYmd(x.date), raceDate) : 99;
+        const beforeHard = HARD_NEXT.includes(next(x)?.type ?? '');
+        const taper = x.phase === 'taper' || toRace <= 10;
+        const intensity: Intensity = taper || beforeHard ? 'light' : phase === 'base' ? 'heavy' : 'moderate';
+        const routine: Routine = taper ? (strengthN % 2 ? 'mobility' : 'core') : beforeHard ? 'core' : strengthN % 2 ? 'B' : 'A';
+        strengthN++;
+        const why = taper ? 'Light core and mobility to stay loose before your race, without tiring your legs.'
+          : beforeHard ? `Core and hips only: ${next(x)!.title.toLowerCase()} is tomorrow, so no heavy leg work today.`
+          : phase === 'base' ? 'Builds the strength in your legs, hips and core that lets you run more without injury.'
+          : 'Keeps the strength you have built while running is the priority.';
+        x.strengthPlan = { routine, intensity, why };
+        x.strength = `${ROUTINE_TITLE[routine]}${only ? ' (no run today)' : ' after the run'}: ${why}`;
+        if (only) Object.assign(x, { title: 'Strength (no run)', focus: 'Strength', purpose: `${why} Treat the day as recovery: stop well before you are tired.` });
+      };
+      if (r.week) {
+        for (const x of weekSessions) {
+          const dw = weekday(parseYmd(x.date));
+          if (nearRace(x)) continue;
+          if (x.title === 'Strength (no run)') plan(x, true);
+          else if (chosen.plusStrength[dw] && x.type !== 'rest' && x.type !== 'race') plan(x, false);
+        }
+      } else if (r.strengthPerWeek > 0) {
+        const ok = (x: PlannedSession) => !nearRace(x) && x.type !== 'race';
+        const easyFree = weekSessions.filter((x) => ok(x) && (x.type === 'easy' || x.type === 'recovery') && !HARD_NEXT.includes(next(x)?.type ?? ''));
+        const restFree = weekSessions.filter((x) => ok(x) && x.type === 'rest' && !HARD_NEXT.includes(next(x)?.type ?? ''));
+        const easyBefore = weekSessions.filter((x) => ok(x) && (x.type === 'easy' || x.type === 'recovery') && HARD_NEXT.includes(next(x)?.type ?? ''));
+        const picks = [...easyFree, ...restFree, ...easyBefore].slice(0, r.strengthPerWeek).sort((a, b) => a.date.localeCompare(b.date));
+        for (const x of picks) plan(x, x.type === 'rest');
+      }
     }
     // No run may be more than 35% of what the week actually adds up to (training weeks with 3+ runs)
     const runsIn = () => weekSessions.filter((x) => x.type !== 'rest');
