@@ -1,0 +1,49 @@
+diff --git a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
+index 7c19904..e4f2f97 100644
+--- a/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
++++ b/node_modules/@capacitor-community/text-to-speech/ios/Sources/TextToSpeechPlugin/TextToSpeech.swift
+@@ -12,16 +12,27 @@ enum QUEUE_STRATEGY: Int {
+ 
+     override init() {
+         super.init()
+-        self.synthesizer.usesApplicationAudioSession = false
++        // Ritmo patch: speak through the app's audio session, so the "playback" category applies. That category plays
++        // with the iPhone silent switch on and with the screen locked, and lowers (ducks) music while a cue plays.
++        self.synthesizer.usesApplicationAudioSession = true
+         self.synthesizer.delegate = self
+     }
+ 
+     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+         self.resolveCurrentCall()
++        self.releaseSession()
+     }
+ 
+     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+         self.resolveCurrentCall()
++        self.releaseSession()
++    }
++
++    // Ritmo patch: once nothing is left to say, give the audio back so music returns to full volume
++    private func releaseSession() {
++        if self.calls.isEmpty && !self.synthesizer.isSpeaking {
++            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
++        }
+     }
+ 
+     @objc public func speak(_ text: String, _ lang: String, _ rate: Float, _ pitch: Float, _ category: String, _ volume: Float, _ voice: Int, _ queueStrategy: Int, _ call: CAPPluginCall) throws {
+@@ -30,6 +41,15 @@ enum QUEUE_STRATEGY: Int {
+         }
+         self.calls.append(call)
+ 
++        // Ritmo patch: "playback" ignores the silent switch and keeps going in the background; music is ducked, not stopped
++        let session = AVAudioSession.sharedInstance()
++        if category == "playback" {
++            try? session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
++        } else {
++            try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
++        }
++        try? session.setActive(true)
++
+         let utterance = AVSpeechUtterance(string: text)
+         utterance.voice = AVSpeechSynthesisVoice(language: lang)
+         utterance.rate = adjustRate(rate)

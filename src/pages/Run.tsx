@@ -19,7 +19,7 @@ import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace,
 import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
 import { primeVoices, type SpeakOptions } from '../run/voice';
-import { cue, resetVoice, unlockAudio } from '../run/cues';
+import { cue, resetVoice, setVoiceSource, unlockAudio, type VoiceSource } from '../run/cues';
 import { primeNativeVoice } from '../run/native-voice';
 import { hasBackgroundGps, watchGps } from '../run/native-gps';
 import { RunCheck } from '../components/RunCheck';
@@ -31,7 +31,7 @@ type Phase = 'ready' | 'countdown' | 'running' | 'summary';
 type GoalKind = 'none' | 'distance' | 'time' | 'pace';
 /** "4:30" or "4.30" to seconds; undefined when it is not a pace */
 const parsePace = (x: string): number | undefined => { const m = x.trim().match(/^(\d{1,2})[:.](\d{2})$/); return m && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : undefined; };
-interface Settings { cues: 'km' | 'steps' | 'off'; countdown: 3 | 5 | 10; autoPause: boolean; screenOn: boolean; voiceURI?: string; rate: number }
+interface Settings { cues: 'km' | 'steps' | 'off'; countdown: 3 | 5 | 10; autoPause: boolean; screenOn: boolean; voiceURI?: string; rate: number; voiceSource?: VoiceSource }
 const DEFAULTS: Settings = { cues: 'steps', countdown: 5, autoPause: true, screenOn: true, rate: 1 };
 interface Saved { track: TrackState; sessionId?: string; stepIdx: number; stepStart: { s: number; m: number }; savedAt: number }
 
@@ -99,7 +99,7 @@ export default function RunPage() {
   const steps: WorkStep[] = sessionPlan ? stepsFor(sessionPlan) : goalSteps;
   const cues = settings.cues !== 'off';
 
-  useEffect(() => { try { localStorage.setItem('ritmo:run:settings', JSON.stringify(settings)); } catch { /* ignore */ } voiceOpts = { voiceURI: settings.voiceURI, rate: settings.rate }; }, [settings]);
+  useEffect(() => { try { localStorage.setItem('ritmo:run:settings', JSON.stringify(settings)); } catch { /* ignore */ } voiceOpts = { voiceURI: settings.voiceURI, rate: settings.rate }; setVoiceSource(settings.voiceSource ?? 'phone'); }, [settings]);
   // An unfinished run saved on this device (the app closed or crashed mid-run)
   useEffect(() => { get(key).then((v) => { if (v) setUnfinished(v as Saved); }).catch(() => {}); }, [key]);
 
@@ -432,12 +432,12 @@ export default function RunPage() {
       </div>
 
       <RunCheck open={checkOpen} onClose={() => setCheckOpen(false)} onStart={startFromCheck} gps={gpsText} gpsReady={gpsReady} cuesOn={cues} voice={voiceOpts}
-        pocket={pocketNext} setPocket={setPocketNext} />
+        pocket={pocketNext} setPocket={setPocketNext} source={settings.voiceSource ?? 'phone'} setSource={(voiceSource) => setSettings((x) => ({ ...x, voiceSource }))} />
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Run settings">
         <div className="stack">
           <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: 'Every step and km' }, { value: 'km', label: 'Every km' }, { value: 'off', label: 'Off' }]} />
           <Chips<Settings['countdown']> label="Countdown" value={settings.countdown} onChange={(c) => setSettings((x) => ({ ...x, countdown: c }))} options={[3, 5, 10].map((v) => ({ value: v as Settings['countdown'], label: `${v} s` }))} />
-          <div id="run-voice-settings"><VoicePicker voiceURI={settings.voiceURI} rate={settings.rate} onChange={(v) => setSettings((x) => ({ ...x, ...v }))} /></div>
+          <div id="run-voice-settings"><VoicePicker voiceURI={settings.voiceURI} rate={settings.rate} source={settings.voiceSource ?? 'phone'} onChange={(v) => setSettings((x) => ({ ...x, ...v }))} /></div>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.autoPause} onChange={(e) => setSettings((x) => ({ ...x, autoPause: e.target.checked }))} /> Pause automatically when I stop</label>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.screenOn} onChange={(e) => setSettings((x) => ({ ...x, screenOn: e.target.checked }))} /> Keep the screen on</label>
         </div>
