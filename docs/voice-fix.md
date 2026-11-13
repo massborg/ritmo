@@ -15,9 +15,23 @@ Ryan reported voice problems. I couldn't reproduce them on his phone, so I went 
 | 7 | **No speech in the Android app.** Android's in-app browser has no Web Speech at all. | The Android app could only play clips. | The app now speaks with the phone's own engine (below). |
 | 8 | **Locked phone.** A browser stops speech and GPS when the screen locks. | Silence and lost distance. | The web app keeps Pocket mode. The store app now tracks and speaks with the phone locked (below). |
 
+## Update: the cause was the silent switch
+
+Ryan's phone was on silent. On iPhone, a browser's speech is muted by the silent switch, but the phone still reports it as speaking. So Ritmo thought cues worked and never switched to its recorded clips. No code can detect the switch from a web page. The fix:
+
+- **Web app on iPhone:** after "Ready when you are", the Before you start sheet asks **Did you hear it?**
+  - **No, use Ritmo's recorded voice** switches to Ritmo's recorded voice, played as audio, which plays on silent. The choice is remembered on the device.
+  - The same choice is in Run settings under **Cues spoken by**.
+  - Trade-offs:
+    - The recorded voice is more robotic than the phone's voice.
+    - It can only say distances, times, paces and Ritmo's set phrases, not workout step names.
+    - It may pause music from another app while it speaks.
+- **Store app:** the voice plugin as published ignored the audio category and was muted on silent. I patched it to use the iPhone `playback` audio session, so cues play on silent and duck music instead of stopping it.
+  - This corrects the earlier claim in this document and in `MOBILE.md`, which was written before I read the plugin's code.
+
 ## Store app (iPhone and Android)
 
-- **Voice:** spoken by the phone's own engine through a native plugin. It plays with the screen locked and with the iPhone silent switch on, and lowers music while it speaks. No tap is needed first, so a cue can't be blocked.
+- **Voice:** spoken by the phone's own engine through a native plugin. It plays with the screen locked and (with the patch above) with the iPhone silent switch on, and lowers music while it speaks. No tap is needed first, so a cue can't be blocked.
 - **GPS:** native background location during a run: iPhone background location mode and an Android foreground service. Locking the phone is fine. Pocket mode is off by default in the app, but still there if you want it.
 - **Setup and store notes** are in `MOBILE.md`.
 - **CI builds** the Android APK and the iOS simulator app on every push. A real-phone test is still needed: a 5 km run with the phone locked for 10 minutes, on iPhone and Android.

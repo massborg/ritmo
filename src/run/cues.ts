@@ -18,6 +18,16 @@ let logged = false;
 const listeners = new Set<(s: VoiceState) => void>();
 const setState = (s: VoiceState) => { state = s; listeners.forEach((f) => f(s)); };
 export const voiceState = () => state;
+
+/**
+ * Who says the cues. 'phone': the phone's own voice (Web Speech). 'ritmo': Ritmo's recorded voice, played as audio.
+ * On iPhone, a browser's speech is muted by the silent switch while still reporting that it is speaking, so Ritmo
+ * cannot tell. Recorded audio still plays on silent, so a runner who did not hear "Ready when you are" switches to it.
+ */
+export type VoiceSource = 'phone' | 'ritmo';
+let source: VoiceSource = 'phone';
+export const voiceSource = () => source;
+export function setVoiceSource(s: VoiceSource) { source = s; }
 export function onVoiceState(f: (s: VoiceState) => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
 /** A new run: check again, and log again if it fails */
 export function resetVoice() { state = 'unknown'; logged = false; useDefault = false; }
@@ -187,6 +197,8 @@ export async function cue(text: string, o: SpeakOptions = {}): Promise<boolean> 
   return p;
 }
 async function run(text: string, o: SpeakOptions): Promise<boolean> {
+  // Ritmo's recorded voice (chosen, e.g. for a phone on silent): nothing to check, it is played as audio
+  if (source === 'ritmo' && !hasNativeVoice()) { playClips(clipsFor(text)); if (state !== 'ok') setState('ok'); return true; }
   const native = hasNativeVoice();
   const has = native || (typeof window !== 'undefined' && 'speechSynthesis' in window);
   if (!has) { blocked('no speech on this device', text); playClips(clipsFor(text)); return false; }

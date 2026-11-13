@@ -11,7 +11,8 @@
     "test": "vitest run",
     "cap:sync": "vite build && cap sync",
     "ios": "npm run cap:sync && cap open ios",
-    "android": "npm run cap:sync && cap open android"
+    "android": "npm run cap:sync && cap open android",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "1.3.1",
@@ -46,6 +47,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
+    "patch-package": "8.0.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5"

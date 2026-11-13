@@ -159,4 +159,16 @@ describe('voice cues on a simulated phone', () => {
     expect(await q).toBe(true);
     expect(m.voiceState()).toBe('ok');
   });
+
+  it("uses Ritmo's recorded voice when chosen (an iPhone on silent mutes the phone's voice)", async () => {
+    const { m, ss } = await load('works');
+    m.setVoiceSource('ritmo');
+    m.unlockClips();
+    const ok = await m.cue('3 kilometres. Average pace 5 10.');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(ok).toBe(true);
+    expect(ss.speak).not.toHaveBeenCalled();
+    expect(played).toEqual(['3']);
+    expect(m.voiceState()).toBe('ok');
+  });
 });

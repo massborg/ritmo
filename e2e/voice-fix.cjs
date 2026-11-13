@@ -175,6 +175,34 @@ const startFree = async (page) => {
   check(/Voice cues working/.test(await sheetB.innerText()), 'after the fix, Test voice finds speech working again');
   check((await said(page)).at(-1) === 'Voice cues are working.', 'and says "Voice cues are working"');
 
+  // ---- 7. iPhone on silent: speech "works" but is muted. The runner says so; Ritmo's recorded voice plays ----
+  const S = await account(b, mock, 'vf-silent@test.ritmo', 'works');
+  page = S.page;
+  await startFree(page);
+  await page.locator('.run-go').click();
+  const sheetS = page.getByRole('dialog', { name: 'Before you start' });
+  await sheetS.waitFor(); await page.waitForTimeout(600);
+  const ask = sheetS.getByRole('group', { name: 'Did you hear it?' });
+  check(await ask.isVisible().catch(() => false), 'on iPhone the sheet asks "Did you hear "Ready when you are"?"');
+  check(/silent switch/.test(await ask.innerText()), 'and explains the silent switch mutes the phone\'s voice in a browser');
+  await page.evaluate(() => { window.__clips.length = 0; });
+  await ask.getByRole('button', { name: /No, use Ritmo's recorded voice/ }).click(); await page.waitForTimeout(300);
+  check((await page.evaluate(() => window.__clips.slice())).includes('ready'), '"No" plays Ritmo\'s recorded "Ready when you are" straight away');
+  check(/Ritmo's recorded voice/.test(await sheetS.innerText()), 'and the sheet says cues use Ritmo\'s recorded voice');
+  check((await page.evaluate(() => JSON.parse(localStorage.getItem('ritmo:run:settings')).voiceSource)) === 'ritmo', 'the choice is remembered on this device');
+  const spokenBefore = await page.evaluate(() => window.__spoken.length);
+  await sheetS.getByRole('button', { name: 'Start run' }).click();
+  await page.locator('.run-live').waitFor({ timeout: 10000 }); await page.waitForTimeout(400);
+  const sc = await page.evaluate(() => window.__clips.slice());
+  check(['3', '2', '1', 'go'].every((c) => sc.includes(c)) && (await page.evaluate(() => window.__spoken.length)) === spokenBefore, `the countdown plays from Ritmo's recorded voice, not the muted phone voice (${sc.join(', ')})`);
+  // Next time: no question, the recorded voice straight away; Run settings shows the choice and can switch back
+  await page.goto(`${APP}/run`); await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: 'Run settings' }).click();
+  const rs = page.getByRole('dialog', { name: 'Run settings' });
+  await rs.waitFor();
+  check(/Cues spoken by/.test(await rs.innerText()) && /plays on silent/.test(await rs.innerText()), 'Run settings: "Cues spoken by" the phone\'s voice or Ritmo\'s recorded voice, with the silent-switch note');
+  check(S.errors.length === 0, `no page errors${S.errors.length ? `: ${S.errors[0]}` : ''}`);
+
   await b.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

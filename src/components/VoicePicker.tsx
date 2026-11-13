@@ -6,9 +6,9 @@ import { Chips } from './inputs';
 import { isIos } from '../lib/install';
 import { loadVoices, rankVoices, SAMPLE, speak, voiceLabel, type VoiceChoice } from '../run/voice';
 import { hasNativeVoice, nativeVoices, speakNative, stopNative } from '../run/native-voice';
-import { voiceLog } from '../run/cues';
+import { playClips, unlockAudio, voiceLog, type VoiceSource } from '../run/cues';
 
-export function VoicePicker({ voiceURI, rate, onChange }: { voiceURI?: string; rate: number; onChange: (v: { voiceURI?: string; rate?: number }) => void }) {
+export function VoicePicker({ voiceURI, rate, source = 'phone', onChange }: { voiceURI?: string; rate: number; source?: VoiceSource; onChange: (v: { voiceURI?: string; rate?: number; voiceSource?: VoiceSource }) => void }) {
   const [voices, setVoices] = useState<VoiceChoice[]>();
   const [playing, setPlaying] = useState<string>();
   // In the store app the phone's own speech engine speaks the cues, so its voices are the ones to offer
@@ -39,6 +39,14 @@ export function VoicePicker({ voiceURI, rate, onChange }: { voiceURI?: string; r
   };
   return (
     <div className="stack-sm">
+      {!native && (
+        <>
+          <Chips<VoiceSource> label="Cues spoken by" value={source} onChange={(v) => { onChange({ voiceSource: v }); if (v === 'ritmo') { unlockAudio(); playClips(['voice-check']); } }}
+            options={[{ value: 'phone', label: "The phone's voice" }, { value: 'ritmo', label: "Ritmo's recorded voice" }]} />
+          <p className="caption">{isIos() ? "On iPhone, the silent switch mutes the phone's voice in a browser. Ritmo's recorded voice still plays on silent, but may pause music from another app. The Ritmo app speaks on silent with either." : "Ritmo's recorded voice plays even where the phone's voice is muted or missing."}</p>
+        </>
+      )}
+      {source === 'ritmo' && !native ? null : <>
       <span className="label">Voice</span>
       {voices === undefined ? <p className="caption">Looking for voices on this device…</p> : (
         <ul className="voice-list" aria-label="Voices">
@@ -54,6 +62,7 @@ export function VoicePicker({ voiceURI, rate, onChange }: { voiceURI?: string; r
           ? 'For more natural voices on iPhone: Settings → Accessibility → Spoken Content → Voices → English, then download an "Enhanced" or "Premium" voice. It will appear here.'
           : 'For more voices: install them in your phone\'s text-to-speech settings (on Android, Settings → Accessibility → Text-to-speech). They will appear here.'}
       </p>
+      </>}
       {log.length > 0 && (
         <details className="voice-log">
           <summary className="caption">Voice problems on this device ({log.length})</summary>

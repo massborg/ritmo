@@ -35,7 +35,9 @@ The app records runs natively, so locking the phone is fine (in a browser, Pocke
   - iOS: `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription` and `UIBackgroundModes` `location` are in `Info.plist`.
   - Android: the plugin adds the location, `FOREGROUND_SERVICE_LOCATION` and `POST_NOTIFICATIONS` permissions. `android.useLegacyBridge` is on in `capacitor.config.ts`, so updates keep arriving after 5 minutes locked.
 - **Voice:** `@capacitor-community/text-to-speech`, wrapped in `src/run/native-voice.ts`.
-  - Cues are spoken by the phone's own engine (AVSpeechSynthesizer, Android text-to-speech) in the `playback` audio category. They play with the screen locked and with the iPhone silent switch on, and music is lowered while a cue plays.
+  - Cues are spoken by the phone's own engine (AVSpeechSynthesizer, Android text-to-speech).
+  - iPhone: the plugin as published ignores the audio category and uses its own audio session, which the silent switch mutes. `patches/@capacitor-community+text-to-speech+8.0.2.patch` (applied by `patch-package` on `npm install`) makes it use the app's session in the `playback` category with mode `voicePrompt`. Cues then play with the silent switch on and the screen locked, music is lowered while a cue plays, and the session is released afterwards so music returns to full volume.
+  - Android: text-to-speech plays on the media stream, which silent and vibrate modes don't mute.
   - Android's in-app browser has no Web Speech at all, so without this the Android app could only play recorded clips.
   - `UIBackgroundModes` `audio` is in `Info.plist`. Run settings lists the native voices.
 
@@ -47,7 +49,7 @@ The app records runs natively, so locking the phone is fine (in a browser, Pocke
 ### Test on a real phone before release
 
 1. Start a 5 km run, lock the phone for 10 minutes, and check the distance keeps adding up with no "GPS paused" gap.
-2. Check a cue is spoken every km with the phone locked, with the silent switch on (iPhone), and with music playing.
+2. Check a cue is spoken every km with the phone locked, with the silent switch on (iPhone), and with music playing (the music should dip, not stop).
 
 ## Run it locally
 
