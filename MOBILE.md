@@ -63,12 +63,48 @@ npm run android   # builds the web app, syncs, opens Android Studio
 
 After any change in `src/`, run `npm run cap:sync`.
 
+## Test builds (TestFlight and Play internal testing)
+
+Builds are made in GitHub Actions: **Actions → Mobile test release → Run workflow**. Choose the version (for example 1.0) and which apps to build. Each run gets a new build number (the run number), so uploads never clash. The workflow is `.github/workflows/mobile-release.yml`.
+
+### One-time setup: iPhone
+
+1. In App Store Connect, create the app "Ritmo Running" with bundle id `com.ritmorunning.app`. Register the id with the HealthKit and Background Modes capabilities.
+2. In App Store Connect, open Users and Access, then Integrations, then App Store Connect API. Create a key with the **Admin** role. Admin is needed so the build can create its signing certificate and profile by itself.
+3. Add these repository secrets (GitHub → Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `ASC_KEY_P8_BASE64` | The downloaded `AuthKey_XXXX.p8`, base64-encoded: `base64 -i AuthKey_XXXX.p8` |
+| `ASC_KEY_ID` | The key's ID |
+| `ASC_ISSUER_ID` | The Issuer ID shown above the keys list |
+| `APPLE_TEAM_ID` | The 10-character Team ID (Membership details) |
+
+4. After the first upload, open TestFlight in App Store Connect. Answer the export-compliance question (Ritmo uses only standard HTTPS encryption), then add testers. Internal testers need no review. External testers need a short beta review the first time.
+
+### One-time setup: Android
+
+1. Create the upload key once and keep it safe, with its passwords, outside the repository:
+   `keytool -genkeypair -v -keystore ritmo-upload.jks -alias ritmo -keyalg RSA -keysize 2048 -validity 10000`
+2. Add these repository secrets:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` | `base64 -i ritmo-upload.jks` |
+| `ANDROID_UPLOAD_STORE_PASSWORD` | The keystore password |
+| `ANDROID_UPLOAD_KEY_ALIAS` | `ritmo` |
+| `ANDROID_UPLOAD_KEY_PASSWORD` | The key password |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Optional at first (see step 4): the JSON key of a Google Cloud service account invited in Play Console (Users and permissions) with release rights for this app |
+
+3. Run the workflow for Android. With the key secrets alone, it attaches a signed `.aab` to the run.
+4. **The first upload must be made by hand.** Play's API can't create an app's first release. In Play Console, create the app, open Testing, then Internal testing, then Create release. Upload the `.aab` from step 3 (opt in to Play App Signing when asked) and add testers. From then on, with `PLAY_SERVICE_ACCOUNT_JSON` set, each run uploads to internal testing by itself. Use the `draft` status option if Play says the app isn't ready for completed releases yet.
+
 ## Accounts needed before private testing
 
 1. **Apple Developer Program** (USD 99/year), under the company name.
    - Register the bundle id `com.ritmorunning.app` with the HealthKit capability.
    - Create the app in App Store Connect as "Ritmo Running".
-   - In Xcode: Signing & Capabilities, choose the team, then Product, Archive, then upload to TestFlight.
+   - Then use the Mobile test release workflow (above) to upload to TestFlight, or in Xcode: Product, Archive.
 2. **Google Play Console** (USD 25 one-off).
    - Create the app "Ritmo Running" and complete the Health Connect declaration form for the four read permissions.
    - Upload a signed AAB to Internal testing.

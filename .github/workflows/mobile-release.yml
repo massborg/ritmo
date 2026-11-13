@@ -1,0 +1,121 @@
+# Test builds for TestFlight (iPhone) and Google Play internal testing (Android). Run it by hand:
+# GitHub → Actions → "Mobile test release" → Run workflow. Each run gets a new build number (the run number).
+# Needs the secrets listed in MOBILE.md ("Test builds"); a platform whose secrets are missing is skipped.
+name: Mobile test release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version shown to testers (e.g. 1.0)
+        default: '1.0'
+        required: true
+      platforms:
+        description: Which apps to build
+        type: choice
+        options: [both, ios, android]
+        default: both
+      play_status:
+        description: "Play release status (use 'draft' until the app's first release has been completed in Play Console)"
+        type: choice
+        options: [completed, draft]
+        default: completed
+
+jobs:
+  android:
+    name: Android → Play internal testing
+    if: inputs.platforms != 'ios'
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 != '' }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Check secrets
+        if: env.HAS_KEY != 'true'
+        run: echo "::error::ANDROID_UPLOAD_KEYSTORE_BASE64 and the other Android secrets are not set (see MOBILE.md)" && exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Upload key
+        run: echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
+      - name: Build signed app bundle
+        working-directory: android
+        env:
+          RITMO_UPLOAD_KEYSTORE: ${{ runner.temp }}/upload.jks
+          RITMO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          RITMO_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          RITMO_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon -PritmoVersionCode=${{ github.run_number }} -PritmoVersionName=${{ inputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ritmo-android-${{ inputs.version }}-${{ github.run_number }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+      - name: Upload to Play internal testing
+        if: env.HAS_PLAY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.ritmorunning.app
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: ${{ inputs.play_status }}
+          releaseName: ${{ inputs.version }} (${{ github.run_number }})
+      - name: No Play upload
+        if: env.HAS_PLAY != 'true'
+        run: echo "::warning::PLAY_SERVICE_ACCOUNT_JSON is not set; the signed bundle is attached to this run for a manual upload in Play Console."
+      - run: rm -f "$RUNNER_TEMP/upload.jks"
+        if: always()
+
+  ios:
+    name: iPhone → TestFlight
+    if: inputs.platforms != 'android'
+    runs-on: macos-15
+    env:
+      HAS_ASC: ${{ secrets.ASC_KEY_P8_BASE64 != '' }}
+    steps:
+      - name: Check secrets
+        if: env.HAS_ASC != 'true'
+        run: echo "::error::ASC_KEY_P8_BASE64, ASC_KEY_ID, ASC_ISSUER_ID and APPLE_TEAM_ID are not set (see MOBILE.md)" && exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: App Store Connect API key
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          echo "${{ secrets.ASC_KEY_P8_BASE64 }}" | base64 -d > "$RUNNER_TEMP/asc/AuthKey.p8"
+      - name: Archive (signed automatically with the API key)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Ritmo.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="${{ inputs.version }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            archive | tail -60
+      - name: Upload to TestFlight
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Ritmo.xcarchive" \
+            -exportOptionsPlist ios/App/release/ExportOptions.plist -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" | tail -40
+      - run: rm -rf "$RUNNER_TEMP/asc"
+        if: always()
