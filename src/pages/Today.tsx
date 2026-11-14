@@ -25,6 +25,7 @@ import { weekReview } from '../training/report';
 import { explainWeek } from '../training/explain';
 import { shoeAlert, shoeTotals } from '../training/shoes';
 import { InstallPrompt } from '../components/InstallPrompt';
+import { SamsungTip } from '../components/SamsungTip';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
 import { CARE_DISCLAIMER, careAreaFor } from '../training/care';
 import { plannedNum } from '../training/session-view';
@@ -440,6 +441,7 @@ export default function Today() {
       </SeeMore>
       <PlanChanges />
       {showRebuild && <RebuildSheet onClose={() => { setShowRebuild(false); markRebuildSeen(); }} />}
+      {data.mode === 'real' && <SamsungTip />}
       {data.mode === 'real' && <InstallPrompt />}
       <SessionSheet date={sheetDay} onClose={() => setSheetDay(undefined)} />
       {sheet}

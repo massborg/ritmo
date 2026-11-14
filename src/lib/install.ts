@@ -22,6 +22,9 @@ export const isStandalone = () => window.matchMedia?.('(display-mode: standalone
 /** iPhone or iPad (iPadOS reports itself as a Mac with touch). */
 export const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
 
+/** Samsung Internet (its own dark mode repaints websites; see SamsungTip). */
+export const isSamsungInternet = (ua = typeof navigator !== 'undefined' ? navigator.userAgent : '') => /SamsungBrowser\//.test(ua);
+
 export type InstallWay = 'prompt' | 'ios';
 /** How Ritmo can be installed here, or undefined when it is installed already, was dismissed recently, or cannot be. */
 export function installWay(now = Date.now()): InstallWay | undefined {
