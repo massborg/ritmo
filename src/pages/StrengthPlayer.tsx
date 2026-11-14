@@ -8,6 +8,7 @@ import { Check, ChevronRight, Minus, Plus, Timer } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { ExerciseDemo } from '../components/ExerciseDemo';
+import { worksLabel } from '../components/figure';
 import { resolveStrength, type Routine } from '../training/strength';
 import { useStrengthAt } from '../components/StrengthSession';
 import { duration, ymd } from '../lib/format';
@@ -107,11 +108,12 @@ export default function StrengthPlayer() {
       <section className="card stack-sm strength-now" aria-label="Current exercise">
         <span className="caption">Exercise {idx + 1} of {items.length}</span>
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          <ExerciseDemo pattern={cur.ex.pattern} name={cur.ex.name} size={104} />
+          <ExerciseDemo pattern={cur.ex.pattern} name={cur.ex.name} muscles={cur.ex.muscles} weights={cur.ex.equipment === 'light' && !!cur.ex.tags?.includes('weights')} size={104} />
           <div className="stack-sm" style={{ gap: 2 }}>
             <h2 className="title">{cur.ex.name}</h2>
             <p className="caption">{cur.ex.cues[0]}{cur.ex.perSide ? ' · each side' : ''}</p>
             {cur.ex.load && <p className="caption">Load: {cur.ex.load}</p>}
+            {cur.ex.muscles.length > 0 && <p className="caption works"><span className="works-dot" aria-hidden="true" />Works: {worksLabel(cur.ex.muscles)}</p>}
             {cur.note && <p className="caption progress-note">Today: {cur.note}</p>}
           </div>
         </div>
