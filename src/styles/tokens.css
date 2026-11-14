@@ -1,4 +1,6 @@
-/* Ritmo design tokens: Giorno (light, default), Notte (dark), Sole (outdoor high contrast). */
+/* Ritmo design tokens: Giorno (light, default), Notte (dark), Sole (outdoor high contrast).
+   "only" in color-scheme tells browsers not to repaint the page with their own forced dark mode (Samsung Internet
+   turned the brand orange dark red): Ritmo has its own dark theme. */
 :root,
 :root[data-theme='giorno'] {
   --surface: #FAF8F5; --surface-raised: #FFFFFF; --surface-sunken: #F0ECE6;
@@ -11,7 +13,7 @@
   --zone-1: #2B8C95; --zone-2: #206F41; --zone-3: #AF7604; --zone-4: #B24314; --zone-5: #711409;
   --card-border: transparent;
   --demo-body: #B9B0A6; --demo-body-far: #D9D2C9; --demo-muscle: #E8480C;
-  color-scheme: light;
+  color-scheme: light only;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,7 +28,7 @@
     --success: #6FD3A8; --warning: #FFB547; --danger: #FF8A80; --info: #79C2E0;
     --zone-1: #277E86; --zone-2: #33AE66; --zone-3: #FABF48; --zone-4: #E76229; --zone-5: #F69D93;
     --demo-body: #6E665F; --demo-body-far: #45403B; --demo-muscle: #FF6A2B;
-    color-scheme: dark;
+    color-scheme: dark only;
   }
 }
 
@@ -39,7 +41,7 @@
   --success: #6FD3A8; --warning: #FFB547; --danger: #FF8A80; --info: #79C2E0;
   --zone-1: #277E86; --zone-2: #33AE66; --zone-3: #FABF48; --zone-4: #E76229; --zone-5: #F69D93;
   --demo-body: #6E665F; --demo-body-far: #45403B; --demo-muscle: #FF6A2B;
-  color-scheme: dark;
+  color-scheme: dark only;
 }
 
 :root[data-theme='sole'] {
@@ -53,7 +55,7 @@
   --zone-1: #2D929B; --zone-2: #206F41; --zone-3: #B07705; --zone-4: #AF4213; --zone-5: #6A1209;
   --card-border: #4A4641;
   --demo-body: #4A4641; --demo-body-far: #A39C94; --demo-muscle: #E8480C;
-  color-scheme: light;
+  color-scheme: light only;
 }
 
 :root {
