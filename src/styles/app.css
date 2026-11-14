@@ -630,6 +630,7 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 
 /* Install prompt */
 .install-card { display: flex; gap: var(--s3); align-items: flex-start; }
+.samsung-tip { display: flex; gap: var(--s3); align-items: flex-start; }
 .install-icon { border-radius: 12px; flex: none; }
 
 /* ---------- Quick run (Training page) ---------- */
