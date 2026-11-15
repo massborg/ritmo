@@ -1376,3 +1376,11 @@ div.hx-row { cursor: default; }
 .hx-tag { border-radius: 999px; padding: 2px 10px; font: 700 13px/18px var(--font-mono, monospace); min-width: 52px; text-align: center; background: var(--surface-sunken); color: var(--ink-muted); }
 .hx-tag.good { background: color-mix(in srgb, var(--success) 16%, var(--surface-raised)); color: var(--success); }
 .hx-tag.slow { background: color-mix(in srgb, var(--accent) 30%, var(--surface-raised)); color: var(--accent-mark); }
+
+/* ---- Update 4, task 7: HYROX predictor and race day ---- */
+.pace-card { display: grid; gap: 2px; padding: 14px 16px; }
+.pace-card p { margin: 0; }
+.pace-card-v { font: 600 18px/24px var(--font-mono, monospace); }
+.pace-card-st { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline); }
+.hx-pred-stations .stat { font: 500 16px/22px var(--font-mono, monospace); }
+.hrd-warm { padding: 0; margin: 0; }

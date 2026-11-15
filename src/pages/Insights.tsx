@@ -1,5 +1,7 @@
 // Insights (brief 6.1): the detailed sections behind You › Progress: mileage history, consistency, easy/hard balance,
 // zones, threshold pace, aerobic efficiency, long runs, training load, estimated race times and reviews.
+import { hyroxSessions, predictHyrox } from '../hyrox/predict';
+import { clock as hxClock } from '../hyrox/hyrox';
 import { zoneTimeFromHistogram } from '../training/derive';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchHrBands } from '../data/store';
@@ -19,7 +21,10 @@ import { forStats } from '../data/quality';
 type Period = 'week' | 'month' | 'year';
 
 export default function Insights() {
-  const { data, today, typeOf, series, zones, hr, stage, plan, fitness, athlete } = useApp();
+  const { data, today, typeOf, series, zones, hr, stage, plan, fitness, athlete, paces } = useApp();
+  // HYROX race predictor (update 4, task 7): for HYROX athletes, and anyone who has recorded a HYROX session
+  const hxShow = (data.profile.athleteType ?? 'runner') !== 'runner' || hyroxSessions(data.profile).length > 0;
+  const hx = hxShow ? predictHyrox(data.profile, paces ? Math.round((paces.threshold[0] + paces.threshold[1]) / 2) : undefined) : undefined;
   const U = data.profile.units;
   const acts = useMemo(() => forStats(data.activities), [data.activities]);
   const [period, setPeriod] = useState<Period>('week');
@@ -188,6 +193,29 @@ export default function Insights() {
           series={[{ name: 'Fitness', values: loadSlice.map((d) => d.ctl), color: 'var(--ink)' }, { name: 'Fatigue', values: loadSlice.map((d) => d.atl), color: 'var(--brand)' }, { name: 'Form', values: loadSlice.map((d) => d.tsb), color: 'var(--info)', dashed: true }]} />
       </section>
       ) : <Locked title="Training load">Fitness, fatigue and form need a few weeks of runs and a known fitness level. Until then they would only be guesses, so Ritmo keeps them hidden.</Locked>}
+
+      {hxShow && (
+        <section className="card stack" aria-labelledby="hx-pred">
+          <h2 id="hx-pred" className="title">HYROX prediction</h2>
+          {hx ? (
+            <>
+              <p className="row-between" style={{ margin: 0, alignItems: 'baseline' }}><span className="stat-xl" data-testid="hx-pred-total">{hxClock(hx.totalS * 1000)}</span><span className="caption">{hx.confidence === 'good' ? 'Good confidence' : hx.confidence === 'medium' ? 'Medium confidence' : 'A first estimate'}</span></p>
+              <p className="caption">Based on {hx.basedOn}.{hx.vsGoalS != null ? ` ${hx.vsGoalS <= 0 ? `${hxClock(-hx.vsGoalS * 1000)} inside` : `${hxClock(hx.vsGoalS * 1000)} outside`} your goal of ${hxClock((data.profile.hyrox?.goalS ?? 0) * 1000)}.` : ''}</p>
+              <div className="grid-3">
+                <Kpi label="Running" value={hxClock(hx.runningS * 1000)} sub={`${pace(hx.runPaceS, U)} each run`} />
+                <Kpi label="Stations" value={hxClock(hx.stationsS * 1000)} sub={`${hx.known} of 8 from your times`} />
+                <Kpi label="Roxzone" value={hxClock(hx.roxzoneS * 1000)} sub="transitions, on top of the runs" />
+              </div>
+              <ul className="list hx-pred-stations">
+                {hx.stations.map((x) => <li key={x.key} className="list-item row-between"><span>{x.name}</span><span className="row" style={{ gap: 8 }}><span className="stat">{hxClock(x.s * 1000)}</span><span className="caption" style={{ minWidth: 64, textAlign: 'right' }}>{x.from === 'race' ? 'yours' : x.from === 'practice' ? 'practice' : 'typical'}</span></span></li>)}
+              </ul>
+              {hx.focus && <p>Most time to gain: <strong>{hx.focus.name.toLowerCase()}</strong>, about {hx.focus.gainS} s against a typical time for your running fitness.</p>}
+              <p className="caption">"Yours" is your best in a full simulation or race. "Practice" is your best on its own, made 8% slower for race fatigue. "Typical" is an average time scaled to your running fitness, until you record that station. An estimate, not a promise.</p>
+              <div className="row wrap" style={{ gap: 8 }}><Link to="/hyrox" className="btn btn-small">Record a session</Link><Link to="/hyrox/race-day" className="btn btn-small">Race-day plan</Link></div>
+            </>
+          ) : <p className="muted">Ritmo needs a few recorded runs, or one full simulation, to predict your HYROX time. <Link to="/hyrox">Record a simulation</Link>.</p>}
+        </section>
+      )}
 
       <div className="grid-2">
 {stage.predictions ? (

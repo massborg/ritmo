@@ -57,6 +57,7 @@ const RecordPage = lazyPage(() => import('./pages/Record'));
 const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
 const ProfileHyroxPage = lazyPage(() => import('./pages/ProfileHyrox'));
 const HyroxPage = lazyPage(() => import('./pages/Hyrox'));
+const HyroxRaceDayPage = lazyPage(() => import('./pages/HyroxRaceDay'));
 const HyroxLivePage = lazyPage(() => import('./pages/HyroxLive'));
 const HyroxSessionPage = lazyPage(() => import('./pages/HyroxSession'));
 
@@ -289,6 +290,7 @@ function Shell() {
               <Route path="/strength" element={<StrengthFreePage />} />
               <Route path="/hyrox" element={<HyroxPage />} />
               <Route path="/hyrox/live" element={<HyroxLivePage />} />
+              <Route path="/hyrox/race-day" element={<HyroxRaceDayPage />} />
               <Route path="/hyrox/session/:id" element={<HyroxSessionPage />} />
               <Route path="/strength/:id" element={<StrengthPlayerPage />} />
               <Route path="/strength-plan" element={<StrengthPlanPage />} />

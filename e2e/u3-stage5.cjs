@@ -136,7 +136,7 @@ const monday = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDa
   prof().body.care.checks = [];
   await reload('/care');
   await page.locator('#care-morning').fill('4');
-  await page.getByRole('button', { name: 'Save the check' }).click(); await page.waitForTimeout(1500);
+  await page.getByRole('button', { name: 'Save the check' }).click(); await page.waitForTimeout(2600); // saves are debounced: wait before the next full page load
   check(/Pain 4\/10: stay at "Build"/.test(await page.locator('main').innerText()), '3–5: stay at this stage');
   check(/Running: Cross-train instead of running/.test(await page.locator('main').innerText()), 'and running is replaced with cross-training (3–5)');
   // Training: the change, with undo

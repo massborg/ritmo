@@ -2,7 +2,7 @@
 // (enter the official splits, or record it live). Division, treadmill or GPS runs, swaps for missing equipment and
 // Roxzone timing are kept for next time. Past sessions and records are listed below.
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { get, del } from 'idb-keyval';
 import { ArrowDown, ArrowUp, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -27,7 +27,8 @@ export default function Hyrox() {
   const prefs = data.profile.hyrox ?? {};
   const division: Division = prefs.division ?? 'men_open';
   const roxzone = prefs.roxzone ?? false, indoor = prefs.indoor ?? false, swaps = prefs.swaps ?? {};
-  const [tab, setTab] = useState<Tab>('simulate');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(params.get('tab') === 'race' ? 'race' : params.get('tab') === 'practice' ? 'practice' : 'simulate');
   const [sim, setSim] = useState<Sim>('full');
   const [sheet, setSheet] = useState<'division' | 'swaps'>();
   const [goalS, setGoalS] = useState<number | undefined>(prefs.goalS);
@@ -163,6 +164,7 @@ export default function Hyrox() {
 
       {tab === 'race' && (
         <section className="card stack" aria-label="Race day">
+          <Link to="/hyrox/race-day" className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Race-day plan: pacing and warm-up</Link>
           <p className="caption">After the race, enter your official splits. Or record it live with the button below: put the phone somewhere you can tap it at each station.</p>
           <DateField id="hx-date" label="Race date" value={raceDate} onChange={setRaceDate} />
           <div className="race-splits">
