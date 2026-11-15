@@ -27,6 +27,7 @@ import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { exById, nextAfter, type StrengthPlan } from '../training/strength';
+import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
 import { doubleProgression, freeName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
@@ -183,6 +184,8 @@ interface Ctx extends Derived {
   updateLog: (id: string, patch: Partial<LogEntry>) => void;
   saveStrength: (e: { date: string; minutes: number; rpe?: number; strength: StrengthLog }) => string;
   setStrengthPrefs: (patch: Partial<NonNullable<Profile['strength']>>) => void;
+  saveHyrox: (h: HyroxSession) => void;
+  setHyroxPrefs: (patch: Partial<HyroxPrefs>) => void;
   saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[] }) => string;
   deleteTemplate: (id: string) => void;
   duplicateTemplate: (id: string) => void;
@@ -1067,7 +1070,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateProfile({ adjust: { kind, from, until: ymd(addDays(derived.today, days - 1)), at: new Date().toISOString() } });
   };
   const addLog = (e: Omit<LogEntry, 'id' | 'at'>) => setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), { ...e, id: uid(), at: new Date().toISOString() }] } }));
-  const updateLog = (id: string, patch: Partial<LogEntry>) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).map((x) => (x.id === id ? { ...x, ...patch, strength: patch.strength ?? x.strength } : x)) } }));
+  const updateLog = (id: string, patch: Partial<LogEntry>) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).map((x) => (x.id === id ? { ...x, ...patch, strength: patch.strength ?? x.strength, hyrox: patch.hyrox ?? x.hyrox } : x)) } }));
   /** A strength workout recorded in Ritmo or logged by hand (update 3, §5): saved with its sets, and the reps and load
    *  of each exercise remembered for next time. Returns the log entry's id. */
   const saveStrength = (e: { date: string; minutes: number; rpe?: number; strength: StrengthLog }): string => {
@@ -1120,6 +1123,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!r.full) setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: toggleFavourite(d.profile.strength?.templates ?? [], id).list } } }));
     return !r.full;
   };
+  /** A HYROX session (update 4, task 5): kept in the log with its segments, so it counts in load and streaks */
+  const saveHyrox = (h: HyroxSession) => setData((d) => {
+    const log = (d.profile.log ?? []).filter((e) => !(e.kind === 'hyrox' && e.hyrox?.id === h.id));
+    const templates = h.templateId ? (d.profile.hyrox?.templates ?? []).map((t) => (t.id === h.templateId ? { ...t, lastUsedAt: new Date().toISOString() } : t)) : d.profile.hyrox?.templates;
+    return { ...d, profile: { ...d.profile, hyrox: { ...d.profile.hyrox, templates }, log: [...log, { id: h.id, date: ymd(new Date(h.startedAt)), kind: 'hyrox', minutes: sessionMinutes(h), rpe: h.rpe, text: h.notes, at: new Date().toISOString(), hyrox: h }] } };
+  });
+  const setHyroxPrefs = (patch: Partial<HyroxPrefs>) => setData((d) => ({ ...d, profile: { ...d.profile, hyrox: { ...d.profile.hyrox, ...patch } } }));
   const setStrengthPrefs = (patch: Partial<NonNullable<Profile['strength']>>) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, ...patch } } }));
   /** Change one day's strength session (update 3, §8): its own exercise list, or another routine. Logged. */
   const editStrength = (sessionId: string, patch: Partial<StrengthPlan> | null, summary: string) => setData((d) => {
@@ -1464,7 +1474,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     injuryCheckIn, healInjury, reopenInjury, markSegment,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };
