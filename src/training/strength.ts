@@ -130,6 +130,8 @@ export interface StrengthPlan {
   routine: Routine; intensity: Intensity; why: string;
   /** This session's own list, when the runner edited it (that day only) */
   custom?: StrengthItem[];
+  /** Extra exercises for this athlete, after the routine's own (HYROX: the hardest stations) */
+  extra?: string[];
 }
 export interface StrengthItem { id: string; sets: number; reps?: number; seconds?: number; /** How this block is harder when there is no harder version of the exercise: "+ reps", "+ reps and a set" */ harder?: string }
 export interface StrengthPrefs { equipment?: Equipment; swaps?: Record<string, string>; never?: string[]; last?: Record<string, { reps?: number; load?: number; seconds?: number }>; /** What each exercise's last session means for the next (update 3, §9) */ progress?: Record<string, ExProgress> }
@@ -168,6 +170,7 @@ export function resolveStrength(sp: StrengthPlan, p: StrengthPrefs = {}, at?: { 
       items.push(d);
     }
   }
+  if (!sp.custom) for (const id of sp.extra ?? []) { const ex = exById.get(id); if (ex && !excluded(ex, never) && !items.some((x) => x.id === id)) items.push(dose(ex, sp.intensity)); }
   const prog = p.progress ?? {};
   const back = (at?.skips ?? 0) >= 2;
   const full = items.map((x) => {

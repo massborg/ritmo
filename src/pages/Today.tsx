@@ -140,6 +140,8 @@ function CareCard() {
 
 /** iPhone Safari only speaks after a tap: a silent word now (and the recorded clips unlocked) lets the run's
  *  audio cues play later, even when a Quick run starts by itself once GPS is ready. */
+/** A simulation or the race itself is recorded with the HYROX recorder, not the run recorder */
+const hyroxRecorded = (s: { hyrox?: { kind: string } }) => !!s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind);
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
@@ -229,7 +231,13 @@ export default function Today() {
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
   const phaseNow = plan?.phases.find((p) => p.start <= t && p.end >= t);
   // "Safi 5K · build phase until 22 Nov": what the plan is for and where it is
-  const subtitle = [aRace?.name, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase until ${shortDate(parseYmd(phaseNow.end))}` : plan ? `plan until ${shortDate(parseYmd(plan.endDate))}` : longDate(today)].filter(Boolean).join(' · ');
+  // A HYROX plan (update 4, task 6): "HYROX · 7 Mar 2027 · build phase · 16 weeks to go"
+  const hxPlan = plan?.goal === 'hyrox';
+  const hxDate = hxPlan ? data.profile.hyrox?.raceDate : undefined;
+  const hxWeeks = hxDate ? Math.max(0, Math.ceil((parseYmd(hxDate).getTime() - parseYmd(t).getTime()) / (7 * 86400000))) : undefined;
+  const hxRep = hxPlan ? plan!.sessions.find((x) => x.hyrox?.kind === 'km_repeats' || x.hyrox?.kind === 'compromised') : undefined;
+  const hxPaceS = hxRep?.paceTarget ? Math.round((hxRep.paceTarget.minSPerKm + hxRep.paceTarget.maxSPerKm) / 2) : undefined;
+  const subtitle = hxPlan ? ['HYROX', hxDate ? parseYmd(hxDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase` : undefined, hxWeeks != null ? `${hxWeeks} week${hxWeeks === 1 ? '' : 's'} to go` : undefined].filter(Boolean).join(' · ') : [aRace?.name, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase until ${shortDate(parseYmd(phaseNow.end))}` : plan ? `plan until ${shortDate(parseYmd(plan.endDate))}` : longDate(today)].filter(Boolean).join(' · ');
   const ranToday = data.activities.some((a) => a.startTime.slice(0, 10) === t);
   const checkedIn = !!data.profile.checkins?.some((c) => c.date === t);
   // A swapped session: what was run, and how it went, in one line
@@ -258,6 +266,9 @@ export default function Today() {
   return (
     <div className="stack-lg">
       <AppHeader title="Training" eyebrow={subtitle} avatar right={<><SampleChip />{data.mode === 'real' && quickButton}{logButton}</>} />
+      {hxPlan && hxPaceS && (
+        <p className="caption hyrox-pace-note">Your HYROX run pace is {pace(hxPaceS, U)}. {data.profile.hyrox?.goalS ? `It comes from your goal of ${duration(data.profile.hyrox.goalS)} (about ${Math.round((hxPaceS * 8) / 60)} min of running over the 8 runs) and your running fitness: it is never faster than your threshold pace.` : 'It is set a little slower than your threshold pace until you add a goal time in Profile, HYROX.'}</p>
+      )}
 
       {(plan || data.activities.length > 0) && (
         <div className="stack-sm"
@@ -361,7 +372,7 @@ export default function Today() {
                 {!swappedNote && s.status !== 'partial' && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
               : isToday && s.type !== 'rest' && s.status === 'planned'
                 ? <>
-                    <Link to="/run" className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+                    <Link to={hyroxRecorded(s) ? '/hyrox' : '/run'} className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
                     <button className="btn" onClick={() => setEditing(s)}><Pencil size={18} strokeWidth={2} aria-hidden="true" />Edit</button>
                     <button className="btn" onClick={() => setSheetDay(s.date)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Swap</button>
                     <button className="btn btn-ghost" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I’ve done this run</button>

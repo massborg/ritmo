@@ -42,7 +42,7 @@ export default function Record() {
           <h2 className="record-today-title">{strength?.title ?? s.title}</h2>
           {line && <p className="record-today-sub">{line}</p>}
           <div className="row" style={{ gap: 8 }}>
-            <Link to={s.strengthPlan ? `/strength/${s.id}` : '/run'} className="btn btn-primary record-start" onClick={s.strengthPlan ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+            <Link to={s.strengthPlan ? `/strength/${s.id}` : s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) ? '/hyrox' : '/run'} className="btn btn-primary record-start" onClick={s.strengthPlan ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
             <Link to={`/session/${s.id}`} className="btn record-details">Details</Link>
           </div>
         </section>

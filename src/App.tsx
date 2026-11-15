@@ -55,6 +55,7 @@ const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
 const RecordPage = lazyPage(() => import('./pages/Record'));
 const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
+const ProfileHyroxPage = lazyPage(() => import('./pages/ProfileHyrox'));
 const HyroxPage = lazyPage(() => import('./pages/Hyrox'));
 const HyroxLivePage = lazyPage(() => import('./pages/HyroxLive'));
 const HyroxSessionPage = lazyPage(() => import('./pages/HyroxSession'));
@@ -312,6 +313,7 @@ function Shell() {
               <Route path="/profile/data" element={<DataSources />} />
               <Route path="/profile/shoes" element={<ProfileShoes />} />
               <Route path="/profile/strength" element={<ProfileStrengthPage />} />
+              <Route path="/profile/hyrox" element={<ProfileHyroxPage />} />
               <Route path="/profile/body" element={<ProfileBody />} />
               <Route path="/garmin/callback" element={<GarminCallback />} />
               <Route path="/strava/callback" element={<StravaCallback />} />

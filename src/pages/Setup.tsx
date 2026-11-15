@@ -9,6 +9,9 @@ import { Chips, DateField, DurationField, Stepper } from '../components/inputs';
 import { AvatarEditor, AvatarImage } from '../components/AvatarEditor';
 import { ProgressSteps } from '../components/setup-ui';
 import { UploadPanel } from './DataSources';
+import { HyroxGoalFields } from '../components/HyroxGoal';
+import type { HyroxPrefs } from '../hyrox/hyrox';
+import { targetsFromGoal, type AthleteType } from '../hyrox/plan-goal';
 import { addDays, DAY_NAMES, DAY_SHORT, dist, duration, durationWords, longDate, MONTHS_LONG, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import type { BackgroundLevel, GoalType, Injury, Plan, Profile, Race, RunningBackground, TrainingSchedule } from '../lib/types';
 import {
@@ -139,6 +142,7 @@ function BasicsStep({ onNext }: StepProps) {
   const [m, setM] = useState(dob0 ? String(dob0.getMonth() + 1) : '');
   const [y, setY] = useState(dob0 ? String(dob0.getFullYear()) : '');
   const [units, setUnits] = useState(p.units);
+  const [athlete, setAthlete] = useState<AthleteType>(p.athleteType ?? 'runner');
   const [photo, setPhoto] = useState(false);
   const [err, setErr] = useState<string>();
   const [tooYoung, setTooYoung] = useState(false);
@@ -182,11 +186,13 @@ function BasicsStep({ onNext }: StepProps) {
         <span className="caption">Used for the age rule and age-aware training limits. Never shown to anyone.</span>
       </fieldset>
       <Chips label="Distance units" value={units} onChange={setUnits} options={[{ value: 'km', label: 'Kilometres' }, { value: 'mi', label: 'Miles' }]} />
+      {/* Update 4, task 6 */}
+      <Chips<AthleteType> label="How do you train?" value={athlete} onChange={setAthlete} options={[{ value: 'runner', label: 'Runner' }, { value: 'hyrox', label: 'HYROX athlete', sub: 'new' }, { value: 'both', label: 'Both' }]} />
       <Footer err={err} onNext={() => {
         if (!name.trim()) { setErr('Please enter your first name.'); return; }
         if (!validDate) { setErr('Please choose your full date of birth.'); return; }
         if (ageOn(dob, new Date()) < MIN_AGE) { setErr(undefined); setTooYoung(true); return; }
-        onNext({ name: name.trim(), dateOfBirth: dob, birthYear: Number(y), units });
+        onNext({ name: name.trim(), dateOfBirth: dob, birthYear: Number(y), units, athleteType: athlete });
       }} />
     </div>
   );
@@ -328,7 +334,12 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const bg = data.profile.background;
   const beginner = !bg || bg.level === 'new' || bg.level === 'returning';
   const existingA = data.races.filter((r) => r.date >= ymd(today)).sort((a, b) => a.priority.localeCompare(b.priority))[0];
-  const [goal, setGoal] = useState<GoalType | ''>(data.profile.goalType ?? (existingA ? 'race' : ''));
+  const athlete: AthleteType = data.profile.athleteType ?? 'runner';
+  // HYROX athletes see "Train for a race" with HYROX already chosen
+  const [goal, setGoal] = useState<GoalType | ''>(data.profile.goalType ?? (existingA || athlete === 'hyrox' ? 'race' : ''));
+  const [isHyrox, setIsHyrox] = useState(athlete === 'hyrox' || (athlete === 'both' && !existingA));
+  const [hx, setHx] = useState<HyroxPrefs>(data.profile.hyrox ?? {});
+  const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS) : data.profile.hyrox?.targets } });
   const [race, setRace] = useState<Partial<Race>>(existingA ?? { name: '', distanceM: 10000, courseType: 'road', priority: 'A' });
   const [warn, setWarn] = useState<ReturnType<typeof checkGoal>>();
   const [err, setErr] = useState<string>();
@@ -336,12 +347,14 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const estVdot = vdot ?? (bg?.recentRace && bg.recentRace !== 'unknown' ? vdotFromPerformance(bg.recentRace.distanceM, bg.recentRace.timeS) : bg?.weeklyKm ? vdotFromWeeklyKm(bg.weeklyKm) : undefined);
 
   const commit = (g: GoalType, r?: Partial<Race>) => {
+    if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, ...hyroxPatch() }); return; }
     const label = g === 'race' && r ? `${r.name || 'My race'}${r.goalS ? ` in ${duration(r.goalS)}` : ''}` : GOALS.find((x) => x.value === g)!.label;
     if (g === 'race' && r?.date && r.distanceM) saveRace({ id: r.id ?? uid(), name: r.name || 'My race', date: r.date, distanceM: r.distanceM, courseType: r.courseType ?? 'road', goalS: r.goalS, priority: 'A' });
-    onNext({ goalType: g, goal: label });
+    onNext({ goalType: g, goal: label, ...(athlete !== 'runner' ? hyroxPatch() : {}) });
   };
   const submit = () => {
     if (!goal) { setErr('Choose a goal.'); return; }
+    if (goal === 'race' && isHyrox) { commit('race'); return; }
     if (goal === 'race' && !race.date) { setErr('Choose the race date.'); return; }
     const c = checkGoal({ goalType: goal, race, level: bg?.level ?? 'new', canRun10: bg?.canRun10, weeklyKm: bg?.weeklyKm, vdot: estVdot, today });
     if (!c.ok && !warn) { setWarn(c); return; }
@@ -355,10 +368,18 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
         {opts.map((g) => <button key={g.value} role="radio" aria-checked={goal === g.value} className={`choice${goal === g.value ? ' on' : ''}`} onClick={() => { setGoal(g.value); setWarn(undefined); setErr(undefined); }}><span className="label">{g.label}</span></button>)}
       </div>
       {goal === 'race' && (
+        <Chips<number> label="Race" value={isHyrox ? -8 : race.distanceM ?? 10000} onChange={(v) => { setIsHyrox(v === -8); if (v !== -8) setRace({ ...race, distanceM: v }); setWarn(undefined); setErr(undefined); }}
+          options={[...RACE_DISTANCES.filter((r) => r.m <= 42195).map((r) => ({ value: r.m, label: r.label })), { value: -8, label: 'HYROX' }]} />
+      )}
+      {goal === 'race' && isHyrox && (
+        <section className="card" aria-label="Your HYROX race">
+          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} />
+        </section>
+      )}
+      {goal === 'race' && !isHyrox && (
         <section className="card stack">
           <div className="field"><label htmlFor="g-name">Race name</label><input id="g-name" className="input" value={race.name ?? ''} onChange={(e) => { setRace({ ...race, name: e.target.value }); setWarn(undefined); }} placeholder="For example, Malta Marathon" /></div>
           <DateField id="g-date" label="Race date" value={race.date ?? ''} min={ymd(addDays(today, 1))} onChange={(v) => { setRace({ ...race, date: v }); setWarn(undefined); }} />
-          <Chips label="Distance" value={race.distanceM ?? 10000} onChange={(v) => { setRace({ ...race, distanceM: v }); setWarn(undefined); }} options={RACE_DISTANCES.filter((r) => r.m <= 42195).map((r) => ({ value: r.m, label: r.label }))} />
           <DurationField id="g-time" label="Goal time (optional)" value={race.goalS} onChange={(v) => { setRace({ ...race, goalS: v }); setWarn(undefined); }} distanceM={race.distanceM} />
         </section>
       )}
