@@ -70,6 +70,8 @@ export interface Activity {
   isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
   /** The runner said this was not a race (so race detection leaves it alone) */
   notRace?: boolean;
+  /** Parts of the run the runner marked by hand on Splits (update 4): warm-up, stride, interval, recovery or cool-down, by the second each part starts at */
+  segmentKinds?: Record<string, 'warmup' | 'stride' | 'run' | 'recovery' | 'cooldown'>;
   /** The planned session this run was logged against ("I've done this run") */
   plannedSessionId?: string;
   /** Screenshots stored with the run (private storage paths) */
@@ -208,6 +210,8 @@ export interface Profile {
   hub?: HubPrefs;
   /** Strava shoes matched to Ritmo shoes: Strava gear id → shoe id, or 'ignore' (not tracked) */
   gearMap?: Record<string, string>;
+  /** What counts as a stride for this runner, tuned by their corrections on Splits (update 4): at most this long and this far */
+  strideRule?: { maxS: number; maxM: number };
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
   /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */

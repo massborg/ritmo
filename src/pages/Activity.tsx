@@ -120,7 +120,7 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today, sessionOfRun, renameRun, setRunHidden } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today, sessionOfRun, renameRun, setRunHidden, markSegment } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -133,7 +133,7 @@ export default function ActivityPage() {
   const setTab = (t: RunTab) => { setTabState(t); try { sessionStorage.setItem(TAB_KEY, t); } catch { /* */ } };
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   const { post, reload: reloadPost } = useRunPost(a);
-  const iv = useMemo(() => (a ? splitRun(a, data.profile.units) : undefined), [a, data.profile.units]);
+  const iv = useMemo(() => (a ? splitRun(a, data.profile.units, data.profile.strideRule) : undefined), [a, data.profile.units, data.profile.strideRule]);
   const [title, setTitle] = useState(a?.name ?? '');
   useEffect(() => { setTitle(a?.name ?? ''); }, [a?.id, a?.name]);
   if (!a || !iv) return <Empty title="Run not found" action={<Link to="/you" className="btn">Back</Link>} />;
@@ -226,8 +226,8 @@ export default function ActivityPage() {
         </Sheet>
       )}
 
-      {tab === 'intervals' && <div role="tabpanel" id="run-panel-intervals" aria-labelledby="run-tab-intervals"><RunIntervals iv={iv} units={U} /></div>}
-      {tab === 'charts' && <div role="tabpanel" id="run-panel-charts" aria-labelledby="run-tab-charts"><RunCharts a={a} reps={iv.reps} units={U} zones={a.avgHr ? zones : undefined} /></div>}
+      {tab === 'intervals' && <div role="tabpanel" id="run-panel-intervals" aria-labelledby="run-tab-intervals"><RunIntervals iv={iv} units={U} onMark={(key, kind, part) => markSegment(a.id, key, kind, part)} /></div>}
+      {tab === 'charts' && <div role="tabpanel" id="run-panel-charts" aria-labelledby="run-tab-charts"><RunCharts a={a} reps={iv.reps.length ? iv.reps : iv.strides?.reps ?? []} units={U} zones={a.avgHr ? zones : undefined} /></div>}
       {tab === 'shoes' && <div role="tabpanel" id="run-panel-shoes" aria-labelledby="run-tab-shoes"><RunShoes run={a} /></div>}
 
       {tab === 'overview' && <div role="tabpanel" id="run-panel-overview" aria-labelledby="run-tab-overview" className="stack-lg">

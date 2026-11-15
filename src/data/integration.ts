@@ -89,7 +89,7 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
       if (takeInc) {
         // What the runner told us stays: the planned session link, reps they entered, race marks
         list[match] = { ...inc, id: cur.id, sourceIds, isRace: cur.isRace || inc.isRace, notRace: cur.notRace, plannedSessionId: cur.plannedSessionId ?? inc.plannedSessionId,
-          reps: cur.reps ?? inc.reps, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device,
+          reps: cur.reps ?? inc.reps, segmentKinds: cur.segmentKinds ?? inc.segmentKinds, media: cur.media ?? inc.media, name: cur.name !== 'Run' ? cur.name : inc.name, device: inc.device ?? cur.device,
           // A run the runner deleted stays deleted when a better copy arrives
           deletedAt: cur.deletedAt, gear: inc.gear ?? cur.gear, shoeId: cur.shoeId ?? inc.shoeId };
         replaced++;

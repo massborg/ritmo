@@ -28,6 +28,7 @@ import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/se
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { nextAfter, type StrengthPlan } from '../training/strength';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
+import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
@@ -144,6 +145,9 @@ interface Ctx extends Derived {
   /** Body: save a check-in (red flags are worked out here, by rules); returns the red flags found */
   addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean }) => string[];
   /** The short daily check-in for the injury being looked after (update 4): applies the progression rules */
+  /** Mark a part of a run on Splits as warm-up, stride, interval, recovery or cool-down (undefined: back to automatic).
+   *  Kept with the run; a correction about strides also tunes what counts as a stride for this runner. */
+  markSegment: (activityId: string, key: string, kind: 'warmup' | 'stride' | 'run' | 'recovery' | 'cooldown' | undefined, part?: { timeS: number; distanceM: number; was: string }) => void;
   injuryCheckIn: (day: Omit<InjuryDay, 'date'>) => { result?: CheckResult; flags: string[] };
   /** "It feels healed": end the injury, ease back in or go straight back, and rebuild the plan from today */
   healInjury: (how: 'ease' | 'straight') => void;
@@ -713,6 +717,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return flags;
   };
+  const markSegment: Ctx['markSegment'] = (activityId, key, kind, part) => setData((d) => {
+    const activities = d.activities.map((x) => {
+      if (x.id !== activityId) return x;
+      const next = { ...(x.segmentKinds ?? {}) };
+      if (kind) next[key] = kind; else delete next[key];
+      return { ...x, segmentKinds: Object.keys(next).length ? next : undefined };
+    });
+    // Tune the stride rule from the correction: a longer effort marked as a stride widens it (to 60 s and 300 m at
+    // most); a stride of 30 s or more marked as an interval narrows it
+    const rule = d.profile.strideRule ?? STRIDE_RULE;
+    let strideRule = d.profile.strideRule;
+    if (part && kind === 'stride' && (part.timeS > rule.maxS || part.distanceM > rule.maxM)) strideRule = { maxS: Math.min(60, Math.max(rule.maxS, Math.ceil(part.timeS / 5) * 5)), maxM: Math.min(300, Math.max(rule.maxM, Math.ceil(part.distanceM / 20) * 20)) };
+    if (part && kind === 'run' && part.was === 'stride' && part.timeS >= 30) strideRule = { maxS: Math.max(20, Math.floor((part.timeS - 1) / 5) * 5), maxM: rule.maxM };
+    return { ...d, activities, profile: strideRule === d.profile.strideRule ? d.profile : { ...d.profile, strideRule } };
+  });
   const injuryCheckIn = (day: Omit<InjuryDay, 'date'>): { result?: CheckResult; flags: string[] } => {
     const cur = dataRef.current.profile.body;
     const inj = cur?.injury;
@@ -1405,7 +1424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
-    injuryCheckIn, healInjury, reopenInjury,
+    injuryCheckIn, healInjury, reopenInjury, markSegment,
     loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),

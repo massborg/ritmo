@@ -828,6 +828,11 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .healed-row { width: 100%; background: var(--surface-raised); border: 1px solid var(--hairline); border-radius: var(--r-card); padding: 12px; min-height: 56px; }
 .healed-tick { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--success) 16%, var(--surface-raised)); color: var(--success); flex: none; }
 .rd-capped { margin-left: 8px; }
+.strides-group { background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised)); }
+.strides-head { width: 100%; background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer; color: inherit; font: inherit; }
+.strides-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.iv-row.iv-stride td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.iv-mark { width: 44px; text-align: right; }
 .status-chip.swapped { background: color-mix(in srgb, var(--info) 15%, var(--surface-raised)); color: var(--info); }
 .status-chip.missed { background: color-mix(in srgb, var(--warning) 15%, var(--surface-raised)); color: var(--warning); }
 .plan-more > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; }

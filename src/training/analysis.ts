@@ -3,6 +3,7 @@ import type { Activity, PlannedSession, SessionFeedback, SessionType, StreamPoin
 import { duration, pace as fmtPace, type Units } from '../lib/format';
 import { type TrainingPaces, zoneOf } from './fitness';
 import { segmentPaces } from './derive-core';
+import { isStrideLap } from './intervals';
 
 export type Zones = { zone: number; min: number; max: number }[];
 
@@ -116,7 +117,8 @@ export function classify(a: Activity, paces: TrainingPaces, zones: Zones | undef
   }
 
   // Structured efforts from laps or 400 m segments
-  const lapPaces = (a.laps ?? []).filter((l) => l.distanceM > 150).map((l) => l.durationS / (l.distanceM / 1000));
+  // Strides (short fast laps) are not part of the session's work: they are left out of its pace and rep count (update 4)
+  const lapPaces = (a.laps ?? []).filter((l) => l.distanceM > 150 && !isStrideLap(l)).map((l) => l.durationS / (l.distanceM / 1000));
   const segs = lapPaces.length >= 5 ? lapPaces : a.streams ? segmentPaces(a.streams) : a.derived?.segs ?? [];
   if (segs.length >= 6) {
     const sorted = [...segs].sort((x, y) => x - y);
@@ -359,7 +361,7 @@ export function analyse(opts: {
     }
   }
   if (cls.reps && ['vo2max', 'threshold', 'speed', 'hills'].includes(type) && a.laps?.length) {
-    const work = a.laps.filter((l) => l.durationS / (l.distanceM / 1000) <= (cls.workPace ?? 0) * 1.06);
+    const work = a.laps.filter((l) => !isStrideLap(l) && l.durationS / (l.distanceM / 1000) <= (cls.workPace ?? 0) * 1.06);
     if (work.length >= 3) {
       const first = work[0].durationS / (work[0].distanceM / 1000);
       const last = work[work.length - 1].durationS / (work[work.length - 1].distanceM / 1000);

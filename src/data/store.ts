@@ -86,7 +86,7 @@ type Row = Record<string, unknown>;
 /** Summary columns of a run. The detailed data (streams, laps) is only written when this device has it,
  *  so saving a run loaded as a summary never erases its detail in the account. */
 const summaryRow = (uid: string, a: Activity): Row => ({
-  id: a.id, user_id: uid, source: a.source, source_ids: { ...withoutDeletedMark(a.sourceIds), ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}), ...(a.deletedAt ? { deleted: a.deletedAt } : {}), ...(a.gear ? { gear: a.gear } : {}), ...(a.gpsGaps?.length ? { gaps: a.gpsGaps } : {}) }, start_time: a.startTime, name: a.name,
+  id: a.id, user_id: uid, source: a.source, source_ids: { ...withoutDeletedMark(a.sourceIds), ...(a.isTimeTrial ? { timeTrial: true } : {}), ...(a.notRace ? { notRace: true } : {}), ...(a.plannedSessionId ? { planned: a.plannedSessionId } : {}), ...(a.reps?.length ? { reps: a.reps } : {}), ...(a.segmentKinds && Object.keys(a.segmentKinds).length ? { segs: a.segmentKinds } : {}), ...(a.media?.length ? { media: a.media } : {}), ...(a.device ? { device: a.device } : {}), ...(a.weather ? { weather: a.weather } : {}), ...(a.weatherSkip ? { weatherSkip: a.weatherSkip } : {}), ...(a.hidden ? { hidden: true } : {}), ...(a.distFrom ? { distFrom: a.distFrom } : {}), ...(a.shoeId ? { shoe: a.shoeId } : {}), ...(a.calories ? { kcal: a.calories } : {}), ...(a.deletedAt ? { deleted: a.deletedAt } : {}), ...(a.gear ? { gear: a.gear } : {}), ...(a.gpsGaps?.length ? { gaps: a.gpsGaps } : {}) }, start_time: a.startTime, name: a.name,
   distance_m: a.distanceM, duration_s: a.durationS, moving_s: a.movingS, elev_gain_m: a.elevGainM ?? null,
   avg_hr: a.avgHr ?? null, max_hr: a.maxHr ?? null, avg_cadence: a.avgCadence ?? null, is_race: !!a.isRace,
   detail_score: a.detailScore,
@@ -108,6 +108,7 @@ const rowToAct = (r: Row): Activity => ({
   isTimeTrial: !!(r.x as Record<string, unknown> | null)?.timeTrial, notRace: !!(r.x as Record<string, unknown> | null)?.notRace,
   plannedSessionId: ((r.x as Record<string, unknown> | null)?.planned as string | undefined) ?? undefined,
   reps: ((r.x as Record<string, unknown> | null)?.reps as Activity['reps']) ?? undefined,
+  segmentKinds: ((r.x as Record<string, unknown> | null)?.segs as Activity['segmentKinds']) ?? undefined,
   media: ((r.x as Record<string, unknown> | null)?.media as string[] | undefined) ?? undefined,
   device: ((r.x as Record<string, unknown> | null)?.device as string | undefined) ?? undefined,
   weather: ((r.x as Record<string, unknown> | null)?.weather as Activity['weather']) ?? undefined,
@@ -265,7 +266,7 @@ export interface PushState {
 export const newPushState = (): PushState => ({ activities: new Map(), coach: new Set() });
 
 /** What decides whether a run needs saving again */
-export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}|${a.deletedAt ?? ''}|${a.gear?.id ?? ''}|${a.gpsGaps?.map((g) => g.resolved ?? '-').join('') ?? ''}`;
+export const actPrint = (a: Activity) => `${a.detailScore}|${a.isRace ? 1 : 0}|${a.isTimeTrial ? 1 : 0}|${a.notRace ? 1 : 0}|${a.plannedSessionId ?? ''}|${a.reps?.length ?? 0}|${a.segmentKinds ? JSON.stringify(a.segmentKinds) : ''}|${a.media?.length ?? 0}|${a.name}|${a.derived?.v ?? 0}|${a.distanceM}|${a.movingS}|${a.durationS}|${a.hidden ? 1 : 0}|${a.shoeId ?? ''}|${a.distFrom ?? ''}|${a.weather?.at ?? ''}|${a.weatherSkip ?? ''}|${a.device ?? ''}|${a.deletedAt ?? ''}|${a.gear?.id ?? ''}|${a.gpsGaps?.map((g) => g.resolved ?? '-').join('') ?? ''}`;
 
 export function markPulled(ps: PushState, d: AppData) {
   for (const a of [...d.activities, ...(d.removed ?? [])]) ps.activities.set(a.id, actPrint(a));
