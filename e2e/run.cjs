@@ -36,7 +36,7 @@ async function account(mock, ctx, email, flagged) {
   // An account without the flag: the Run tab, Quick run and recording are open to everyone
   const other = await account(mock, ctx, 'norun@test.ritmo', false);
   await other.page.goto(`${APP}/`); await other.page.waitForTimeout(1000);
-  check(await other.page.locator('.tabbar a[href="/run"]').count() === 1, 'every runner has the Run tab (no flag needed)');
+  check(await other.page.locator('.tabbar a[href="/record"]').count() === 1, 'every runner has the Activity tab (no flag needed)');
   const fitO = other.page.getByRole('button', { name: /Train 6 days a week/ });
   if (await fitO.isVisible().catch(() => false)) { await fitO.click(); await other.page.waitForTimeout(800); }
   check(await other.page.locator('a.quick-run-btn').isVisible(), 'Quick run is shown to every runner, not only flagged accounts');
@@ -53,8 +53,10 @@ async function account(mock, ctx, email, flagged) {
   const { page, uid } = await account(mock, ctx2, 'runner@test.ritmo', true);
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${APP}/`); await page.waitForTimeout(1200);
-  check(await page.locator('.tabbar a[href="/run"]').isVisible(), 'flagged account: Run is in the tab bar');
-  await page.locator('.tabbar a[href="/run"]').click();
+  check(await page.locator('.tabbar a[href="/record"]').isVisible(), 'flagged account: Activity is in the tab bar');
+  // Update 4: the Activity hub first, then the run recorder
+  await page.locator('.tabbar a[href="/record"]').click();
+  await page.locator('a[href="/run?free=1"]').click();
   await page.getByText('GPS ready', { exact: true }).waitFor({ timeout: 10000 });
   check(true, 'GPS accuracy shown before the start');
   await page.waitForTimeout(500);
