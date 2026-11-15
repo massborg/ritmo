@@ -32,6 +32,7 @@ import { RunIntervals } from '../components/RunIntervals';
 import { RunCharts } from '../components/RunCharts';
 import { RunShoes } from '../components/RunShoes';
 import { Sheet } from '../components/inputs';
+import { DurationInput } from '../components/TimeEntry';
 import { DeleteRunSheet } from '../components/DeleteRun';
 import { AudienceSheet, StravaShareGuide, useRunPost } from '../components/RunHub';
 import { setPostVisibility } from '../data/hub';
@@ -480,9 +481,8 @@ function FixRun({ run }: { run: Activity }) {
   const U = data.profile.units;
   const toU = (m: number) => (U === 'mi' ? m / 1609.344 : m / 1000);
   const [km, setKm] = useState('');
-  const [time, setTime] = useState('');
-  // "1:15:00", "75:00" or "75" (minutes)
-  const newS = (() => { const p = time.trim().split(':').map(Number); if (!time.trim() || p.some((x) => !Number.isFinite(x))) return NaN; return p.length === 1 ? p[0] * 60 : p.length === 2 ? p[0] * 60 + p[1] : p[0] * 3600 + p[1] * 60 + p[2]; })();
+  const [fixS, setFixS] = useState<number>();
+  const newS = fixS ?? NaN;
   const [msg, setMsg] = useState<string>();
   const shoes = (data.profile.shoes ?? []).filter((s) => !s.retired || s.id === run.shoeId);
   const auto = shoeForRun({ startTime: run.startTime }, typeOf(run), data.profile.shoes ?? []);
@@ -530,10 +530,10 @@ function FixRun({ run }: { run: Activity }) {
       {!run.streams?.length && (
         <div className="stack-sm" id="fix-time-block">
           <label htmlFor="fix-time" className="label">Correct the time</label>
-          <p className="caption">For a run typed in by hand with the wrong time. Enter it as hours:minutes:seconds or minutes:seconds, or just minutes.</p>
+          <p className="caption">For a run typed in by hand with the wrong time. Type the digits: 1 1 5 0 0 becomes 1:15:00.</p>
           <div className="row wrap">
-            <input id="fix-time" className="input" style={{ maxWidth: 160 }} inputMode="numeric" placeholder={duration(run.movingS)} value={time} onChange={(e) => setTime(e.target.value)} />
-            <button className="btn btn-small" disabled={!(newS >= 60 && newS < 86400 && Math.abs(newS - run.movingS) >= 1)} onClick={() => { fixRunTime(run, newS); setTime(''); setMsg(`Time set to ${duration(newS)}.`); }}>Save time</button>
+            <DurationInput id="fix-time" label="Correct the time" value={fixS} placeholderS={run.movingS} onChange={setFixS} />
+            <button className="btn btn-small" disabled={!(newS >= 60 && newS < 86400 && Math.abs(newS - run.movingS) >= 1)} onClick={() => { fixRunTime(run, newS); setFixS(undefined); setMsg(`Time set to ${duration(newS)}.`); }}>Save time</button>
           </div>
         </div>
       )}

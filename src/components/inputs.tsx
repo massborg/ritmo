@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
-import { addDays, DAY_SHORT, duration, longDate, MONTHS_LONG, parseTime, parseYmd, startOfWeek, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, longDate, MONTHS_LONG, parseYmd, startOfWeek, ymd } from '../lib/format';
 
 export function Sheet({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -108,22 +108,8 @@ export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, 
   );
 }
 
-/** A typed time: "15:30" or "1:13:37" (or minutes, "45"). Value in seconds. */
-export function DurationField({ label, value, onChange, id }: { label: string; value?: number; onChange: (s: number | undefined) => void; id: string }) {
-  const [text, setText] = useState(value ? duration(value) : '');
-  const [bad, setBad] = useState(false);
-  useEffect(() => { if (value !== parseTime(text)) setText(value ? duration(value) : ''); /* keep in step when changed from outside */ // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <input id={id} className="input time-input" inputMode="numeric" placeholder="mm:ss or h:mm:ss" value={text} aria-invalid={bad || undefined} aria-describedby={`${id}-h`}
-        onChange={(e) => { const t = e.target.value.replace(/[^\d:]/g, ''); setText(t); const v = parseTime(t); setBad(!!t && v === undefined); onChange(t ? v : undefined); }}
-        onBlur={() => { const v = parseTime(text); if (v) setText(duration(v)); }} />
-      <span id={`${id}-h`} className="caption">{bad ? 'Use minutes and seconds, like 15:30, or hours too, like 1:13:37.' : 'For example 15:30 or 1:13:37.'}</span>
-    </div>
-  );
-}
+// The typed time field (update 4, task 1) lives in TimeEntry: digits fill in from the right on the number keypad
+export { DurationField } from './TimeEntry';
 
 export function Chips<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string; sub?: string }[]; onChange: (v: T) => void }) {
   return (

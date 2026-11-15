@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, Image as ImageIcon, Watch, PenLine } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Chips, DurationField, Sheet, StartTimeField, defaultStart } from './inputs';
+import { DurationInput } from './TimeEntry';
 import { Segmented, StatusLine } from './ui';
 import { PAIN_AREAS } from './LogRun';
 import { ScreenshotReader } from './ScreenshotReader';
@@ -144,7 +145,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
                     return (
                       <tr key={i} className={r.kind !== 'work' ? 'muted' : undefined}>
                         <th scope="row">{r.label}{r.distanceM ? <span className="caption"> · {r.distanceM >= 1000 ? `${r.distanceM / 1000} km` : `${r.distanceM} m`}</span> : null}</th>
-                        <td><input className={`input input-sm${r.unsure?.includes('time') ? ' unsure' : ''}`} aria-label={`${r.label} time${r.unsure?.includes('time') ? ', please check' : ''}`} inputMode="numeric" placeholder="m:ss" value={r.time} onChange={(e) => setRow(i, { time: e.target.value, unsure: r.unsure?.filter((u) => u !== 'time') })} /></td>
+                        <td className={r.unsure?.includes('time') ? 'unsure' : undefined}><DurationInput small id={`ls-rep-${i}`} label={`${r.label} time${r.unsure?.includes('time') ? ', please check' : ''}`} value={t} onChange={(v) => setRow(i, { time: v ? duration(v) : '', unsure: r.unsure?.filter((u) => u !== 'time') })} /></td>
                         <td className="stat">{t && r.distanceM ? pace(t / (r.distanceM / 1000), U, false) : '–'}</td>
                         <td><input className={`input input-sm${r.unsure?.includes('hr') ? ' unsure' : ''}`} aria-label={`${r.label} heart rate${r.unsure?.includes('hr') ? ', please check' : ''}`} inputMode="numeric" value={r.hr} onChange={(e) => setRow(i, { hr: e.target.value.replace(/\D/g, ''), unsure: r.unsure?.filter((u) => u !== 'hr') })} /></td>
                       </tr>

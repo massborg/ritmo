@@ -303,7 +303,7 @@ function BackgroundStep({ onNext }: StepProps) {
           <Stepper id="s-long" label={`Longest run in the last 6 weeks (${unit})`} value={longest} onChange={setLongest} min={0} max={60} unit={unit} placeholder="8" />
           <Chips label="A recent race or time trial" value={noRace ? -1 : raceM} onChange={(v) => { if (v === -1) { setNoRace(true); setRaceM(0); } else { setNoRace(false); setRaceM(v); } }}
             options={[...RACE_DISTANCES.filter((r) => r.m <= 42195).map((r) => ({ value: r.m, label: r.label })), { value: -1, label: 'I do not have one' }]} />
-          {!!raceM && <DurationField id="s-racetime" label="Your time" value={raceS} onChange={setRaceS} />}
+          {!!raceM && <DurationField id="s-racetime" label="Your time" value={raceS} onChange={setRaceS} distanceM={raceM} />}
           <p className="caption">A time from the last six months gives the most accurate paces. Without one, paces start as an estimate and improve as you log runs.</p>
         </section>
       )}
@@ -359,7 +359,7 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
           <div className="field"><label htmlFor="g-name">Race name</label><input id="g-name" className="input" value={race.name ?? ''} onChange={(e) => { setRace({ ...race, name: e.target.value }); setWarn(undefined); }} placeholder="For example, Malta Marathon" /></div>
           <DateField id="g-date" label="Race date" value={race.date ?? ''} min={ymd(addDays(today, 1))} onChange={(v) => { setRace({ ...race, date: v }); setWarn(undefined); }} />
           <Chips label="Distance" value={race.distanceM ?? 10000} onChange={(v) => { setRace({ ...race, distanceM: v }); setWarn(undefined); }} options={RACE_DISTANCES.filter((r) => r.m <= 42195).map((r) => ({ value: r.m, label: r.label }))} />
-          <DurationField id="g-time" label="Goal time (optional)" value={race.goalS} onChange={(v) => { setRace({ ...race, goalS: v }); setWarn(undefined); }} />
+          <DurationField id="g-time" label="Goal time (optional)" value={race.goalS} onChange={(v) => { setRace({ ...race, goalS: v }); setWarn(undefined); }} distanceM={race.distanceM} />
         </section>
       )}
       {warn && !warn.ok && (

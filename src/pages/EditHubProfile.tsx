@@ -7,6 +7,7 @@ import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
 import { PbStrip } from '../components/HubBits';
 import { duration } from '../lib/format';
+import { DurationInput } from '../components/TimeEntry';
 import * as hub from '../data/hub';
 import type { HubProfile } from '../data/hub';
 import { fasterThanOwn, MAX_PROFILE_PBS, parseTime, PROFILE_PB_DISTANCES, resolvePbs, ritmoBests, type HubPbSettings, type PbChoice } from '../training/profile-pbs';
@@ -90,7 +91,7 @@ export default function EditHubProfile() {
                 {!b && <span className="caption">No Ritmo time yet at this distance from runs that can be shown. Runs from Strava can't be shown to others (Strava's rules), so enter your own.</span>}
                 {c.mode === 'own' && (
                   <div className="row wrap" style={{ gap: 8 }}>
-                    <input className="input" style={{ maxWidth: 130 }} aria-label={`${d.label} time`} inputMode="numeric" placeholder="m:ss or h:mm:ss" value={times[c.m] ?? ''} onChange={(e) => setTimes((t) => ({ ...t, [c.m]: e.target.value }))} aria-invalid={badTimes.includes(c.m)} />
+                    <DurationInput small id={`pb-${c.m}`} label={`${d.label} time`} value={parseTime(times[c.m] ?? '')} onChange={(v) => setTimes((t) => ({ ...t, [c.m]: v ? duration(v) : '' }))} invalid={badTimes.includes(c.m)} />
                     <input className="input" style={{ flex: 1, minWidth: 140 }} aria-label={`${d.label} race or date (optional)`} placeholder="Race or date (optional)" value={c.race ?? ''} maxLength={60} onChange={(e) => setItem(c.m, { race: e.target.value })} />
                   </div>
                 )}

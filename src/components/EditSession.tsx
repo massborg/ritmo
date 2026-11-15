@@ -10,6 +10,7 @@ import { startOfWeek, ymd } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
 
 const MI = 1609.344;
+import { PaceInput } from './TimeEntry';
 const toSec = (x: string) => { const m = x.trim().match(/^(\d{1,2})[:.](\d{2})$/); return m && Number(m[2]) < 60 ? Number(m[1]) * 60 + Number(m[2]) : undefined; };
 const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
 
@@ -64,9 +65,9 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Target pace (per {U})</legend>
           <div className="row" style={{ gap: 8 }}>
-            <input className="input" aria-label="Fastest pace" inputMode="numeric" placeholder="4:50" value={pMin} onChange={(e) => setPMin(e.target.value)} style={{ maxWidth: 110 }} />
+            <PaceInput id="ed-pace-min" label="Fastest pace" value={toSec(pMin)} placeholderS={290} onChange={(v) => setPMin(v ? fmt(v) : '')} />
             <span>to</span>
-            <input className="input" aria-label="Slowest pace" inputMode="numeric" placeholder="5:20" value={pMax} onChange={(e) => setPMax(e.target.value)} style={{ maxWidth: 110 }} />
+            <PaceInput id="ed-pace-max" label="Slowest pace" value={toSec(pMax)} placeholderS={320} onChange={(v) => setPMax(v ? fmt(v) : '')} />
           </div>
           {note && <p className="caption" role="status">{note}</p>}
         </fieldset>
