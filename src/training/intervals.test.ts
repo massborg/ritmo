@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, StreamPoint } from '../lib/types';
-import { segTime, splitRun } from './intervals';
+import { segKey, segTime, splitRun } from './intervals';
 
 /** A 1 Hz stream from pieces of [seconds, pace s/km] */
 function stream(pieces: [number, number][], hr = (i: number) => 130 + (i % 7)): StreamPoint[] {
@@ -25,9 +25,11 @@ describe('splitting a run into intervals (update 2, §2)', () => {
     const r = splitRun(tenNov);
     expect(r.method).toBe('auto');
     expect(r.caption).toBe('found automatically');
-    expect(r.reps).toHaveLength(6);
+    // Six strides on their own are the strides group, not an interval set (update 4)
+    expect(r.strides?.reps).toHaveLength(6);
+    expect(r.reps).toHaveLength(0);
     expect(r.title).toBe('6 × 30 s strides');
-    for (const rep of r.reps) { expect(rep.paceS!).toBeGreaterThan(185); expect(rep.paceS!).toBeLessThan(215); }
+    for (const rep of r.strides!.reps) { expect(rep.paceS!).toBeGreaterThan(185); expect(rep.paceS!).toBeLessThan(215); }
     const wu = r.segments[0];
     expect(wu.kind).toBe('warmup');
     expect(wu.distanceM / 1000).toBeGreaterThan(6.3);
@@ -36,7 +38,7 @@ describe('splitting a run into intervals (update 2, §2)', () => {
     expect(r.segments[r.segments.length - 1].kind).toBe('cooldown');
     expect(r.summary?.avgRecoveryS).toBeGreaterThan(140);
     expect(r.summary?.note).toMatch(/^Even reps: only \d+ s\/km between fastest and slowest/);
-    expect(r.segments.find((x) => x.kind === 'run')?.avgHr).toBeTruthy();
+    expect(r.segments.find((x) => x.kind === 'stride')?.avgHr).toBeTruthy();
   });
 
   it('a steady run with no laps or reps shows 1 km splits', () => {
@@ -99,5 +101,76 @@ describe('splitting a run into intervals (update 2, §2)', () => {
     expect(segTime(31.63)).toBe('0:31.6');
     expect(segTime(1877)).toBe('31:17');
     expect(segTime(4189)).toBe('1:09:49');
+  });
+});
+
+describe('strides are their own group (update 4, task 2c)', () => {
+  const kinds = (r: ReturnType<typeof splitRun>) => r.segments.map((x) => (x.kind === 'recovery' && x.of === 'strides' ? 'jog' : x.kind));
+  it('easy 3 km + 4 × 20 s strides + 5 × 1 km + cool-down: W / S×4 / I×5 / R×4 / C', () => {
+    const pieces: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 4; i++) { pieces.push([20, 200]); pieces.push([60, 330]); }
+    for (let i = 0; i < 5; i++) { pieces.push([208, 208]); if (i < 4) pieces.push([90, 340]); }
+    pieces.push([600, 310]);
+    const r = splitRun(run(stream(pieces)));
+    expect(r.strides?.reps).toHaveLength(4);
+    expect(r.reps).toHaveLength(5);
+    expect(r.segments.filter((x) => x.kind === 'recovery' && !x.of)).toHaveLength(4);
+    expect(r.segments[0].kind).toBe('warmup');
+    expect(r.segments[r.segments.length - 1].kind).toBe('cooldown');
+    expect(kinds(r).join(' ')).toBe('warmup stride jog stride jog stride jog stride jog run recovery run recovery run recovery run recovery run cooldown');
+    expect(r.title).toBe('5 × 1 km');
+    expect(r.strides!.line).toMatch(/^Strides ×4 · avg 2\d s · \d+ m · jog-back recovery$/);
+    // The interval averages, count and fastest rep leave the strides out
+    expect(r.summary!.avgRepTimeS).toBeGreaterThan(195);
+    expect(Math.min(...r.reps.map((x) => x.paceS!))).toBeGreaterThan(200);
+    expect(r.summary!.avgRecoveryS!).toBeGreaterThan(80); // the 60 s jogs after strides are not interval recoveries
+    expect(r.reps.map((x) => x.n)).toEqual([1, 2, 3, 4, 5]);
+    expect(r.strides!.reps.map((x) => x.n)).toEqual([1, 2, 3, 4]);
+  });
+  it('an easy run with 6 strides at the end: Easy + Strides ×6, and no intervals', () => {
+    const pieces: [number, number][] = [[2400, 300]];
+    for (let i = 0; i < 6; i++) { pieces.push([20, 195]); pieces.push([70, 340]); }
+    const r = splitRun(run(stream(pieces)));
+    expect(r.strides?.reps).toHaveLength(6);
+    expect(r.reps).toHaveLength(0);
+    expect(r.title).toBe('6 × 20 s strides');
+    expect(r.segments[0].kind).toBe('warmup');
+  });
+  it('8 × 200 m at 5K pace with 200 m jogs are intervals: reps longer than 40 s are not strides', () => {
+    const pieces: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 8; i++) { pieces.push([42, 210]); pieces.push([70, 350]); }
+    pieces.push([600, 310]);
+    const r = splitRun(run(stream(pieces)));
+    expect(r.strides).toBeUndefined();
+    expect(r.reps).toHaveLength(8);
+  });
+  it('more than 10 short reps are a session, not strides; a stride needs 30 s of recovery', () => {
+    const many: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 12; i++) { many.push([30, 200]); many.push([60, 340]); }
+    expect(splitRun(run(stream(many))).strides).toBeUndefined();
+    const shortRest: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 6; i++) { shortRest.push([20, 200]); shortRest.push([20, 340]); }
+    shortRest.push([600, 310]);
+    expect(splitRun(run(stream(shortRest))).strides).toBeUndefined();
+  });
+  it('the runner can mark a part by hand, and it is regrouped', () => {
+    const pieces: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 4; i++) { pieces.push([20, 200]); pieces.push([60, 330]); }
+    for (let i = 0; i < 5; i++) { pieces.push([208, 208]); if (i < 4) pieces.push([90, 340]); }
+    pieces.push([600, 310]);
+    const a = run(stream(pieces));
+    const auto = splitRun(a);
+    const firstStride = auto.strides!.reps[0];
+    // "Mark as interval" on the first stride: it joins the interval set
+    const marked = splitRun({ ...a, segmentKinds: { [segKey(firstStride)]: 'run' } });
+    expect(marked.strides!.reps).toHaveLength(3);
+    expect(marked.reps).toHaveLength(6);
+    expect(marked.segments.find((x) => segKey(x) === segKey(firstStride))!.byHand).toBe(true);
+    // A looser rule for this runner (learned from a correction) takes 45 s reps as strides
+    const longer: [number, number][] = [[900, 300]];
+    for (let i = 0; i < 4; i++) { longer.push([45, 200]); longer.push([60, 330]); }
+    longer.push([900, 300]);
+    expect(splitRun(run(stream(longer))).strides).toBeUndefined();
+    expect(splitRun(run(stream(longer)), 'km', { maxS: 50, maxM: 260 }).strides?.reps).toHaveLength(4);
   });
 });

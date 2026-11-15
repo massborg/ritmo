@@ -1,7 +1,7 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
 import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
-import { predictRace, raceEvidence, vdotFromPerformance } from './fitness';
+import { officialTimeS, predictRace, raceEvidence, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 
 export function totalsBy(activities: Activity[], key: (a: Activity) => string): Map<string, { m: number; n: number; s: number }> {
@@ -38,7 +38,8 @@ export const PB_BASIS_LABEL: Record<PbBasis, string> = { official: 'official rac
  */
 export function timeAt(a: Activity, m: number, races: Race[] = []): { timeS: number; basis: PbBasis; within: boolean; kind: PbKind } | undefined {
   const kind: PbKind = a.isTimeTrial ? 'timetrial' : raceEvidence(a, races) ? 'race' : 'training';
-  if (kind === 'race' && a.distanceM >= m * 0.98 && a.distanceM <= m * 1.05) return { timeS: Math.round(a.durationS || a.movingS), basis: 'official', within: false, kind };
+  const official = kind === 'race' ? officialTimeS(a, m) : undefined;
+  if (official) return { timeS: official, basis: 'official', within: false, kind };
   let t: number | undefined, within = false;
   if (a.distanceM >= m * 0.99 && a.distanceM <= m * 1.03) t = a.movingS * (m / a.distanceM);
   if (a.distanceM >= m) { const e = effortOf(a, m); if (e && (!t || e < t - 0.5)) { t = e; within = true; } }

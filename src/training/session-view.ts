@@ -68,7 +68,7 @@ export interface WeekTarget {
   /** The target the plan was built with, in metres */
   originalM: number;
   /** Set when the target is lower than planned, with when and why */
-  lowered?: { at: string; because: string; changeId?: string };
+  lowered?: { at: string; because: string; changeId?: string; /** Lowered while coming back from an injury (a return-to-run step or care plan) */ returning?: boolean };
 }
 
 /**
@@ -76,7 +76,7 @@ export interface WeekTarget {
  * When that is clearly lower than the plan was built with, the latest plan change says when and why.
  * `painLabel` names the niggle ("right ankle") for pain changes.
  */
-export function weekTarget(adapted: Plan | undefined, stored: Plan | undefined, weekStart: string, weekEnd: string, painLabel?: string): WeekTarget {
+export function weekTarget(adapted: Plan | undefined, stored: Plan | undefined, weekStart: string, weekEnd: string, painLabel?: string, returning = false): WeekTarget {
   const inWeek = (p?: Plan) => (p?.sessions ?? []).filter((s) => s.date >= weekStart && s.date <= weekEnd);
   const m = inWeek(adapted).reduce((a, s) => a + s.distanceM, 0);
   // What was planned for the days of this week the plan covers (a plan that starts mid-week isn't "lowered")
@@ -86,5 +86,15 @@ export function weekTarget(adapted: Plan | undefined, stored: Plan | undefined, 
   if (!(originalM > 0 && m < originalM * 0.9 && originalM - m >= 2000)) return { m, originalM };
   const ch = [...(adapted?.changes ?? [])].filter((c) => c.reason !== 'moved').sort((a, b) => b.at.localeCompare(a.at))[0];
   const because = ch ? (ch.reason === 'pain' && painLabel ? `of your ${painLabel.toLowerCase()}` : REASON[ch.reason] ?? 'of a plan change') : 'of a plan change';
-  return { m, originalM, lowered: { at: ch?.at ?? new Date().toISOString(), because, changeId: ch?.id } };
+  return { m, originalM, lowered: { at: ch?.at ?? new Date().toISOString(), because, changeId: ch?.id, returning: returning || undefined } };
 }
+
+/** "7.1 of 22 km" (or "20 of 45 min" for sessions set by time): how much of a partly done session was covered */
+export function partlyDone(s: Pick<PlannedSession, 'distanceM' | 'durationS' | 'partial'>, u: Units): { text: string; ratio: number } | undefined {
+  if (!s.partial) return undefined;
+  if (s.distanceM > 0) return { text: `${plannedNum(s.partial.doneM, u)} of ${plannedNum(s.distanceM, u)} ${u}`, ratio: Math.min(1, s.partial.doneM / s.distanceM) };
+  return { text: `${Math.round(s.partial.doneS / 60)} of ${Math.round(s.durationS / 60)} min`, ratio: s.durationS ? Math.min(1, s.partial.doneS / s.durationS) : 0 };
+}
+
+/** "25 km (reduced from 93 km while returning)": the one wording for a week lowered by an injury (update 4) */
+export const reducedLine = (wt: WeekTarget, u: Units) => `${plannedNum(wt.m, u)} ${u} (reduced from ${plannedNum(wt.originalM, u)} ${u} while returning)`;

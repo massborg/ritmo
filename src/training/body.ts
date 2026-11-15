@@ -35,6 +35,27 @@ export interface BodyState {
   undone?: string;
   /** A care plan for the area (update 3, §10) */
   care?: import('./care').CareState;
+  /** The injury being looked after, from the first report to "healed" (update 4, task 2b) */
+  injury?: import('./injury').Injury;
+  /** Injuries marked healed, newest last */
+  injuryHistory?: import('./injury').PastInjury[];
+  /** Easing back in after "It feels healed" */
+  easeBack?: import('./injury').EaseBack;
+}
+
+/** Care-plan stage → the longest easy run it allows, in minutes */
+const CARE_MINUTES = [30, 45, 60];
+/** The return-to-run step now: the injury's, or the older stand-alone step */
+export const stepNow = (b: BodyState | undefined) => b?.injury?.step ?? b?.rtrStep;
+/** Whether an injury is being looked after (a step, a care plan or an active niggle): the plan follows it, and
+ *  readiness is capped at "Easy day" */
+export function injuryMode(b: BodyState | undefined, today: Date): string | undefined {
+  if (!b) return undefined;
+  if (b.injury) return `${b.injury.side ? `${b.injury.side} ` : ''}${b.injury.area.toLowerCase()}`;
+  const n = activeNiggle(b, today);
+  if (n && b.undone !== n.id) return label(n).toLowerCase();
+  if (b.rtrStep || b.care) return b.care ? b.care.area.replace('itband-hip', 'hip').replace('lower-back', 'lower back') : 'injury';
+  return undefined;
 }
 
 const label = (c: Pick<BodyCheckin, 'area' | 'side'>) => `${c.side ? `${c.side[0].toUpperCase()}${c.side.slice(1)} ` : ''}${c.side ? c.area.toLowerCase() : c.area}`;
@@ -119,9 +140,22 @@ export function painRule(c: BodyCheckin, careful = false): { level: PainLevel; d
 export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Plan {
   const active = activeNiggle(b, today);
   const paused = !!b?.redFlagAt && (!b.checkedAt || b.checkedAt < b.redFlagAt);
-  if (!active && !paused && !b?.rtrStep) return plan;
+  const step = stepNow(b);
+  const ease = b?.easeBack && b.easeBack.until >= ymd(today) ? b.easeBack : undefined;
+  if (!active && !paused && !step && !b?.care && !ease) return plan;
   const t = ymd(today);
   const sessions = plan.sessions.map((s) => ({ ...s }));
+  // What the plan had, so every changed session can show it crossed out with the reason (update 4)
+  const before = new Map(plan.sessions.map((s) => [s.id, { type: s.type, title: s.title, distanceM: s.distanceM, durationS: s.durationS }]));
+  const whereNow = injuryMode(b, today) ?? ease?.label ?? 'injury';
+  const finish = (p: Plan): Plan => {
+    for (const s of p.sessions) {
+      const o = before.get(s.id);
+      if (!o || s.date < t || s.status !== 'planned') continue;
+      if (o.type !== s.type || o.title !== s.title || Math.abs(o.distanceM - s.distanceM) > 100) s.changedFor = { label: whereNow, title: o.title, distanceM: o.distanceM, durationS: o.durationS };
+    }
+    return p;
+  };
   const changes = [...plan.changes];
   const log = (id: string, summary: string) => { if (!changes.some((c) => c.id === id)) changes.push({ id, at: new Date().toISOString(), reason: 'pain', summary }); };
   const upcoming = sessions.filter((s) => s.date >= t && s.status !== 'done' && s.type !== 'race');
@@ -132,7 +166,7 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
     // Red flag: no running until checked; no exercise tips either
     for (const s of upcoming.filter((x) => parseYmd(x.date) <= addDays(today, 13))) rest(s, 'Rest: get checked first', 'You reported a warning sign. Please see a doctor or physio before running again. Confirm in Ritmo once you have been checked.');
     log(`body-redflag:${b!.redFlagAt}`, 'Training is paused because you reported a warning sign. Get checked by a doctor or physio, then confirm in Ritmo to resume.');
-    return { ...plan, sessions, changes };
+    return finish({ ...plan, sessions, changes });
   }
 
   if (active) {
@@ -140,7 +174,7 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
     const area = active.area;
     const rule = painRule(active, b?.careful === active.id);
     // "Undo" on Training: the runner keeps their plan for this check-in (red flags are never undone)
-    if (b?.undone === active.id) { log(`body-undone:${active.id}`, `${where} pain ${active.pain}/10: you chose to keep your plan as it was. Check in again tomorrow.`); return { ...plan, sessions, changes }; }
+    if (b?.undone === active.id) { log(`body-undone:${active.id}`, `${where} pain ${active.pain}/10: you chose to keep your plan as it was. Check in again tomorrow.`); return finish({ ...plan, sessions, changes }); }
     const settle = ymd(addDays(parseYmd(active.at.slice(0, 10)), rule.days));
     if (rule.level === 'rest') {
       // 6+: rest from running, and see a physio
@@ -156,7 +190,8 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
       if (HARD.includes(s.type)) easy(s, `An easy, flat run instead of a hard session while your ${where.toLowerCase()} settles.`, k === 1 ? 0.8 : k);
       else if (k < 1) Object.assign(s, { distanceM: Math.round(s.distanceM * k), durationS: Math.round(s.durationS * k) });
     }
-    log(`body-rule:${active.id}:${rule.level}`, rule.summary);
+    // With a return-to-run step, one entry says it all (below); otherwise the pain rule is logged in its own words
+    if (!step) log(`body-rule:${active.id}:${rule.level}`, rule.summary);
     // Location-aware: what each area should avoid for now
     const two = upcoming.filter((x) => parseYmd(x.date) <= addDays(today, 13));
     for (const s of two) {
@@ -173,14 +208,39 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
     if (['Achilles', 'Calf', 'Hamstring', 'Knee', 'Shin'].includes(area)) log(`body-area:${active.id}`, `${where}: sessions that load it most are changed for the next two weeks (${area === 'Shin' ? 'no back-to-back running days' : area === 'Knee' ? 'shorter, flatter long run' : area === 'Hamstring' ? 'no sprint-speed reps' : 'no hills, spikes or fast strides'}).`);
   }
 
-  if (b?.rtrStep && b.rtrStep >= 1 && b.rtrStep <= RTR_STEPS.length) {
-    // Coming back: the next running days become return-to-run steps, one step at a time
-    const step = RTR_STEPS[b.rtrStep - 1];
-    const next = upcoming.find((x) => isRun(x) && x.title !== 'Cross-training instead of running');
-    if (next) Object.assign(next, { type: 'runwalk', title: step.title, focus: 'Building up', purpose: `${step.detail} Move to the next step only if pain stays at 2/10 or lower during the run and the next morning.`, distanceM: step.km * 1000, durationS: step.km * 400, steps: [{ label: step.title, detail: step.detail, km: step.km }], paceTarget: undefined, second: undefined });
+  // Injury mode overrides the plan (update 4): while a return-to-run step or a care plan is active, long and hard
+  // sessions become easy, flat runs of the length the current step allows
+  const capKm = step && step >= 1 && step <= RTR_STEPS.length ? RTR_STEPS[step - 1].km : b?.care ? Math.round((CARE_MINUTES[b.care.stage] ?? 45) * 60 / 400 * 2) / 2 : undefined;
+  if (capKm) {
+    const runs = upcoming.filter((x) => isRun(x) && x.title !== 'Cross-training instead of running' && parseYmd(x.date) <= addDays(today, 13)).sort((x, y) => x.date.localeCompare(y.date));
+    runs.forEach((x, i) => {
+      if (step && i === 0) {
+        // Coming back: the next running day is the return-to-run step, one step at a time
+        const st = RTR_STEPS[step - 1];
+        Object.assign(x, { type: 'runwalk', title: st.title, focus: 'Building up', purpose: `${st.detail} Move to the next step only if pain stays at 2/10 or lower during the run and the next morning.`, distanceM: st.km * 1000, durationS: st.km * 400, steps: [{ label: st.title, detail: st.detail, km: st.km }], paceTarget: undefined, hrZones: undefined, second: undefined });
+        return;
+      }
+      if (!(HARD.includes(x.type) || x.type === 'long' || x.distanceM > capKm * 1000)) return;
+      const m = Math.min(x.distanceM || capKm * 1000, capKm * 1000);
+      const perM = x.distanceM > 0 ? Math.max(0.33, x.durationS / x.distanceM) : 0.4;
+      Object.assign(x, { type: 'easy', title: 'Easy flat run', focus: 'Aerobic base', purpose: `An easy, flat run of up to ${Math.round(m * perM / 60)} minutes while your ${whereNow} recovers. Z2 only, no steady finish. Stop if pain goes above 2/10.`, distanceM: m, durationS: Math.round(m * perM), steps: [{ label: 'Easy flat run', detail: 'Relaxed and conversational, on flat ground. Stop if pain goes above 2/10.', km: Math.round(m / 100) / 10 }], paceTarget: undefined, second: undefined });
+    });
+    log(step ? `body-rtr:${b?.injury?.id ?? 'step'}:${step}` : `body-care:${b!.care!.startedAt}:${b!.care!.stage}`, step
+      ? `${active && painRule(active, b?.careful === active.id).level !== 'easy' ? `${label(active)} pain ${active.pain}/10: ${painRule(active, b?.careful === active.id).short.charAt(0).toLowerCase()}${painRule(active, b?.careful === active.id).short.slice(1)} ` : ''}Return to run, step ${step} of 6: your plan follows this until you are cleared. Hard and long sessions are easy, flat runs of up to ${capKm} km.`
+      : `Care plan, stage ${b!.care!.stage + 1} of 3: hard and long sessions are easy, flat runs of up to ${capKm} km until the stage moves on.`);
   }
-  return { ...plan, sessions, changes };
+
+  // Easing back in after "It feels healed": about 70% of the planned distance, and no intervals or hills at first
+  if (ease && !step) {
+    for (const x of upcoming.filter((y) => isRun(y) && y.date >= ease.from && y.date <= ease.until)) {
+      if (x.date <= ease.noHardUntil && HARD.includes(x.type)) easy(x, `An easy run instead of a hard session for the first days back from your ${ease.label}.`, EASE_BACK_SCALE);
+      else Object.assign(x, { distanceM: Math.round(x.distanceM * EASE_BACK_SCALE / 100) * 100, durationS: Math.round(x.durationS * EASE_BACK_SCALE) });
+    }
+  }
+  return finish({ ...plan, sessions, changes });
 }
+
+const EASE_BACK_SCALE = 0.7;
 
 /** Exercises many runners use to stay strong in each area (general guidance, not treatment). */
 export const PREHAB: Record<string, { title: string; exercises: { name: string; dose: string[] }[] }> = {

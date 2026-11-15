@@ -10,7 +10,7 @@ import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
 import { dist, duration, longDate, pace, type Units, ymd } from '../lib/format';
-import { EASY_FAMILY, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
+import { EASY_FAMILY, SESSION_SHORT, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import { buildVerdict } from '../training/verdict';
 import { ReadinessStrip } from '../components/training';
 import { swapLine } from '../training/plan';
@@ -120,7 +120,7 @@ function SplitsTable({ splits, units }: { splits: ReturnType<ReturnType<typeof u
 
 export default function ActivityPage() {
   const { id } = useParams();
-  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today, sessionOfRun, renameRun, setRunHidden } = useApp();
+  const { data, analysisFor, logFeedback, setRaceFlag, groupOf, plan, aRace, paces, fitness, typeOf, hasFlag, labelOf, zones, hr, hrIssue, readinessToday, today, sessionOfRun, renameRun, setRunHidden, markSegment } = useApp();
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -133,7 +133,7 @@ export default function ActivityPage() {
   const setTab = (t: RunTab) => { setTabState(t); try { sessionStorage.setItem(TAB_KEY, t); } catch { /* */ } };
   const { run: a, loading } = useRunDetail(data.activities.find((x) => x.id === id), data.mode === 'real');
   const { post, reload: reloadPost } = useRunPost(a);
-  const iv = useMemo(() => (a ? splitRun(a, data.profile.units) : undefined), [a, data.profile.units]);
+  const iv = useMemo(() => (a ? splitRun(a, data.profile.units, data.profile.strideRule) : undefined), [a, data.profile.units, data.profile.strideRule]);
   const [title, setTitle] = useState(a?.name ?? '');
   useEffect(() => { setTitle(a?.name ?? ''); }, [a?.id, a?.name]);
   if (!a || !iv) return <Empty title="Run not found" action={<Link to="/you" className="btn">Back</Link>} />;
@@ -158,6 +158,7 @@ export default function ActivityPage() {
   const session = sessionOfRun(a.id);
   const d0 = a.startTime.slice(0, 10);
   const planTag = session?.status === 'swapped' ? { cls: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
+    : session?.status === 'partial' ? { cls: 'muted', icon: null, text: `Part of your planned ${(SESSION_SHORT[session.type] ?? session.title).toLowerCase()} · ${TYPE_LABEL[typeOf(a)]}` }
     : session?.status === 'done' ? { cls: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `Matched plan · ${TYPE_LABEL[typeOf(a)]}` }
     : plan && d0 >= plan.startDate ? { cls: 'extra', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' } : undefined;
   const nextSession = plan?.sessions.find((x) => x.date > ymd(today) && x.type !== 'rest' && x.status === 'planned');
@@ -225,8 +226,8 @@ export default function ActivityPage() {
         </Sheet>
       )}
 
-      {tab === 'intervals' && <div role="tabpanel" id="run-panel-intervals" aria-labelledby="run-tab-intervals"><RunIntervals iv={iv} units={U} /></div>}
-      {tab === 'charts' && <div role="tabpanel" id="run-panel-charts" aria-labelledby="run-tab-charts"><RunCharts a={a} reps={iv.reps} units={U} zones={a.avgHr ? zones : undefined} /></div>}
+      {tab === 'intervals' && <div role="tabpanel" id="run-panel-intervals" aria-labelledby="run-tab-intervals"><RunIntervals iv={iv} units={U} onMark={(key, kind, part) => markSegment(a.id, key, kind, part)} /></div>}
+      {tab === 'charts' && <div role="tabpanel" id="run-panel-charts" aria-labelledby="run-tab-charts"><RunCharts a={a} reps={iv.reps.length ? iv.reps : iv.strides?.reps ?? []} units={U} zones={a.avgHr ? zones : undefined} /></div>}
       {tab === 'shoes' && <div role="tabpanel" id="run-panel-shoes" aria-labelledby="run-tab-shoes"><RunShoes run={a} /></div>}
 
       {tab === 'overview' && <div role="tabpanel" id="run-panel-overview" aria-labelledby="run-tab-overview" className="stack-lg">

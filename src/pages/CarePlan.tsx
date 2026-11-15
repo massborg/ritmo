@@ -8,6 +8,7 @@ import { AlertTriangle, Check, HeartPulse } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { StatusLine } from '../components/ui';
+import { HealedSheet } from '../components/InjurySheets';
 import { activeNiggle, painRule, type BodyArea } from '../training/body';
 import { applyCheck, CARE_DISCLAIMER, careAreaFor, loadCarePlans, physioAdvice, URGENT, type CareArea, type CareExercise, type CarePlans, type CareState } from '../training/care';
 import { longDate, parseYmd, ymd } from '../lib/format';
@@ -32,6 +33,7 @@ export default function CarePlan() {
   const [urgent, setUrgent] = useState(false);
   const [result, setResult] = useState<string>();
   const [physioText, setPhysioText] = useState<string>();
+  const [healed, setHealed] = useState(false);
   if (err) return <div className="stack-lg"><AppHeader title="Care plan" back /><StatusLine kind="warning">{err}</StatusLine></div>;
   if (!plans) return <div className="stack-lg"><AppHeader title="Care plan" back /><p className="muted">Loading…</p></div>;
 
@@ -149,7 +151,11 @@ export default function CarePlan() {
       </section>
 
       {safety}
-      <button className="btn btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => updateBody({ care: undefined })}>Stop the care plan</button>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <button className="btn" onClick={() => setHealed(true)}>It feels healed</button>
+        <button className="btn btn-ghost" onClick={() => updateBody({ care: undefined })}>Stop the care plan</button>
+      </div>
+      {healed && <HealedSheet onClose={() => setHealed(false)} />}
     </div>
   );
 }

@@ -65,6 +65,7 @@ export default function Planned() {
           {s.status === 'done' && <StatusLine kind="success">Completed</StatusLine>}
           {s.status === 'swapped' && <StatusLine kind="info">Swapped: run as an easy run instead</StatusLine>}
           {s.status === 'missed' && <StatusLine kind="warning">Missed</StatusLine>}
+          {s.status === 'partial' && <StatusLine kind="info">Partly done</StatusLine>}
           {s.edited && <span className="tag edited-tag">Your version</span>}
         </div>
         {s.status === 'planned' && s.type !== 'rest' && s.type !== 'race' && (

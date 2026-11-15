@@ -51,6 +51,9 @@ const HARDER: SessionType[] = ['threshold', 'vo2max', 'tempo', 'hills'];
 /**
  * Apply adaptations to a plan given what actually happened. Idempotent: each change has a stable id.
  */
+/** A matched run completes a session from 80% of its planned distance or time */
+export const PART_DONE = 0.8;
+
 export function adaptPlan(opts: {
   plan: Plan;
   activities: Activity[];
@@ -93,17 +96,29 @@ export function adaptPlan(opts: {
     const linked = activities.find((a) => a.plannedSessionId === s.id && !used.has(a.id));
     const pick = (linked && unitOf.get(linked.id)) ?? best(s, unitsOn(s.date))
       ?? unitsOn(ymd(addDays(parseYmd(s.date), 1))).find(() => !plan.sessions.some((o) => o.date === ymd(addDays(parseYmd(s.date), 1)) && o.type !== 'rest'));
-    if (pick && !linked && s.date === t && !fits(s, pick)) continue; // wait until the end of the day
+    // Done needs at least 80% of the planned distance (or time) as well as the right kind of run (update 4). A run
+    // the runner linked themselves, or reps they entered, is done as they said.
+    const sure = !!pick && (!!linked || repsDone(pick));
+    let parts = pick ? [pick] : [];
+    const covered = () => (s.distanceM > 0 ? parts.reduce((x, g) => x + g.totalM, 0) / s.distanceM : s.durationS > 0 ? parts.reduce((x, g) => x + g.movingS, 0) / s.durationS : 1);
+    if (pick && !sure && covered() < PART_DONE) {
+      // Every other run that day counts toward the same planned session, wherever the gaps between them fall
+      parts = [pick, ...unitsOn(s.date).filter((g) => g.id !== pick.id && !g.parts.some((a) => a.plannedSessionId && a.plannedSessionId !== s.id))].sort((x, y) => x.parts[0].startTime.localeCompare(y.parts[0].startTime));
+    }
+    const partly = !!pick && !sure && covered() < PART_DONE;
+    if (pick && !linked && !partly && s.date === t && !fits(s, pick)) continue; // wait until the end of the day
     if (pick) {
-      used.add(pick.id);
+      for (const g of parts) used.add(g.id);
       const ran = typeOf(pick.main);
       // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
       // even if the average pace over the whole run (warm-up and jogs included) looks easy
       const outcome = repsDone(pick) ? { status: 'done' as const } : sessionOutcome(s.type, ran);
-      s.status = outcome.status;
-      s.swappedTo = outcome.status === 'swapped' ? ran : undefined;
+      const all = parts.flatMap((g) => g.parts);
+      s.status = partly ? 'partial' : outcome.status;
+      s.partial = partly ? { doneM: all.reduce((x, a) => x + a.distanceM, 0), doneS: all.reduce((x, a) => x + a.movingS, 0), ran } : undefined;
+      s.swappedTo = !partly && outcome.status === 'swapped' ? ran : undefined;
       s.completedActivityId = pick.main.id;
-      s.completedParts = pick.parts.length > 1 ? pick.parts.map((a) => a.id) : undefined;
+      s.completedParts = all.length > 1 ? all.map((a) => a.id) : undefined;
     } else if (s.date < t && s.status === 'planned') {
       s.status = 'missed';
     }

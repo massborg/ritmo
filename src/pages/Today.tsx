@@ -18,7 +18,7 @@ import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_NAMES, daysBetween, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
-import { TYPE_LABEL } from '../training/analysis';
+import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
 import { weekReview } from '../training/report';
@@ -28,7 +28,9 @@ import { InstallPrompt } from '../components/InstallPrompt';
 import { SamsungTip } from '../components/SamsungTip';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
 import { CARE_DISCLAIMER, careAreaFor } from '../training/care';
-import { plannedNum } from '../training/session-view';
+import { canReopen, dayNumber, feelsHealed, injuryLabel } from '../training/injury';
+import { HealedSheet, InjuryCheckinSheet } from '../components/InjurySheets';
+import { partlyDone, plannedNum } from '../training/session-view';
 import { EditSession } from '../components/EditSession';
 import { StrengthCard } from '../components/StrengthSession';
 import { BodyCheckinSheet } from '../components/BodyCheckin';
@@ -45,12 +47,38 @@ function dayTitle(d: string, t: string): string {
   return `${DAY_NAMES[(date.getDay() + 6) % 7]}'s training · ${date.getDate()} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
 }
 
-/** Body: the niggle Ritmo is looking after, a red-flag pause, or the return-to-run step */
-function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+
+/** Body: the injury or niggle Ritmo is looking after, a red-flag pause, or the return-to-run step */
+function BodyCard({ onCheckIn, onHealed }: { onCheckIn: () => void; onHealed: () => void }) {
   const { data, today, updateBody } = useApp();
   const b = data.profile.body;
   const n = activeNiggle(b, today);
   const paused = !!b?.redFlagAt && (!b.checkedAt || b.checkedAt < b.redFlagAt);
+  const inj = b?.injury;
+  // An injury Ritmo is bringing back step by step (update 4): it overrides the plan until it is cleared or healed
+  if (inj && !paused) {
+    const t = ymd(today);
+    const last = inj.days[inj.days.length - 1];
+    const checked = inj.days.some((d) => d.date === t);
+    return (
+      <section className="card stack-sm injury-card" aria-labelledby="body-card">
+        <div className="row-between">
+          <h2 id="body-card" className="label">Return to run · step {inj.step} of 6</h2>
+          <span className="status-chip partial">{cap(inj.area)} {last?.pain ?? 0}/10</span>
+        </div>
+        <p className="body-rule">Your plan follows this until you're cleared. Hard or long sessions become easy, flat runs.</p>
+        {feelsHealed(inj) && <p className="label">Feels healed? Five days at 0–1 out of 10.</p>}
+        <div className="row wrap">
+          <button className={`btn btn-small${checked ? '' : ' btn-primary'}`} onClick={onCheckIn}>{checked ? 'Check in again' : 'Check in'}</button>
+          <button className={`btn btn-small${feelsHealed(inj) ? ' btn-primary' : ''}`} onClick={onHealed}>It feels healed</button>
+          {!b?.care && careAreaFor(inj.area) && <Link to="/care" className="btn btn-small">Start a care plan</Link>}
+          <Link to="/coach?mode=body" className="btn btn-ghost btn-small">Ask about it</Link>
+        </div>
+        <p className="caption">Day {dayNumber(inj, t)} · {injuryLabel(inj)}. {DISCLAIMER}</p>
+      </section>
+    );
+  }
   if (!n && !paused && !b?.rtrStep) return null;
   const firstOfArea = n ? [...(b?.checkins ?? [])].filter((c) => c.area === n.area && c.side === n.side).sort((x, y) => x.at.localeCompare(y.at))[0] : undefined;
   const dayN = firstOfArea ? Math.floor((today.getTime() - new Date(firstOfArea.at).getTime()) / 86400000) + 1 : 1;
@@ -72,6 +100,7 @@ function BodyCard({ onCheckIn }: { onCheckIn: () => void }) {
         {!paused && n && !b?.rtrStep && painRule(n).level !== 'rest' && (b?.careful === n.id
           ? <button className="btn btn-ghost btn-small" onClick={() => updateBody({ careful: undefined })}>Back to Ritmo's advice</button>
           : <button className="btn btn-small" onClick={() => updateBody({ careful: n.id })}>Be more careful</button>)}
+        {!paused && (n || b?.rtrStep) && <button className="btn btn-small" onClick={onHealed}>It feels healed</button>}
         {!paused && <Link to="/coach?mode=body" className="btn btn-ghost btn-small">Ask about it</Link>}
       </div>
       <p className="caption">{DISCLAIMER}</p>
@@ -114,7 +143,7 @@ function CareCard() {
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
-  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen } = useApp();
+  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen, linkRunToSession, reopenInjury } = useApp();
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
@@ -133,6 +162,11 @@ export default function Today() {
   const [editing, setEditing] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
   const [hurts, setHurts] = useState(false);
+  const [daily, setDaily] = useState(false);
+  const [healed, setHealed] = useState(false);
+  const injuryNow = data.profile.body?.injury;
+  // "It's back" for 14 days on Training (30 days in Profile, Health)
+  const backAgain = [...(data.profile.body?.injuryHistory ?? [])].sort((x, y) => y.endedAt.localeCompare(x.endedAt)).find((p) => canReopen(p, today) && (today.getTime() - parseYmd(p.endedAt).getTime()) / 86400000 <= 14);
   const shiftDay = (n: number) => setSelected((d) => ymd(addDays(parseYmd(d), n)));
   // ← and → change the day on a keyboard (not while typing)
   useEffect(() => {
@@ -187,7 +221,7 @@ export default function Today() {
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = athlete.weekM;
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
-  const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk');
+  const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk' && !x.changedFor); // a return-to-run step is not a starter plan
   const lastAn = last ? analysisFor(last) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
   const missedTo = plan && missed ? missedMoveOptions(plan, missed.id, today).slice(0, 3) : [];
@@ -206,7 +240,9 @@ export default function Today() {
     return { ran: `You ran ${labelOf(done).split(' · ')[0].toLowerCase().replace(/ run$/, '')} ${dist(done.distanceM, U)} instead · ${pace(done.movingS / (done.distanceM / 1000), U)} · ${duration(done.movingS)} · ${v.title.toLowerCase()}`, next: plan ? swapLine(s, done, plan.sessions) : '' };
   })() : undefined;
   const upcoming = (plan?.sessions ?? []).filter((x) => x.date >= t && x.type !== 'rest');
-  const isStarter = plan?.sessions.some((x) => x.type === 'runwalk' || x.type === 'timetrial');
+  // A starter plan (run/walk or a time trial), read from the plan itself: a return-to-run step during an injury is not
+  // one, so "Full plans unlocked" never shows to a runner whose plan was built from a race result or PB (update 4)
+  const isStarter = !!data.plan?.sessions.some((x) => (x.type === 'runwalk' && !/^Return to run/.test(x.title)) || x.type === 'timetrial');
 
   // Coaching insight: only recent plan changes (they carry their own date), otherwise a note from the last run, dated
   const recentChange = plan?.changes.filter((c) => c.id !== 'built' && daysBetween(new Date(c.at), today) <= 2).sort((a, b) => b.at.localeCompare(a.at))[0];
@@ -262,9 +298,17 @@ export default function Today() {
         if (!worn) return null;
         return <Link to="/profile/shoes" className="banner shoe-alert" role="note"><StatusLine kind="warning">{shoeAlert(worn.sh, worn.km) === 'retire' ? `Time for new shoes: ${worn.sh.name} have done ${Math.round(worn.km)} km` : `${worn.sh.name}: about ${Math.max(0, Math.round(worn.sh.retireKm - worn.km))} km left before they are worn out`}</StatusLine></Link>;
       })()}
-      {hasFlag('body') && <BodyCard onCheckIn={() => setHurts(true)} />}
+      {hasFlag('body') && <BodyCard onCheckIn={() => (injuryNow && injuryNow.startedAt !== t ? setDaily(true) : setHurts(true))} onHealed={() => setHealed(true)} />}
+      {hasFlag('body') && !injuryNow && backAgain && (
+        <section className="card stack-sm" aria-label="Recently healed">
+          <p className="caption">{cap(injuryLabel(backAgain))} marked healed on {parseYmd(backAgain.endedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{data.profile.body?.easeBack && data.profile.body.easeBack.until >= t ? `. Easing back in until ${parseYmd(data.profile.body.easeBack.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}.</p>
+          <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => reopenInjury(backAgain.id, 2)}>It's back</button>
+        </section>
+      )}
+      {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setHurts(true); }} />}
+      {healed && <HealedSheet onClose={() => setHealed(false)} />}
       {hasFlag('body') && isToday && <CareCard />}
-      {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
+      {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
         <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
@@ -277,6 +321,9 @@ export default function Today() {
             <span className="pill-on-brand">{isToday ? 'Today' : dayTitle(selected, t).replace("'s training", '')}</span>
             <span className="label">{s.focus} · {PHASE_LABEL[s.phase]}</span>
           </div>
+          {s.changedFor && s.status === 'planned' && (
+            <p className="changed-for"><span className="pill-on-brand">Changed for your {s.changedFor.label}</span> <s className="was-planned">{s.changedFor.title}{s.changedFor.distanceM > 0 ? ` · ${plannedNum(s.changedFor.distanceM, U)} ${U}` : ''}</s></p>
+          )}
           <h2 id="session-title" className="display-lg">{s.title}</h2>
           {s.edited && <span className="pill-on-brand edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
           {s.type !== 'rest' ? (
@@ -296,6 +343,13 @@ export default function Today() {
               {swappedNote.next && <p className="swapped-next">{swappedNote.next}</p>}
             </div>
           )}
+          {s.status === 'partial' && s.partial && (() => { const pd = partlyDone(s, U)!; return (
+            <div className="partly" role="group" aria-label="Partly done">
+              <div className="row-between"><span className="label">Partly done</span><span className="status-chip partial">{pd.text}</span></div>
+              <div className="partly-bar" role="progressbar" aria-label="How much of the session is done" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pd.ratio * 100)}><span style={{ width: `${Math.round(pd.ratio * 100)}%` }} /></div>
+              <p className="caption">Matched as {/^[aeiou]/i.test(TYPE_LABEL[s.partial.ran]) ? 'an' : 'a'} <strong>{TYPE_LABEL[s.partial.ran].toLowerCase()}</strong>, not the {(SESSION_SHORT[s.type] ?? s.title).toLowerCase()}. Ritmo counts it toward your week but won't mark the {(SESSION_SHORT[s.type] ?? 'session').toLowerCase()} as done.</p>
+            </div>
+          ); })()}
           {done && s.status === 'done' && <p className="swapped-line"><span className="tag">Done</span> {dist(done.distanceM, U)} · {pace(done.movingS / (done.distanceM / 1000), U)} · {duration(done.movingS)}</p>}
           {!done && s.type !== 'rest' && selected < t && s.status !== 'skipped' && <p className="label">Did you do this session?</p>}
           {s.status === 'skipped' && <p className="label">You skipped this session.</p>}
@@ -303,7 +357,8 @@ export default function Today() {
             {done
               ? <><Link to={`/activity/${done.id}`} className="btn btn-primary">See feedback <ArrowRight size={18} strokeWidth={2} aria-hidden="true" /></Link>
                 <Link to={`/coach?q=${encodeURIComponent(`How did my run on ${longDate(new Date(done.startTime))} go?`)}`} className="btn"><MessageCircle size={18} strokeWidth={2} aria-hidden="true" />Ask coach</Link>
-                {!swappedNote && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
+                {s.status === 'partial' && <button className="btn btn-ghost" onClick={() => linkRunToSession(done.id, s.id)}><Check size={18} strokeWidth={2} aria-hidden="true" />Count it as done</button>}
+                {!swappedNote && s.status !== 'partial' && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
               : isToday && s.type !== 'rest' && s.status === 'planned'
                 ? <>
                     <Link to="/run" className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>

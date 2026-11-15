@@ -168,6 +168,22 @@ export function likelyRace(a: Activity, hr: HrSetup, races: Race[] = []): boolea
   return !!a.avgHr && a.avgHr >= hr.rest + 0.85 * (hr.max - hr.rest);
 }
 
+/**
+ * The one time a race counts as, everywhere (update 4): the whole run's time, rounded to the second, when the run is
+ * the race distance (within 2% under to 5% over). Personal bests, the plan note and the Coach all quote this, so a
+ * 5K never shows as 15:53 in one place and 15:52 in another.
+ */
+export function officialTimeS(a: Pick<Activity, 'distanceM' | 'durationS' | 'movingS'>, m: number): number | undefined {
+  return a.distanceM >= m * 0.98 && a.distanceM <= m * 1.05 ? Math.round(a.durationS || a.movingS) : undefined;
+}
+
+/** The time to quote for an all-out run in notes: the official time when the run was the race distance without real
+ *  stops (so it matches the personal best to the second); otherwise the moving time scaled to the distance */
+const quotedTimeS = (a: Pick<Activity, 'distanceM' | 'durationS' | 'movingS'>, m: number): number => {
+  const official = officialTimeS(a, m);
+  return official !== undefined && official - a.movingS <= 5 ? official : a.movingS * (m / a.distanceM);
+};
+
 const GENERIC_NAME = /^(run|running|morning run|afternoon run|evening run|lunch run|night run|corsa|activity)$/i;
 const effortLabel = (a: Activity, distanceM: number, timeS: number, when: string) =>
   `your ${a.name && !GENERIC_NAME.test(a.name.trim()) ? a.name : distanceLabel(distanceM).replace(/^\w/, (c) => c.toLowerCase())} in ${duration(timeS)} on ${when}`;
@@ -187,7 +203,7 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
     const allOut = likelyRace(a, hr, races);
     const when = shortDate(new Date(a.startTime));
     const candidates: { v: number; label: string; allOut: boolean }[] = [];
-    if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isTimeTrial ? `your time trial on ${when}` : effortLabel(a, raceDistanceOf(a.distanceM) ?? a.distanceM, a.movingS * ((raceDistanceOf(a.distanceM) ?? a.distanceM) / a.distanceM), when), allOut: true });
+    if (allOut) candidates.push({ v: vdotFromPerformance(a.distanceM, a.movingS), label: a.isTimeTrial ? `your time trial on ${when}` : effortLabel(a, raceDistanceOf(a.distanceM) ?? a.distanceM, quotedTimeS(a, raceDistanceOf(a.distanceM) ?? a.distanceM), when), allOut: true });
     {
       for (const d of EFFORT_DISTANCES) {
         const e = effortOf(a, d);

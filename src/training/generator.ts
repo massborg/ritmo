@@ -415,6 +415,7 @@ export function generatePlan(input: GenInput): GenResult {
   let normal = r.weeklyKm;
   let qVariant = 0;
   let strengthN = 0;
+  let strengthDows: number[] = [];
   for (let w = 0; w < totalWeeks; w++) {
     const ws = addDays(ws0, w * 7);
     let phase: Phase = w < preTaperWeeks ? weekPhases[w] ?? 'peak' : 'taper';
@@ -586,8 +587,14 @@ export function generatePlan(input: GenInput): GenResult {
         const easyFree = weekSessions.filter((x) => ok(x) && (x.type === 'easy' || x.type === 'recovery') && !HARD_NEXT.includes(next(x)?.type ?? ''));
         const restFree = weekSessions.filter((x) => ok(x) && x.type === 'rest' && !HARD_NEXT.includes(next(x)?.type ?? ''));
         const easyBefore = weekSessions.filter((x) => ok(x) && (x.type === 'easy' || x.type === 'recovery') && HARD_NEXT.includes(next(x)?.type ?? ''));
-        const picks = [...easyFree, ...restFree, ...easyBefore].slice(0, r.strengthPerWeek).sort((a, b) => a.date.localeCompare(b.date));
+        // The same weekdays as last week where they still fit (update 4): with one session a week, picking a different
+        // day each week left gaps of up to 10 days between sessions
+        const dow = (x: PlannedSession) => weekday(parseYmd(x.date));
+        const good = [...easyFree, ...restFree];
+        const kept = good.filter((x) => strengthDows.includes(dow(x)));
+        const picks = [...kept, ...good.filter((x) => !kept.includes(x)), ...easyBefore].slice(0, r.strengthPerWeek).sort((a, b) => a.date.localeCompare(b.date));
         for (const x of picks) plan(x, x.type === 'rest');
+        if (picks.length) strengthDows = picks.map(dow);
       }
     }
     // No run may be more than 35% of what the week actually adds up to (training weeks with 3+ runs)

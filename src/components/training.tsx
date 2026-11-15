@@ -17,7 +17,7 @@ import { canRestore } from '../training/rebuild';
 import { findDuplicates } from '../data/quality';
 import { relTime } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
-import { plannedNum, sessionAmount } from '../training/session-view';
+import { plannedNum, reducedLine, sessionAmount } from '../training/session-view';
 import { EditSession } from './EditSession';
 import { StrengthCard } from './StrengthSession';
 
@@ -37,7 +37,8 @@ export function WeekBar({ doneM, plannedM, thisWeek }: { doneM: number; plannedM
       <div className="row-between"><span className="label">This week</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${n(plannedM)}` : ''} <small>{U}</small></span></div>
       {plannedM > 0 && <div className="week-bar-track" role="progressbar" aria-label="Distance this week" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: `${pct}%` }} /></div>}
       {over >= 100 && <p className="caption week-over">+{n(over)} {U} over this week's target</p>}
-      {thisWeek && wt.lowered && plannedM > 0 && <p className="caption week-why">Lowered from {n(wt.originalM)} {U} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}. <a href="#changes" onClick={(e) => { e.preventDefault(); const el = document.getElementById('changes'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.closest('section')?.querySelector('details')?.setAttribute('open', ''); }}>Why?</a></p>}
+      {thisWeek && wt.lowered?.returning && plannedM > 0 && <p className="caption week-why">This week: <strong>{reducedLine(wt, U)}</strong></p>}
+      {thisWeek && wt.lowered && !wt.lowered.returning && plannedM > 0 && <p className="caption week-why">Lowered from {n(wt.originalM)} {U} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}. <a href="#changes" onClick={(e) => { e.preventDefault(); const el = document.getElementById('changes'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.closest('section')?.querySelector('details')?.setAttribute('open', ''); }}>Why?</a></p>}
     </div>
   );
 }
@@ -69,7 +70,7 @@ export function ReadinessStrip({ r }: { r: ReadinessScore }) {
           <span className="row" style={{ gap: 8, alignItems: 'baseline' }}>
             <span className="caption">Readiness</span>
             <span className="rd-score">{r.score}</span>
-            <span className="rd-word" style={{ color: BAND_COLOUR[r.band] }}>{r.word}</span>
+            <span className="rd-word" style={{ color: BAND_COLOUR[r.band] }}>{r.word}</span>{r.capped && <span className="status-chip partial rd-capped">Capped by injury</span>}
           </span>
           <ChevronRight size={20} strokeWidth={2} aria-hidden="true" />
         </span>
@@ -213,6 +214,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
               <div className="row-between"><h3 className="title">{s.title}</h3><StatusChip s={s} /></div>
               {s.edited && <span className="tag edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
               {s.type !== 'rest' && <p className="caption">{sessionAmount(s, U)} · {s.focus}{phase ? ` · ${PHASE_LABEL[phase.phase]} phase` : ''}</p>}
+              {s.changedFor && s.status === 'planned' && <p className="caption"><s>{s.changedFor.title}{s.changedFor.distanceM > 0 ? ` · ${plannedNum(s.changedFor.distanceM, U)} ${U}` : ''}</s> · changed for your {s.changedFor.label}</p>}
               <p>{s.purpose}</p>
               {s.strengthPlan && <StrengthCard session={s} compact />}
               {s.type !== 'rest' && s.steps.length > 0 && <ol className="ol-steps caption">{s.steps.map((st, i) => <li key={i}><strong style={{ color: 'var(--ink)' }}>{localise(st.label, U)}</strong> {localise(st.detail ?? '', U)}</li>)}</ol>}
@@ -248,6 +250,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
 
 function StatusChip({ s }: { s: PlannedSession }) {
   if (s.status === 'done') return <span className="status-chip done">Done</span>;
+  if (s.status === 'partial') return <span className="status-chip partial">Partly done</span>;
   if (s.status === 'swapped') return <span className="status-chip swapped"><ArrowLeftRight size={12} strokeWidth={2.5} aria-hidden="true" />Swapped</span>;
   if (s.status === 'missed') return <span className="status-chip missed">Missed</span>;
   if (s.status === 'skipped') return <span className="status-chip missed">Skipped</span>;
@@ -281,7 +284,7 @@ export function RestOfWeek({ from }: { from: string }) {
             <li key={d} data-drop-date={d} className={dropClass(d) || undefined}>
               <button className="rw-row" onClick={() => setOpen(d)} {...(canDrag ? handle(s!.id, s!.title) : {})}>
                 <span className="rw-day"><span className="label">{DAY_SHORT[weekday(parseYmd(d))]}</span><span className="caption">{parseYmd(d).getDate()}</span></span>
-                <span className="rw-main"><span className="label">{s ? s.title : 'Nothing planned'}</span>{s && s.type !== 'rest' && <span className="caption">{sessionAmount(s, U)}</span>}</span>
+                <span className="rw-main"><span className="label">{s ? s.title : 'Nothing planned'}</span>{s && s.type !== 'rest' && <span className="caption">{sessionAmount(s, U)}</span>}{s?.changedFor && s.status === 'planned' && <span className="caption"><s>{s.changedFor.title}</s> · changed for your {s.changedFor.label}</span>}</span>
                 {z ? <span className="zone-chip"><span className={`zone-dot z${z}`} aria-hidden="true" />Z{z}</span> : s?.type === 'rest' ? <span className="caption">Rest</span> : null}
                 <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
               </button>
@@ -366,7 +369,7 @@ export function PlanChanges() {
     <section className="card stack-sm plan-changes" aria-labelledby="changes">
       <h2 id="changes" className="title">Plan changes</h2>
       <p className="caption">Every change Ritmo makes is explained here.</p>
-      {wt.m > 0 && <p className="week-target-line"><span className="label">This week's target: {plannedNum(wt.m, data.profile.units)} {data.profile.units}</span>{wt.lowered && <span className="caption"> · lowered from {plannedNum(wt.originalM, data.profile.units)} {data.profile.units} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}</span>}</p>}
+      {wt.m > 0 && <p className="week-target-line"><span className="label">This week's target: {wt.lowered?.returning ? reducedLine(wt, data.profile.units) : `${plannedNum(wt.m, data.profile.units)} ${data.profile.units}`}</span>{wt.lowered && !wt.lowered.returning && <span className="caption"> · lowered from {plannedNum(wt.originalM, data.profile.units)} {data.profile.units} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}</span>}</p>}
       {latest && <p><span className="caption">{shortDate(new Date(latest.at))} · {REASON[latest.reason] ?? ''}</span><br />{latest.summary}</p>}
       {canRestore(data.plan) && <div className="row wrap" style={{ gap: 8 }}><button className="btn btn-small" onClick={restorePreviousPlan}>Restore previous plan</button><span className="caption">Available for 24 hours after a rebuild.</span></div>}
       <details className="plan-more">

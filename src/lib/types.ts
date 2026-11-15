@@ -70,6 +70,8 @@ export interface Activity {
   isTimeTrial?: boolean; // an all-out test effort, used to unlock full fitness features
   /** The runner said this was not a race (so race detection leaves it alone) */
   notRace?: boolean;
+  /** Parts of the run the runner marked by hand on Splits (update 4): warm-up, stride, interval, recovery or cool-down, by the second each part starts at */
+  segmentKinds?: Record<string, 'warmup' | 'stride' | 'run' | 'recovery' | 'cooldown'>;
   /** The planned session this run was logged against ("I've done this run") */
   plannedSessionId?: string;
   /** Screenshots stored with the run (private storage paths) */
@@ -208,6 +210,8 @@ export interface Profile {
   hub?: HubPrefs;
   /** Strava shoes matched to Ritmo shoes: Strava gear id → shoe id, or 'ignore' (not tracked) */
   gearMap?: Record<string, string>;
+  /** What counts as a stride for this runner, tuned by their corrections on Splits (update 4): at most this long and this far */
+  strideRule?: { maxS: number; maxM: number };
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
   /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */
@@ -343,8 +347,14 @@ export interface PlannedSession {
   paceTarget?: { minSPerKm: number; maxSPerKm: number };
   hrZones?: number[]; // e.g. [2] or [3,4]
   phase: Phase;
-  /** done: run as planned. swapped: a quality session run easy instead (judged as what was run, not added back) */
-  status: 'planned' | 'done' | 'swapped' | 'missed' | 'moved' | 'skipped';
+  /** done: run as planned. swapped: a quality session run easy instead (judged as what was run, not added back).
+   *  partial: a run was matched but covers under 80% of the planned distance or time (update 4): it counts toward
+   *  the week, but the session is not marked done. */
+  status: 'planned' | 'done' | 'swapped' | 'missed' | 'moved' | 'skipped' | 'partial';
+  /** For a partly done session: what was covered, and the type of run it was */
+  partial?: { doneM: number; doneS: number; ran: SessionType };
+  /** Changed while an injury is looked after (update 4): what the plan had, shown crossed out, and why */
+  changedFor?: { label: string; title: string; distanceM: number; durationS: number };
   completedActivityId?: string;
   /** All parts of a session in parts that completed it (runs less than 30 minutes apart) */
   completedParts?: string[];

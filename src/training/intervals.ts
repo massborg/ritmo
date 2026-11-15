@@ -5,10 +5,14 @@
 //   4. reps found automatically in the pace stream: stretches of at least 15 s clearly faster than the running
 //      around them (more than 15% faster than the rolling median), paired with the recoveries between them
 //   5. otherwise 1 km (or mile) splits
+// Strides are their own group (update 4, task 2c): short fast efforts (40 s and 200 m at most) with a jog or walk of
+// at least 30 s after each, in a block of 2 to 10 before the main set, after it, or on their own after an easy run.
+// They are found before the interval set, never join it, and are left out of its averages, count and fastest rep.
+// The runner can mark any part as warm-up, stride, interval, recovery or cool-down; that is kept with the run.
 // Reps are never judged against the easy-pace band; strides just get a consistency note.
 import type { Activity, Lap, StreamPoint } from '../lib/types';
 
-export type SegmentKind = 'warmup' | 'run' | 'recovery' | 'cooldown' | 'split';
+export type SegmentKind = 'warmup' | 'run' | 'recovery' | 'cooldown' | 'split' | 'stride';
 export interface Segment {
   kind: SegmentKind;
   /** Rep or split number (1-based) for runs and splits */
@@ -22,6 +26,10 @@ export interface Segment {
   maxHr?: number;
   cadence?: number;
   elevChangeM?: number;
+  /** A recovery that belongs to the strides (the jog back after a stride), not to the interval set */
+  of?: 'strides';
+  /** Marked by the runner */
+  byHand?: boolean;
 }
 export type SplitMethod = 'workout' | 'laps' | 'entered' | 'auto' | 'splits' | 'none';
 export interface Intervals {
@@ -32,6 +40,8 @@ export interface Intervals {
   caption: string;
   segments: Segment[];
   reps: Segment[];
+  /** The strides group, when there is one: "Strides ×4 · avg 20 s · 98 m · jog-back recovery" */
+  strides?: { reps: Segment[]; avgTimeS: number; avgDistM?: number; recovery: 'jog-back' | 'walk'; line: string };
   summary?: { avgRepPaceS?: number; avgRepTimeS: number; avgRepDistM?: number; avgRecoveryS?: number; spreadS?: number; faded: boolean; note: string; ok: boolean };
   footnote: string;
 }
@@ -134,7 +144,10 @@ export function detectReps(s: StreamPoint[]): Segment[] {
   // Rolling median of the running around each point (±3 minutes), from a thinned copy so it stays fast
   const step = Math.max(1, Math.floor(s.length / 600));
   const thin = s.map((p, i) => ({ t: p.t, v: v[i] })).filter((_, i) => i % step === 0);
-  const thr: number[] = s.map((p) => median(thin.filter((x) => Math.abs(x.t - p.t) <= 180 && x.v > 1).map((x) => x.v)) * 1.15);
+  // The whole run's median too (update 4): inside a set of long reps the running around a rep is mostly other reps,
+  // so the local median alone hides them (5 × 1 km after strides was not found)
+  const whole = median(thin.filter((x) => x.v > 1).map((x) => x.v));
+  const thr: number[] = s.map((p) => Math.min(median(thin.filter((x) => Math.abs(x.t - p.t) <= 180 && x.v > 1).map((x) => x.v)), whole || Infinity) * 1.15);
   const fast: boolean[] = s.map((_, i) => thr[i] > 0 && v[i] > thr[i] && v[i] > 2.5);
   // Edges from a short (3 s) window, so a 30 s stride is not smeared into 35 s by the smoothing
   const v3 = speeds(s, 3);
@@ -180,7 +193,80 @@ function splits(a: Activity, unitM: number): Segment[] {
   return out;
 }
 
-export function splitRun(a: Activity, units: 'km' | 'mi' = 'km'): Intervals {
+/** What counts as a stride: tuned per runner by their corrections */
+export interface StrideRule { maxS: number; maxM: number }
+export const STRIDE_RULE: StrideRule = { maxS: 40, maxM: 200 };
+const MIN_STRIDE_RECOVERY_S = 30;
+/** A watch lap short enough to be a stride: left out of a session's work pace, rep count and work volume */
+export const isStrideLap = (l: { durationS: number; distanceM: number }, rule: StrideRule = STRIDE_RULE) => l.durationS <= rule.maxS && l.distanceM <= rule.maxM;
+
+/**
+ * Finds the strides among the fast parts and relabels them, before the interval set is read from what is left.
+ * A block of 2 to 10 strides at the start, at the end, or making up all the fast parts.
+ */
+export function markStrides(segments: Segment[], rule: StrideRule = STRIDE_RULE): Segment[] {
+  const out = segments.map((x) => ({ ...x }));
+  const runs = out.map((x, i) => (x.kind === 'run' ? i : -1)).filter((i) => i >= 0);
+  if (runs.length < 2) return out;
+  const isStride = (i: number) => {
+    const x = out[i];
+    if (x.byHand || x.timeS > rule.maxS || (x.distanceM > 0 && x.distanceM > rule.maxM)) return false;
+    // The jog or walk after it, up to the next fast part
+    let rec = 0, j = i + 1;
+    for (; j < out.length && out[j].kind !== 'run'; j++) if (out[j].kind === 'recovery') rec += out[j].timeS;
+    return j >= out.length || rec >= MIN_STRIDE_RECOVERY_S;
+  };
+  const cand = runs.map(isStride);
+  // Parts the runner marked by hand at either end are theirs: the blocks are looked for inside them
+  let from = 0; while (from < runs.length && out[runs[from]].byHand) from++;
+  let to = runs.length; while (to > from && out[runs[to - 1]].byHand) to--;
+  let lead = 0; while (from + lead < to && cand[from + lead]) lead++;
+  let trail = 0; while (trail < to - from - lead && cand[to - 1 - trail]) trail++;
+  const block = (at: number, n: number) => (n >= 2 && n <= 10 ? runs.slice(at, at + n) : []);
+  const all = lead === to - from;
+  const picks = all ? block(from, lead) : [...block(from, lead), ...block(to - trail, trail)];
+  if (!picks.length) return out;
+  const set = new Set(picks);
+  for (const i of picks) {
+    out[i].kind = 'stride';
+    // The recovery after a stride is the jog back, not part of the interval set
+    for (let j = i + 1; j < out.length && out[j].kind !== 'run' && out[j].kind !== 'stride' && !set.has(j); j++) if (out[j].kind === 'recovery') out[j].of = 'strides';
+  }
+  return out;
+}
+
+/** Parts the runner marked by hand (kept with the run), by the second each part starts at */
+export type SegmentOverrides = Record<string, 'warmup' | 'stride' | 'run' | 'recovery' | 'cooldown'>;
+export const segKey = (x: Pick<Segment, 'startS'>) => String(Math.round(x.startS));
+
+/** Strides, the runner's own marks, numbering and the summaries, for a run already split into parts */
+function finish(method: SplitMethod, caption: string, footnote: string, raw: Segment[], a: Activity, rule: StrideRule): Intervals {
+  const marks: SegmentOverrides = a.segmentKinds ?? {};
+  // The runner's marks first (they are final), then strides among what is left
+  let segments = raw.map((x) => (marks[segKey(x)] ? { ...x, kind: marks[segKey(x)] as SegmentKind, byHand: true } : x));
+  segments = markStrides(segments, rule);
+  let n = 0, k = 0;
+  segments = segments.map((x) => (x.kind === 'run' ? { ...x, n: ++n } : x.kind === 'stride' ? { ...x, n: ++k } : { ...x, n: undefined }));
+  const reps = segments.filter((x) => x.kind === 'run');
+  const str = segments.filter((x) => x.kind === 'stride');
+  const main = segments.filter((x) => !(x.kind === 'recovery' && x.of === 'strides'));
+  const strides = str.length ? (() => {
+    const avgTimeS = mean(str.map((r) => r.timeS)), withD = str.filter((r) => r.distanceM > 0);
+    const avgDistM = withD.length ? mean(withD.map((r) => r.distanceM)) : undefined;
+    const jogs = segments.filter((x) => x.kind === 'recovery' && x.of === 'strides' && x.paceS);
+    const recovery: 'jog-back' | 'walk' = jogs.length && median(jogs.map((x) => x.paceS!)) > 600 ? 'walk' : 'jog-back';
+    return { reps: str, avgTimeS, avgDistM, recovery, line: `Strides ×${str.length} · avg ${Math.round(avgTimeS)} s${avgDistM ? ` · ${Math.round(avgDistM)} m` : ''} · ${recovery === 'walk' ? 'walk' : 'jog-back'} recovery` };
+  })() : undefined;
+  const title = reps.length ? repName(reps, false) : str.length ? `${str.length} × ${Math.round(median(str.map((r) => r.timeS)) / 5) * 5} s strides` : 'Splits';
+  return {
+    method, caption, footnote: `${footnote}${strides ? ' Strides are short (under 40 s and 200 m) fast efforts with a jog or walk after each: they have their own group and are left out of the interval averages.' : ''}`,
+    title, segments, reps, strides,
+    // The interval averages, count and fastest rep leave the strides and their jogs out
+    summary: reps.length ? summarise(reps, main, false) : str.length ? summarise(str, segments, true) : undefined,
+  };
+}
+
+export function splitRun(a: Activity, units: 'km' | 'mi' = 'km', rule: StrideRule = STRIDE_RULE): Intervals {
   const s = a.streams?.length ? a.streams : undefined;
   const endS = s ? s[s.length - 1].t : a.durationS;
   const laps = a.laps ?? [];
@@ -190,11 +276,7 @@ export function splitRun(a: Activity, units: 'km' | 'mi' = 'km'): Intervals {
     const kindOf = (l: Lap, i: number): SegmentKind => l.intensity === 'warmup' ? 'warmup' : l.intensity === 'cooldown' ? 'cooldown' : l.intensity === 'rest' || l.intensity === 'recovery' ? 'recovery' : i === 0 && laps.length > 2 && !laps.some((x) => x.intensity === 'warmup') ? 'warmup' : 'run';
     let n = 0;
     const segments = mergeEnds(laps.map((l, i) => { const k = kindOf(l, i); return { ...lapSeg(l, k, s), ...(k === 'run' ? { n: ++n } : {}) }; }), s);
-    const reps = segments.filter((x) => x.kind === 'run');
-    if (reps.length >= 2) {
-      const strides = median(reps.map((r) => r.timeS)) < 60;
-      return { method: 'workout', title: repName(reps, strides), caption: 'from your workout', segments, reps, summary: summarise(reps, segments, strides), footnote: 'Split using the workout steps your watch recorded (warm up, run, recovery, cool down).' };
-    }
+    if (segments.filter((x) => x.kind === 'run').length >= 2) return finish('workout', 'from your workout', 'Split using the workout steps your watch recorded (warm up, run, recovery, cool down).', segments, a, rule);
   }
   // 2. Manual laps
   if (laps.length >= 3 && !autoLaps(laps)) {
@@ -208,9 +290,7 @@ export function splitRun(a: Activity, units: 'km' | 'mi' = 'km'): Intervals {
         const k: SegmentKind = isRep[i] ? 'run' : i < firstRep ? 'warmup' : i > lastRep ? 'cooldown' : 'recovery';
         return { ...lapSeg(l, k, s), ...(k === 'run' ? { n: ++n } : {}) };
       }), s);
-      const reps = segments.filter((x) => x.kind === 'run');
-      const strides = median(reps.map((r) => r.timeS)) < 60;
-      return { method: 'laps', title: repName(reps, strides), caption: 'from your laps', segments, reps, summary: summarise(reps, segments, strides), footnote: 'Split using the laps you pressed on your watch: the faster laps are the reps.' };
+      return finish('laps', 'from your laps', 'Split using the laps you pressed on your watch: the faster laps are the reps.', segments, a, rule);
     }
   }
   // 3. Reps entered by hand
@@ -231,10 +311,7 @@ export function splitRun(a: Activity, units: 'km' | 'mi' = 'km'): Intervals {
   if (s) {
     const found = detectReps(s);
     if (found.length >= 2) {
-      const segments = withPairs(found, s, { endS });
-      const reps = segments.filter((x) => x.kind === 'run');
-      const strides = median(reps.map((r) => r.timeS)) < 60;
-      return { method: 'auto', title: repName(reps, strides), caption: 'found automatically', segments, reps, summary: summarise(reps, segments, strides), footnote: 'Found automatically: stretches of at least 15 seconds clearly faster (over 15%) than the running around them. Everything before the first rep is the warm up, after the last the cool down.' };
+      return finish('auto', 'found automatically', 'Found automatically: stretches of at least 15 seconds clearly faster (over 15%) than the running around them. Everything before the first rep is the warm up, after the last the cool down.', withPairs(found, s, { endS }), a, rule);
     }
   }
   // 5. Splits

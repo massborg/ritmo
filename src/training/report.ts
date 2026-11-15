@@ -2,6 +2,7 @@
 // target, what it means for the goal, a tip for the next session, and trends. Built from the numbers only, so it
 // never contradicts the run; an AI write-up, when enabled, may only reword it.
 import type { Activity, Plan, PlannedSession, Race, SessionType } from '../lib/types';
+import { isStrideLap } from './intervals';
 import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, type Units, ymd } from '../lib/format';
 import type { Analysis } from './analysis';
 import { TYPE_LABEL, STEADY_TYPES, EASY_FAMILY } from './analysis';
@@ -34,7 +35,7 @@ export function workReps(a: Activity, workPace?: number): RepStat[] {
     return a.reps.filter((r) => r.kind === 'work' && r.timeS).map((r) => ({ label: r.label, timeS: r.timeS!, distanceM: r.distanceM, paceS: r.distanceM ? r.timeS! / (r.distanceM / 1000) : undefined, avgHr: r.avgHr }));
   }
   if (a.laps?.length && workPace) {
-    return a.laps.filter((l) => l.distanceM > 150 && l.durationS / (l.distanceM / 1000) <= workPace * 1.06)
+    return a.laps.filter((l) => l.distanceM > 150 && !isStrideLap(l) && l.durationS / (l.distanceM / 1000) <= workPace * 1.06)
       .map((l, i) => ({ label: `Rep ${i + 1}`, timeS: l.durationS, distanceM: l.distanceM, paceS: l.durationS / (l.distanceM / 1000), avgHr: l.avgHr }));
   }
   return [];

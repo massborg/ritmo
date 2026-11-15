@@ -42,6 +42,8 @@ export interface ReadinessScore {
   /** No check-in today, or too little history for load numbers */
   lessAccurate: boolean;
   unavailable?: string;
+  /** Set when the word is held at "Easy day" because an injury is being looked after (update 4) */
+  capped?: 'injury';
   /** Readiness and today's plan disagree: the swap to offer */
   swap?: { kind: 'easy' | 'rest'; sessionId: string; label: string; km?: number };
 }

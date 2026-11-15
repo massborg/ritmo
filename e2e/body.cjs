@@ -53,7 +53,10 @@ const tap = (page, name) => page.getByRole('radio', { name, exact: true }).or(pa
   check(await page.getByText(/Left calf pain 5\/10: cross-train instead of running for 3 days/).filter({ visible: true }).first().isVisible(), 'a 5/10 calf check-in replaces runs with cross-training, with the reason (the 3–5 rule)');
   check(await page.getByText(/no hills, spikes or fast strides/).filter({ visible: true }).first().isVisible(), 'and removes hills and strides');
   await page.getByRole('button', { name: 'Done' }).click();
+  await page.waitForTimeout(2000); // the check-in is saved a moment after the tap
   await page.goto(`${APP}/`); await page.waitForTimeout(800);
+  // On a Sunday the cross-training days are next week
+  if (!(await page.getByText('Cross-training instead of running').first().isVisible().catch(() => false))) { await page.getByRole('button', { name: 'Next week' }).click(); await page.waitForTimeout(500); await page.locator('button.daychip').first().click(); await page.waitForTimeout(400); }
   check(await page.getByText('Cross-training instead of running').first().isVisible(), 'Training shows cross-training days');
 
   // 18: pain at night → red flag

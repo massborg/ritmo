@@ -25,7 +25,7 @@ export function DayRuns({ runs, unplanned, currentId, session }: { runs: Activit
   const tag = (g: RunGroup) => {
     if (!planned) return unplanned ? ' · unplanned' : '';
     const s = sessionOfRun(g.main.id);
-    if (s?.id === planned.id) return s.status === 'swapped' ? ' · swapped' : ' · Matched plan';
+    if (s?.id === planned.id) return s.status === 'swapped' ? ' · swapped' : s.status === 'partial' ? ' · part of the plan' : ' · Matched plan';
     return planned.completedActivityId ? ' · extra' : '';
   };
   const split = new Set(data.profile.splitRuns ?? []);

@@ -7,7 +7,8 @@ import { careAreaFor } from '../training/care';
 import { Link } from 'react-router-dom';
 import { Chips, Sheet } from './inputs';
 import { StatusLine } from './ui';
-import { BODY_AREAS, type BodyArea, DISCLAIMER, PREHAB, prehabFor, type PainWhen, type Sign, SIGN_LABEL, WHEN_LABEL } from '../training/body';
+import { BODY_AREAS, type BodyArea, DISCLAIMER, PREHAB, prehabFor, type PainWhen, RTR_STEPS, type Sign, SIGN_LABEL, WHEN_LABEL } from '../training/body';
+import { RUN_BEHAVIOUR, type RunBehaviour } from '../training/injury';
 
 export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; start?: { area: BodyArea; side?: 'left' | 'right' } }) {
   const { addBodyCheckin, data, updateBody, plan } = useApp();
@@ -18,6 +19,8 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
   const [onset, setOnset] = useState<'gradual' | 'sudden' | ''>('');
   const [trend, setTrend] = useState<'better' | 'same' | 'worse' | ''>(start ? '' : 'same');
   const [signs, setSigns] = useState<Sign[]>([]);
+  const [running, setRunning] = useState<RunBehaviour | ''>('');
+  const [physio, setPhysio] = useState<'yes' | 'no' | ''>('');
   const [result, setResult] = useState<string[]>();
   const first = !data.profile.body?.disclaimerSeenAt;
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -39,6 +42,13 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
           </div>
         ) : (
           <div className="stack">
+            {data.profile.body?.injury && (() => { const st = data.profile.body.injury.step; return (
+              <section className="card stack-sm" aria-label="Return to run">
+                <p className="label">Return to run · step {st} of 6</p>
+                <p>{RTR_STEPS[st - 1].detail}</p>
+                <p className="caption">Your plan follows this until you're cleared: hard or long sessions become easy, flat runs. Two clear days in a row unlock the next step. Tap "It feels healed" at any time to go back to your plan.</p>
+              </section>
+            ); })()}
             <section className="stack-sm"><h3 className="label">What Ritmo changes in your plan</h3>
               {changes.length ? <ul className="bullets">{changes.map((c) => <li key={c}>{c}</li>)}</ul> : <p>No change needed today. Check in again tomorrow, or sooner if it gets worse.</p>}
             </section>
@@ -61,7 +71,9 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
     <Sheet open onClose={onClose} title="Something hurts?"
       footer={<button className="btn btn-primary btn-block" disabled={!ok} onClick={() => {
         if (first) updateBody({ disclaimerSeenAt: new Date().toISOString() });
-        setResult(addBodyCheckin({ area: area as BodyArea, side: side || undefined, pain, when, onset: onset as 'gradual' | 'sudden', trend: trend || undefined, signs }));
+        // How it behaves when running: as answered, or read from "When does it hurt?"
+        const run: RunBehaviour = running || (when.includes('worse-running') ? 'worse' : when.includes('start-eases') ? 'eases' : 'same');
+        setResult(addBodyCheckin({ area: area as BodyArea, side: side || undefined, pain, when, onset: onset as 'gradual' | 'sudden', trend: trend || undefined, signs }, { running: run, seenPhysio: physio ? physio === 'yes' : undefined }));
       }}>See what to do</button>}>
       {first && <StatusLine kind="info">{DISCLAIMER}</StatusLine>}
       <Chips<BodyArea | ''> label="Where?" value={area} onChange={setArea} options={BODY_AREAS.map((a) => ({ value: a, label: a }))} />
@@ -75,12 +87,16 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
         <legend className="label" style={{ marginBottom: 6 }}>When does it hurt?</legend>
         <div className="row wrap">{(Object.keys(WHEN_LABEL) as PainWhen[]).map((w) => <button key={w} type="button" className="chip" aria-pressed={when.includes(w)} onClick={() => setWhen((x) => toggle(x, w))}>{WHEN_LABEL[w]}</button>)}</div>
       </fieldset>
+      <Chips<RunBehaviour | ''> label="When you run, it… (optional)" value={running} onChange={setRunning} options={(Object.keys(RUN_BEHAVIOUR) as RunBehaviour[]).map((k) => ({ value: k, label: RUN_BEHAVIOUR[k] }))} />
       <Chips<'gradual' | 'sudden' | ''> label="How did it start?" value={onset} onChange={setOnset} options={[{ value: 'gradual', label: 'Gradually' }, { value: 'sudden', label: 'Suddenly (a pop, a fall)' }]} />
       <Chips<'better' | 'same' | 'worse' | ''> label="Compared with yesterday" value={trend} onChange={setTrend} options={[{ value: 'better', label: 'Better' }, { value: 'same', label: 'The same' }, { value: 'worse', label: 'Worse' }]} />
       <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="label" style={{ marginBottom: 6 }}>Anything else? (optional)</legend>
         <div className="row wrap">{(Object.keys(SIGN_LABEL) as Sign[]).map((g) => <button key={g} type="button" className="chip" aria-pressed={signs.includes(g)} onClick={() => setSigns((x) => toggle(x, g))}>{SIGN_LABEL[g]}</button>)}</div>
+        <p className="caption">Can't put weight on it, or numbness: Ritmo pauses running and suggests seeing a doctor or physio.</p>
       </fieldset>
+      <Chips<'yes' | 'no' | ''> label="Have you seen a physio about it? (optional)" value={physio} onChange={setPhysio} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'Not yet' }]} />
+      <p className="caption">Only asked the first time. Later check-ins take 20 seconds.</p>
     </Sheet>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useApp } from '../app/AppContext';
 import { areaLabel, DISCLAIMER, PREHAB, patternAlert, WHEN_LABEL } from '../training/body';
 import { StatusLine } from './ui';
+import { InjuryHistory } from './InjurySheets';
 
 export function BodySection({ heading = true }: { heading?: boolean } = {}) {
   const { data, today, updateBody, plan } = useApp();
@@ -48,6 +49,7 @@ export function BodySection({ heading = true }: { heading?: boolean } = {}) {
           ))}
         </ul>
       )}
+      <InjuryHistory />
       <div className="stack-sm">
         <span className="label">Exercises many runners use to stay strong</span>
         <div className="row wrap">{Object.entries(PREHAB).map(([k, r]) => <button key={k} className="chip" aria-pressed={routine === k} onClick={() => setRoutine(routine === k ? undefined : k)}>{r.title}</button>)}</div>

@@ -85,17 +85,18 @@ function stream(pieces, withHr = true) {
   await page.getByRole('tab', { name: 'Intervals' }).click(); await page.waitForTimeout(500);
   const iv = await page.locator('main').innerText();
   check(/6 × 30 s strides/.test(iv) && /found automatically/.test(iv), 'Intervals: "6 × 30 s strides", found automatically');
-  const runRows = await page.locator('tr.iv-run').count();
-  check(runRows === 6, `six reps in the table (${runRows})`);
+  // Six strides on their own are the strides group (update 4), not an interval set
+  const runRows = await page.locator('tr.iv-stride').count();
+  check(runRows === 6 && await page.locator('tr.iv-run').count() === 0, `six strides in the table, and no intervals (${runRows})`);
   const wu = await page.locator('tr.iv-warmup').first().innerText();
   check(/6\.(4|5)\d/.test(wu), `the warm up is about 6.48 km (${wu.replace(/\s+/g, ' ')})`);
   check(await page.locator('tr.iv-recovery').count() === 5 && await page.locator('tr.iv-cooldown').count() === 1, 'five recoveries and a cool down');
-  check(/0:3\d\.\d/.test(await page.locator('tr.iv-run').first().innerText()), 'rep times under a minute show tenths');
+  check(/0:3\d\.\d/.test(await page.locator('tr.iv-stride').first().innerText()), 'rep times under a minute show tenths');
   check(/Even reps: only \d+ s\/km between fastest and slowest/.test(iv), 'a consistency note');
   check(await page.locator('.iv-bar').count() === 6, 'a bar per rep');
-  await page.getByRole('button', { name: 'Run', exact: true }).click(); await page.waitForTimeout(200);
-  check(await page.locator('tr.iv-row').count() === 6, 'the Run filter shows only the reps');
-  await page.locator('tr.iv-run').first().click(); await page.waitForTimeout(200);
+  await page.getByRole('button', { name: 'Strides 6', exact: true }).click(); await page.waitForTimeout(200);
+  check(await page.locator('tr.iv-row').count() === 6, 'the "Strides 6" filter shows only the strides');
+  await page.locator('tr.iv-stride').first().click(); await page.waitForTimeout(200);
   check(/Avg HR \d+ · Max HR \d+ · Cadence \d+ spm/.test(await page.locator('tr.iv-detail').innerText()), 'tapping a row shows HR, cadence and elevation');
   await page.screenshot({ path: path.join(OUT, 'intervals.png'), fullPage: true });
 
