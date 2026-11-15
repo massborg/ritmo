@@ -164,6 +164,8 @@ export default function Today() {
   const [editing, setEditing] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
   const [hurts, setHurts] = useState(false);
+  // The report sheet opened from "Update details": it corrects the current injury instead of starting a new one
+  const [fixing, setFixing] = useState(false);
   const [daily, setDaily] = useState(false);
   const [healed, setHealed] = useState(false);
   const injuryNow = data.profile.body?.injury;
@@ -316,10 +318,10 @@ export default function Today() {
           <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => reopenInjury(backAgain.id, 2)}>It's back</button>
         </section>
       )}
-      {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setHurts(true); }} />}
+      {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setFixing(true); setHurts(true); }} />}
       {healed && <HealedSheet onClose={() => setHealed(false)} />}
       {hasFlag('body') && isToday && <CareCard />}
-      {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
+      {hurts && <BodyCheckinSheet onClose={() => { setHurts(false); setFixing(false); }} editing={fixing && !!injuryNow} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
         <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>

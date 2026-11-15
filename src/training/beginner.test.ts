@@ -234,6 +234,13 @@ describe('analysis and coach for beginners', () => {
     }
     expect(localReply('How did my last run go?', ctx()).text).toMatch(/not logged a run yet/);
   });
+  it('before the first session it says when the plan starts, not "There is no plan yet"', () => {
+    const sunday = addDays(parseYmd(s0.date), -2);
+    const r = localReply('What should I do today?', ctx({ today: sunday, todaySession: undefined, planStart: s0.date, planSessionsTotal: 0, weekAhead: [s0] }));
+    expect(r.text).not.toMatch(/no plan yet/);
+    expect(r.text).toMatch(/Your plan starts on .* with run\/walk.*nothing is planned today/);
+    expect(localReply('What should I do today?', ctx({ todaySession: undefined, planStart: undefined })).text).toMatch(/There is no plan yet/);
+  });
   it('sends urgent symptoms to a doctor', () => {
     expect(localReply('I felt dizzy and had chest pain', ctx()).text).toMatch(/medical advice/);
   });

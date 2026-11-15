@@ -176,6 +176,15 @@ export function localReply(q: string, c: CoachContext): CoachReply {
   }
 
   if (/why.*(easy|rest|recovery|today)|what.*today|today'?s/.test(lower)) {
+    if (!s && c.planStart) {
+      // A plan exists but has nothing on today, e.g. the days before a starter plan's first session
+      const now = `Right now you are: ${c.readiness.label.toLowerCase()}. ${c.readiness.summary}`;
+      if (c.planStart > ymd(c.today)) {
+        const first = c.weekAhead?.find((x) => x.date === c.planStart && x.type !== 'rest');
+        return { text: `Your plan starts on ${longDate(parseYmd(c.planStart))}${first ? ` with ${first.title.toLowerCase()}` : ''}, so nothing is planned today. Today is free: rest, or go for a walk if you like. ${now}`, facts };
+      }
+      return { text: `Nothing is planned today. Rest, or go for a walk if you like. ${now}`, facts };
+    }
     if (!s) return { text: `There is no plan yet. Build one from Training and I will explain every session. Right now you are: ${c.readiness.label.toLowerCase()}. ${c.readiness.summary}`, facts };
     const reason = s.type === 'rest' ? 'Rest is when your body turns training into fitness.' : s.purpose;
     if (s.type === 'runwalk') return { text: `Today is ${s.title.toLowerCase()}. ${s.purpose} ${s.howItHelps} Keep the running easy enough to talk, and walk the walking breaks.`, facts };
