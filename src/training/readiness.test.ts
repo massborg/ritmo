@@ -65,6 +65,14 @@ describe('readiness score', () => {
     expect(r.factors.find((f) => f.key === 'limit')?.explain).toMatch(/unwell/);
     expect(sum(r)).toBe(25);
   });
+  it('on race day a Recover score offers no swap to rest (a race cannot be swapped) and has its own line', () => {
+    const p = { ...profile, illnessUntil: '2026-11-11', checkins: [{ date: '2026-11-09', sleep: 5, legs: 5, energy: 5 }] };
+    const race = { ...intervals, type: 'race', title: 'Race · Safi 5K AM', distanceM: 5000 } as PlannedSession;
+    const r = readinessScore({ now, series: day(5), activities: month, feedback: [], profile: p, typeOf, todaySession: race });
+    expect(r.word).toBe('Recover');
+    expect(r.swap).toBeUndefined();
+    expect(r.line).toBe('Race day: listen to your body.');
+  });
   it('a hard session under 24 hours ago lowers the score strongly; 24–48 hours slightly', () => {
     const fresh = readinessScore({ now, series: day(0), activities: [...month, run('t', 0.5, 12, 50, { name: 'Threshold' })], feedback: [], profile, typeOf });
     const later = readinessScore({ now, series: day(0), activities: [...month, run('t', 1.5, 12, 50, { name: 'Threshold' })], feedback: [], profile, typeOf });
