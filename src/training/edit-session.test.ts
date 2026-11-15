@@ -1,7 +1,7 @@
 // Change what Ritmo gives you: running sessions (update 3, §8)
 import { describe, expect, it } from 'vitest';
 import type { Plan, PlannedSession } from '../lib/types';
-import { applyEdit, impactCheck, paceNote, resetEdit } from './edit-session';
+import { amountInvalid, applyEdit, EDIT_RANGE, impactCheck, paceNote, resetEdit } from './edit-session';
 import { easyRun } from './generator';
 import { trainingPaces } from './fitness';
 
@@ -54,5 +54,17 @@ describe('editing a running session', () => {
     expect(impactCheck(plan, applyEdit(thu, { distanceM: 9000 }, P).session, { biggestWeekKm: 100 }).text).toMatch(/Threshold: 3 x 10 min is tomorrow/);
     // A shorter run is never a warning
     expect(impactCheck(plan, applyEdit(thu, { distanceM: 6000 }, P).session, { biggestWeekKm: 100 }).ok).toBe(true);
+  });
+});
+
+describe('typed amounts in the Edit sheet', () => {
+  it('0 km, 250 km and an empty field cannot be saved; the limits themselves can', () => {
+    expect([0, 0.5, 60.5, 250, undefined].map((x) => amountInvalid(x, 9.8, EDIT_RANGE.dist))).toEqual([true, true, true, true, true]);
+    expect([1, 9.8, 12, 60].map((x) => amountInvalid(x, 9.8, EDIT_RANGE.dist))).toEqual([false, false, false, false]);
+    expect([5, 245].map((x) => amountInvalid(x, 30, EDIT_RANGE.mins))).toEqual([true, true]);
+  });
+  it('the amount the session already had is always allowed', () => {
+    expect(amountInvalid(0.8, 0.8, EDIT_RANGE.dist)).toBe(false);
+    expect(amountInvalid(undefined, undefined, EDIT_RANGE.dist)).toBe(false);
   });
 });

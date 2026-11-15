@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../app/AppContext';
 import { Chips, Sheet, Stepper } from './inputs';
-import { applyEdit, easyKind, EASY_FAMILY, impactCheck, paceNote, type EasyKind, type SessionEdit } from '../training/edit-session';
+import { amountInvalid, applyEdit, easyKind, EASY_FAMILY, EDIT_RANGE, impactCheck, paceNote, type EasyKind, type SessionEdit } from '../training/edit-session';
 import { trainingPaces } from '../training/fitness';
 import { forStats } from '../data/quality';
 import { startOfWeek, ymd } from '../lib/format';
@@ -22,8 +22,12 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
   const base = data.plan?.sessions.find((x) => x.id === session.id) ?? session;
   const easy = EASY_FAMILY.includes(base.type);
   const byTime = base.distanceM === 0 && base.durationS > 0;
-  const [dist, setDist] = useState<number | undefined>(base.distanceM ? Math.round((base.distanceM / unitM) * 10) / 10 : undefined);
-  const [mins, setMins] = useState<number | undefined>(byTime ? Math.round(base.durationS / 60) : undefined);
+  const dist0 = base.distanceM ? Math.round((base.distanceM / unitM) * 10) / 10 : undefined;
+  const mins0 = byTime ? Math.round(base.durationS / 60) : undefined;
+  const [dist, setDist] = useState<number | undefined>(dist0);
+  const [mins, setMins] = useState<number | undefined>(mins0);
+  // A typed amount outside the field's limits (0 km, 250 km) cannot be saved
+  const invalid = byTime ? amountInvalid(mins, mins0, EDIT_RANGE.mins) : amountInvalid(dist, dist0, EDIT_RANGE.dist);
   const [kind, setKind] = useState<EasyKind>(easyKind(base));
   const perU = (s: number) => (U === 'km' ? s : s * (MI / 1000));
   const [pMin, setPMin] = useState(base.paceTarget ? fmt(perU(base.paceTarget.minSPerKm)) : '');
@@ -53,13 +57,14 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
   return (
     <Sheet open={open} onClose={onClose} title={`Edit: ${base.title}`}
       footer={<div className="stack-sm">
-        <button className="btn btn-primary btn-block" disabled={!changed} onClick={() => { editSession(base.id, edit); onClose(); }}>Save for this day</button>
+        <button className="btn btn-primary btn-block" disabled={!changed || invalid} onClick={() => { editSession(base.id, edit); onClose(); }}>Save for this day</button>
         {base.edited && <button className="btn btn-block" onClick={() => { resetSession(base.id); onClose(); }}>Reset to plan</button>}
       </div>}>
       <div className="stack">
         {byTime
-          ? <Stepper id="ed-min" label="Time" value={mins} min={10} max={240} step={5} unit="min" onChange={setMins} />
-          : <Stepper id="ed-dist" label={`Distance (${U})`} value={dist} min={1} max={60} step={0.5} unit={U} onChange={setDist} />}
+          ? <Stepper id="ed-min" label="Time" value={mins} min={EDIT_RANGE.mins[0]} max={EDIT_RANGE.mins[1]} step={5} unit="min" onChange={setMins} />
+          : <Stepper id="ed-dist" label={`Distance (${U})`} value={dist} min={EDIT_RANGE.dist[0]} max={EDIT_RANGE.dist[1]} step={0.5} unit={U} onChange={setDist} />}
+        {invalid && <p className="caption" role="status">{byTime ? `Enter a time from ${EDIT_RANGE.mins[0]} to ${EDIT_RANGE.mins[1]} minutes.` : `Enter a distance from ${EDIT_RANGE.dist[0]} to ${EDIT_RANGE.dist[1]} ${U}.`}</p>}
         {delta !== 0 && <p className="caption"><span className="edit-delta">{delta > 0 ? '+' : ''}{delta} {U}</span> compared with the plan ({Math.round((base.distanceM / unitM) * 10) / 10} {U})</p>}
         {easy && <Chips<EasyKind> label="Type" value={kind} onChange={setKind} options={[{ value: 'easy', label: 'Easy' }, { value: 'strides', label: 'Easy + strides' }, { value: 'recovery', label: 'Recovery' }]} />}
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
@@ -71,7 +76,7 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
           </div>
           {note && <p className="caption" role="status">{note}</p>}
         </fieldset>
-        {impact && <div className={`card stack-sm edit-impact${impact.ok ? '' : ' warn'}`} role="status"><p className="caption" style={{ color: 'var(--ink)' }}>{impact.text}</p></div>}
+        {impact && !invalid && <div className={`card stack-sm edit-impact${impact.ok ? '' : ' warn'}`} role="status"><p className="caption" style={{ color: 'var(--ink)' }}>{impact.text}</p></div>}
         <p className="caption">This changes this day only. Ritmo doesn't cut other days to make up for it, and your run is judged against your version.</p>
       </div>
     </Sheet>

@@ -14,6 +14,15 @@ export interface SessionEdit { distanceM?: number; durationS?: number; kind?: Ea
 export type Original = Pick<PlannedSession, 'type' | 'title' | 'distanceM' | 'durationS' | 'steps' | 'paceTarget' | 'purpose' | 'focus' | 'hrZones'>;
 
 export const EASY_FAMILY = ['easy', 'recovery'];
+
+/** The limits of the Edit sheet's fields: distance in the runner's unit, time in minutes */
+export const EDIT_RANGE = { dist: [1, 60] as const, mins: [10, 240] as const };
+/**
+ * A typed amount the sheet cannot save: empty, or outside the field's limits (0 km, 250 km). The value the session
+ * already had is always allowed, so an unusual session can still have its type or pace edited.
+ */
+export const amountInvalid = (value: number | undefined, initial: number | undefined, [min, max]: readonly [number, number]): boolean =>
+  value !== initial && (value === undefined || !isFinite(value) || value < min || value > max);
 export const easyKind = (s: PlannedSession): EasyKind => (s.type === 'recovery' ? 'recovery' : s.steps.some((x) => x.kind === 'strides') ? 'strides' : 'easy');
 const KIND_TITLE: Record<EasyKind, string> = { easy: 'Easy run', strides: 'Easy run with strides', recovery: 'Recovery run' };
 const dayName = (d: string) => longDate(parseYmd(d)).split(' ')[0];

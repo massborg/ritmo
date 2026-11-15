@@ -99,7 +99,9 @@ export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, 
       <label htmlFor={id}>{label}</label>
       <div className="stepper">
         <button type="button" className="icon-btn" aria-label={`Decrease ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) - step)}><Minus size={20} strokeWidth={2} /></button>
-        <input id={id} inputMode={dec ? 'decimal' : 'numeric'} className="stepper-input" value={typed ?? v ?? ''} placeholder={placeholder} onBlur={() => setTyped(undefined)}
+        <input id={id} inputMode={dec ? 'decimal' : 'numeric'} className="stepper-input" value={typed ?? v ?? ''} placeholder={placeholder}
+          // A typed value is held to the same limits as the buttons once the field is left
+          onBlur={() => { if (v != null) { const c = Math.min(max, Math.max(min, v)); if (c !== v) onChange(c); } setTyped(undefined); }}
           onChange={(e) => { const x = dec ? e.target.value.replace(',', '.').replace(/[^\d.]/g, '') : e.target.value.replace(/\D/g, ''); if (dec) setTyped(x); onChange(x === '' || x === '.' ? undefined : Number(x)); }} />
         {unit && <span className="caption">{unit}</span>}
         <button type="button" className="icon-btn" aria-label={`Increase ${label}`} onClick={() => set((v ?? (placeholder ? Number(placeholder) : min)) + step)}><Plus size={20} strokeWidth={2} /></button>
