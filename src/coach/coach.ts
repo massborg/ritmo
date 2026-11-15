@@ -1,5 +1,6 @@
 // The Ritmo coach. Answers are built only from the runner's computed data (facts), never invented numbers.
 // When the Supabase "coach" function is configured with a Claude API key, it phrases answers from the same facts.
+import { hyroxFacts } from '../hyrox/predict';
 import type { Activity, PlannedSession, Profile, Race } from '../lib/types';
 import { daysUntil, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units, ymd } from '../lib/format';
 import type { StageInfo } from '../training/stage';
@@ -80,6 +81,8 @@ export function buildFacts(c: CoachContext): string[] {
     f.push(`Next A race: ${c.race.name}, ${distanceLabel(c.race.distanceM)}, ${shortDate(parseYmd(c.race.date))} (${d} days away)${c.race.goalS ? `, goal ${duration(c.race.goalS)}` : ''}.`);
     if (c.raceReadiness) f.push(`Predicted finish ${duration(c.raceReadiness.predictedS)}. Race preparation ${c.raceReadiness.score}/100: ${c.raceReadiness.parts.map((p) => `${p.label} ${p.value}`).join('; ')}.`);
   }
+  // HYROX (update 4, task 7): the athlete's profile, latest splits, bests, weak stations and prediction
+  f.push(...hyroxFacts(c.profile, c.paces ? Math.round((c.paces.threshold[0] + c.paces.threshold[1]) / 2) : undefined));
   if (c.last) {
     const a = c.last.activity, an = c.last.analysis;
     f.push(`Last run ${shortDate(new Date(a.startTime))}: ${(a.distanceM / 1000).toFixed(1)} km in ${duration(a.movingS)}, ${an.type}, score ${an.score}. ${an.scoreReason}`);

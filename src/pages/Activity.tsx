@@ -1,3 +1,4 @@
+import { HyroxLaps } from '../components/HyroxLaps';
 import { lazy, Suspense, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { forStats, implausible } from '../data/quality';
 import { garminAttribution } from '../data/garmin';
@@ -231,6 +232,7 @@ export default function ActivityPage() {
       {tab === 'shoes' && <div role="tabpanel" id="run-panel-shoes" aria-labelledby="run-tab-shoes"><RunShoes run={a} /></div>}
 
       {tab === 'overview' && <div role="tabpanel" id="run-panel-overview" aria-labelledby="run-tab-overview" className="stack-lg">
+        <HyroxLaps activity={a} />
       {/* The route coloured by pace, with the weather (start and finish privacy applies only to anything shared) */}
       {a.gpsGaps?.length ? <GapNotice run={a} /> : null}
       {a.streams?.some((p) => p.lat != null && p.lon != null) && <RouteMap points={a.streams} byPace weather={weatherChip} />}
