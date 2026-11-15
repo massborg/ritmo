@@ -319,10 +319,13 @@ export function moveTargets(s: PlannedSession, today: Date): string[] {
 
 /** True when moving a hard session to toDate puts it next to another hard day (the runner may still choose to). */
 export function moveClash(plan: Plan, s: PlannedSession, toDate: string): boolean {
-  if (!KEY.includes(s.type)) return false;
-  const near = [ymd(addDays(parseYmd(toDate), -1)), ymd(addDays(parseYmd(toDate), 1))]
-    .map((x) => plan.sessions.find((y) => y.date === x && y.id !== s.id && y.date !== s.date));
-  return near.some((y) => y && KEY.includes(y.type));
+  // A hard day beside `date`, not counting the two days that trade places
+  const hardBeside = (date: string) => [-1, 1].map((d) => ymd(addDays(parseYmd(date), d)))
+    .some((x) => x !== s.date && x !== toDate && plan.sessions.some((y) => y.date === x && KEY.includes(y.type)));
+  if (KEY.includes(s.type) && hardBeside(toDate)) return true;
+  // The session it trades places with: a hard one that lands next to a hard day is the same clash
+  const b = plan.sessions.find((y) => y.date === toDate && y.id !== s.id);
+  return !!b && KEY.includes(b.type) && hardBeside(s.date);
 }
 
 export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan {
@@ -332,11 +335,14 @@ export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan
   const b = sessions.find((s) => s.date === toDate);
   const from = a.date;
   a.date = toDate;
-  a.movedFrom = from;
+  // Back on the day it came from (an Undo): it is no longer "moved"
+  if (a.movedFrom === toDate) delete a.movedFrom; else a.movedFrom = from;
   a.status = 'planned'; // a session moved to another day is planned again (even if it was missed)
-  if (b) { b.date = from; b.movedFrom = toDate; }
+  if (b) { b.date = from; if (b.movedFrom === from) delete b.movedFrom; else b.movedFrom = toDate; }
   sessions.sort((x, y) => x.date.localeCompare(y.date));
-  const warn = b && KEY.includes(b.type) && KEY.includes(a.type) && Math.abs(daysBetween(parseYmd(from), parseYmd(toDate))) === 1;
+  // Either session, where it now is, hard and next to another hard day
+  const clash = (x?: PlannedSession) => !!x && KEY.includes(x.type) && sessions.some((y) => y.id !== x.id && KEY.includes(y.type) && Math.abs(daysBetween(parseYmd(x.date), parseYmd(y.date))) === 1);
+  const warn = clash(a) || clash(b);
   return {
     ...plan,
     sessions,
