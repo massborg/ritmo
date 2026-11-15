@@ -6,7 +6,7 @@ import type { Plan, PlannedSession } from '../lib/types';
 import { addDays, longDate, pace as fmtPace, parseYmd, startOfWeek, ymd } from '../lib/format';
 import { easyRun } from './generator';
 import type { TrainingPaces } from './fitness';
-import { fitSteps } from './session-view';
+import { fitSteps, repsKm } from './session-view';
 
 export type EasyKind = 'easy' | 'strides' | 'recovery';
 export interface SessionEdit { distanceM?: number; durationS?: number; kind?: EasyKind; pace?: [number, number] }
@@ -23,6 +23,16 @@ export const EDIT_RANGE = { dist: [1, 60] as const, mins: [10, 240] as const };
  */
 export const amountInvalid = (value: number | undefined, initial: number | undefined, [min, max]: readonly [number, number]): boolean =>
   value !== initial && (value === undefined || !isFinite(value) || value < min || value > max);
+/**
+ * The shortest a hard session can be edited to, in km: its reps plus a short warm-up and cool-down (1 km together).
+ * Below that the rep step would have to shrink while its label ("2 x 15 min") stays, so the steps would no longer
+ * add up. Easy runs, and long runs made of easy and steady parts, have no such limit (0).
+ */
+export function minEditKm(s: PlannedSession): number {
+  if (EASY_FAMILY.includes(s.type)) return 0;
+  const reps = repsKm(s);
+  return reps > 0 ? Math.ceil(reps + 1) : 0;
+}
 export const easyKind = (s: PlannedSession): EasyKind => (s.type === 'recovery' ? 'recovery' : s.steps.some((x) => x.kind === 'strides') ? 'strides' : 'easy');
 const KIND_TITLE: Record<EasyKind, string> = { easy: 'Easy run', strides: 'Easy run with strides', recovery: 'Recovery run' };
 const dayName = (d: string) => longDate(parseYmd(d)).split(' ')[0];

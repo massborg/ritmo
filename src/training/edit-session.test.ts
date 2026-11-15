@@ -1,7 +1,7 @@
 // Change what Ritmo gives you: running sessions (update 3, §8)
 import { describe, expect, it } from 'vitest';
 import type { Plan, PlannedSession } from '../lib/types';
-import { amountInvalid, applyEdit, EDIT_RANGE, impactCheck, paceNote, resetEdit } from './edit-session';
+import { amountInvalid, applyEdit, EDIT_RANGE, impactCheck, minEditKm, paceNote, resetEdit } from './edit-session';
 import { easyRun } from './generator';
 import { trainingPaces } from './fitness';
 
@@ -89,5 +89,22 @@ describe('typed amounts in the Edit sheet', () => {
   it('the amount the session already had is always allowed', () => {
     expect(amountInvalid(0.8, 0.8, EDIT_RANGE.dist)).toBe(false);
     expect(amountInvalid(undefined, undefined, EDIT_RANGE.dist)).toBe(false);
+  });
+});
+
+describe('the shortest a hard session can be edited to', () => {
+  const base = { id: 't', date: '2026-11-17', phase: 'build', status: 'planned', title: 'x', focus: '', purpose: '', howItHelps: '', durationS: 3000 } as unknown as PlannedSession;
+  it('threshold 2 x 15 min: the reps (about 9 km) plus 1 km of warm-up and cool-down', () => {
+    const s = { ...base, type: 'threshold', distanceM: 13100, steps: [{ kind: 'warmup', label: 'Warm up', detail: '2 km easy', km: 2 }, { kind: 'work', label: '2 x 15 min threshold', detail: 'at 3:25–3:30/km', km: 9.1 }, { kind: 'cooldown', label: 'Cool down', detail: '2 km easy', km: 2 }] } as PlannedSession;
+    expect(minEditKm(s)).toBe(11);
+    // At the limit the rep step is left as planned and the steps still add up
+    const { session } = applyEdit(s, { distanceM: 11000 }, trainingPaces(50));
+    expect(session.steps[1].km).toBe(9.1);
+    expect(Math.abs(session.steps.reduce((a, x) => a + (x.km ?? 0), 0) - 11)).toBeLessThan(0.15);
+  });
+  it('easy runs and progressive long runs have no such limit', () => {
+    expect(minEditKm(easyRun('2026-11-17', 8, 'build', { paces: trainingPaces(50) }))).toBe(0);
+    const long = { ...base, type: 'long', distanceM: 22000, steps: [{ kind: 'easy', label: '18 km easy', detail: '', km: 18 }, { kind: 'steady', label: 'last 4 km steady', detail: '', km: 4 }] } as PlannedSession;
+    expect(minEditKm(long)).toBe(0);
   });
 });

@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../app/AppContext';
 import { Chips, Sheet, Stepper } from './inputs';
-import { amountInvalid, applyEdit, easyKind, EASY_FAMILY, EDIT_RANGE, impactCheck, paceNote, type EasyKind, type SessionEdit } from '../training/edit-session';
+import { amountInvalid, applyEdit, easyKind, EASY_FAMILY, EDIT_RANGE, impactCheck, minEditKm, paceNote, type EasyKind, type SessionEdit } from '../training/edit-session';
 import { trainingPaces } from '../training/fitness';
 import { forStats } from '../data/quality';
 import { startOfWeek, ymd } from '../lib/format';
 import type { PlannedSession } from '../lib/types';
+import { repsKm } from '../training/session-view';
 
 const MI = 1609.344;
 import { PaceInput } from './TimeEntry';
@@ -27,7 +28,11 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
   const [dist, setDist] = useState<number | undefined>(dist0);
   const [mins, setMins] = useState<number | undefined>(mins0);
   // A typed amount outside the field's limits (0 km, 250 km) cannot be saved
-  const invalid = byTime ? amountInvalid(mins, mins0, EDIT_RANGE.mins) : amountInvalid(dist, dist0, EDIT_RANGE.dist);
+  // A hard session cannot go below its reps plus a short warm-up and cool-down (in the runner's unit, to the half)
+  const repMin = byTime ? 0 : Math.ceil(((minEditKm(base) * 1000) / unitM) * 2) / 2;
+  const tooShort = repMin > 0 && dist != null && dist !== dist0 && dist < repMin;
+  const invalid = (byTime ? amountInvalid(mins, mins0, EDIT_RANGE.mins) : amountInvalid(dist, dist0, EDIT_RANGE.dist)) || tooShort;
+  const distMin = Math.max(EDIT_RANGE.dist[0], Math.min(repMin, dist0 ?? repMin));
   const [kind, setKind] = useState<EasyKind>(easyKind(base));
   const perU = (s: number) => (U === 'km' ? s : s * (MI / 1000));
   const [pMin, setPMin] = useState(base.paceTarget ? fmt(perU(base.paceTarget.minSPerKm)) : '');
@@ -63,8 +68,9 @@ export function EditSession({ session, open, onClose }: { session: PlannedSessio
       <div className="stack">
         {byTime
           ? <Stepper id="ed-min" label="Time" value={mins} min={EDIT_RANGE.mins[0]} max={EDIT_RANGE.mins[1]} step={5} unit="min" onChange={setMins} />
-          : <Stepper id="ed-dist" label={`Distance (${U})`} value={dist} min={EDIT_RANGE.dist[0]} max={EDIT_RANGE.dist[1]} step={0.5} unit={U} onChange={setDist} />}
-        {invalid && <p className="caption" role="status">{byTime ? `Enter a time from ${EDIT_RANGE.mins[0]} to ${EDIT_RANGE.mins[1]} minutes.` : `Enter a distance from ${EDIT_RANGE.dist[0]} to ${EDIT_RANGE.dist[1]} ${U}.`}</p>}
+          : <Stepper id="ed-dist" label={`Distance (${U})`} value={dist} min={distMin} max={EDIT_RANGE.dist[1]} step={0.5} unit={U} onChange={setDist} />}
+        {tooShort && <p className="caption" role="status">The reps alone are about {Math.round(((repsKm(base) * 1000) / unitM) * 10) / 10} {U}. With a short warm-up and cool-down, the shortest this session can be is {repMin} {U}.</p>}
+        {invalid && !tooShort && <p className="caption" role="status">{byTime ? `Enter a time from ${EDIT_RANGE.mins[0]} to ${EDIT_RANGE.mins[1]} minutes.` : `Enter a distance from ${EDIT_RANGE.dist[0]} to ${EDIT_RANGE.dist[1]} ${U}.`}</p>}
         {delta !== 0 && <p className="caption"><span className="edit-delta">{delta > 0 ? '+' : ''}{delta} {U}</span> compared with the plan ({Math.round((base.distanceM / unitM) * 10) / 10} {U})</p>}
         {easy && <Chips<EasyKind> label="Type" value={kind} onChange={setKind} options={[{ value: 'easy', label: 'Easy' }, { value: 'strides', label: 'Easy + strides' }, { value: 'recovery', label: 'Recovery' }]} />}
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
