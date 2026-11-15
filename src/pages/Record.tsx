@@ -20,10 +20,14 @@ export default function Record() {
   const t0 = ymd(today);
   const log = data.profile.log ?? [];
   const strengthDone = (id: string) => log.some((e) => e.kind === 'strength' && e.strength?.sessionId === id);
-  // Today's session still to do: a run first, then strength
-  const todays = (plan?.sessions ?? []).filter((s) => s.date === t0 && (s.strengthPlan ? !strengthDone(s.id) : s.type !== 'rest' && s.status !== 'done' && s.status !== 'swapped' && s.status !== 'skipped'));
-  const s = todays.find((x) => !x.strengthPlan) ?? todays[0];
-  const strength = s?.strengthPlan ? resolveStrength(s.strengthPlan, data.profile.strength) : undefined;
+  // Today's session still to do: a run first, then strength. The plan puts strength on the run's own session
+  // ("after the run"), so one session can be both: the run while it is open, then the strength workout.
+  const todays = (plan?.sessions ?? []).filter((x) => x.date === t0);
+  const runOpen = (x: (typeof todays)[number]) => x.type !== 'rest' && x.status !== 'done' && x.status !== 'swapped' && x.status !== 'skipped';
+  const strengthOpen = (x: (typeof todays)[number]) => !!x.strengthPlan && !strengthDone(x.id);
+  const runS = todays.find(runOpen);
+  const s = runS ?? todays.find(strengthOpen);
+  const strength = s && !runS && s.strengthPlan ? resolveStrength(s.strengthPlan, data.profile.strength) : undefined;
   const line = !s ? '' : strength ? `${strength.items.length} exercises · about ${strength.minutes} min` : [structureLine(s), sessionAmount(s, data.profile.units)].filter(Boolean).join(' · ');
   const Card = ({ to, onClick, icon, tone, title, sub, isNew }: { to?: string; onClick?: () => void; icon: React.ReactNode; tone: string; title: string; sub: string; isNew?: boolean }) => {
     const inner = <>
@@ -42,7 +46,7 @@ export default function Record() {
           <h2 className="record-today-title">{strength?.title ?? s.title}</h2>
           {line && <p className="record-today-sub">{line}</p>}
           <div className="row" style={{ gap: 8 }}>
-            <Link to={s.strengthPlan ? `/strength/${s.id}` : s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) ? '/hyrox' : '/run'} className="btn btn-primary record-start" onClick={s.strengthPlan ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+            <Link to={strength ? `/strength/${s.id}` : s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) ? '/hyrox' : '/run'} className="btn btn-primary record-start" onClick={strength ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
             <Link to={`/session/${s.id}`} className="btn record-details">Details</Link>
           </div>
         </section>
