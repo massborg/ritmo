@@ -340,6 +340,8 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const [goal, setGoal] = useState<GoalType | ''>(data.profile.goalType ?? (existingA || athlete === 'hyrox' ? 'race' : ''));
   const [isHyrox, setIsHyrox] = useState(athlete === 'hyrox' || (athlete === 'both' && !existingA));
   const [hx, setHx] = useState<HyroxPrefs>(data.profile.hyrox ?? {});
+  // A HYROX time typed wrongly (1:75:00) holds Continue, so it is not dropped without a word
+  const [hxInvalid, setHxInvalid] = useState(false);
   const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS, undefined, thresholdS) : data.profile.hyrox?.targets } });
   const [race, setRace] = useState<Partial<Race>>(existingA ?? { name: '', distanceM: 10000, courseType: 'road', priority: 'A' });
   const [warn, setWarn] = useState<ReturnType<typeof checkGoal>>();
@@ -357,7 +359,10 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   };
   const submit = () => {
     if (!goal) { setErr('Choose a goal.'); return; }
-    if (goal === 'race' && isHyrox) { commit('race'); return; }
+    if (goal === 'race' && isHyrox) {
+      if (hxInvalid) { setErr('One of the times is not valid. Fix it, or clear it, to continue.'); return; }
+      commit('race'); return;
+    }
     if (goal === 'race' && !race.date) { setErr('Choose the race date.'); return; }
     const c = checkGoal({ goalType: goal, race, level: bg?.level ?? 'new', canRun10: bg?.canRun10, weeklyKm: bg?.weeklyKm, vdot: estVdot, today });
     if (!c.ok && !warn) { setWarn(c); return; }
@@ -376,7 +381,7 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
       )}
       {goal === 'race' && isHyrox && (
         <section className="card" aria-label="Your HYROX race">
-          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} thresholdS={thresholdS} />
+          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} thresholdS={thresholdS} onInvalid={(bad) => { setHxInvalid(bad); if (!bad) setErr(undefined); }} />
         </section>
       )}
       {goal === 'race' && !isHyrox && (

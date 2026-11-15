@@ -1,5 +1,6 @@
 // The HYROX goal (update 4, task 6): division with its loads, race date, goal time, previous time, the hardest
 // stations (up to 3) and the equipment available. Used in onboarding and in Profile, HYROX.
+import { useEffect, useState } from 'react';
 import { Chips, DateField } from './inputs';
 import { DurationInput } from './TimeEntry';
 import { STATIONS, loadFor, type Division, type StationKey } from '../hyrox/hyroxDivisions';
@@ -13,7 +14,13 @@ const split = (d: Division): [Format, Who] => { const [a, b] = d.split('_'); ret
 const join = (f: Format, w: Who): Division => (f === 'open' || f === 'pro' ? `${w === 'mixed' ? 'men' : w}_${f}` : `${f}_${w}`) as Division;
 export const MAX_HARDEST = 3;
 
-export function HyroxGoalFields({ value, onChange, minDate, thresholdS }: { value: HyroxPrefs; onChange: (p: Partial<HyroxPrefs>) => void; minDate?: string; /** Threshold pace (s/km), to show the HYROX run pace */ thresholdS?: number }) {
+export function HyroxGoalFields({ value, onChange, minDate, thresholdS, onInvalid }: { value: HyroxPrefs; onChange: (p: Partial<HyroxPrefs>) => void; minDate?: string; /** Threshold pace (s/km), to show the HYROX run pace */ thresholdS?: number; /** Told when a typed time is not a valid time (1:75:00), so the caller can hold Continue */ onInvalid?: (invalid: boolean) => void }) {
+  // A time that is not valid (minutes or seconds of 60 or more) has no value; the field says why under its boxes
+  const [goalErr, setGoalErr] = useState(false);
+  const [prevErr, setPrevErr] = useState(false);
+  const anyErr = goalErr || prevErr;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { onInvalid?.(anyErr); }, [anyErr]);
   const division: Division = value.division ?? 'men_open';
   const [format, who] = split(division);
   const hardest = value.hardest ?? [];
@@ -31,12 +38,12 @@ export function HyroxGoalFields({ value, onChange, minDate, thresholdS }: { valu
       {value.raceDate && <button type="button" className="btn btn-ghost btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => onChange({ raceDate: undefined })}>No race date yet</button>}
       <div className="field">
         <label htmlFor="hg-goal">Goal time</label>
-        <DurationInput id="hg-goal" label="HYROX goal time" value={value.goalS} onChange={(v) => onChange({ goalS: v })} />
-        <span className="caption" role="status">{value.goalS ? `HYROX in ${duration(value.goalS)}: about ${fmtPace(runPace!, 'km')} for each 1 km run${thresholdS && runPace === thresholdS ? ' (your threshold pace: the plan never asks for faster)' : ''}.` : 'Type the digits: 1 1 5 0 0 becomes 1:15:00. Leave it empty if you are not sure yet.'}</span>
+        <DurationInput id="hg-goal" label="HYROX goal time" value={value.goalS} onChange={(v) => onChange({ goalS: v })} onError={(e) => setGoalErr(!!e)} />
+        <span className="caption" role="status">{value.goalS ? `HYROX in ${duration(value.goalS)}: about ${fmtPace(runPace!, 'km')} for each 1 km run${thresholdS && runPace === thresholdS ? ' (your threshold pace: the plan never asks for faster)' : ''}.` : goalErr ? 'Fix the time, or clear it if you are not sure yet.' : 'Type the digits: 1 1 5 0 0 becomes 1:15:00. Leave it empty if you are not sure yet.'}</span>
       </div>
       <div className="field">
         <label htmlFor="hg-prev">Your last HYROX time (optional)</label>
-        <DurationInput id="hg-prev" label="Previous HYROX time" value={value.previousS} onChange={(v) => onChange({ previousS: v })} />
+        <DurationInput id="hg-prev" label="Previous HYROX time" value={value.previousS} onChange={(v) => onChange({ previousS: v })} onError={(e) => setPrevErr(!!e)} />
       </div>
       <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="label" style={{ marginBottom: 6 }}>Your hardest stations (up to {MAX_HARDEST})</legend>
