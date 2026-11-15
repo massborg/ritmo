@@ -62,8 +62,8 @@ function elbow(sh: P, hand: P): P {
 }
 
 /** The muscles an exercise lists, as parts of the figure */
-export type Part = 'quads' | 'glutes' | 'hamstrings' | 'calves' | 'achilles' | 'ankles' | 'core' | 'back' | 'hips';
-export const PART_LABEL: Record<Part, string> = { quads: 'Quads', glutes: 'Glutes', hamstrings: 'Hamstrings', calves: 'Calves', achilles: 'Achilles', ankles: 'Ankles', core: 'Core', back: 'Back', hips: 'Hips' };
+export type Part = 'quads' | 'glutes' | 'hamstrings' | 'calves' | 'achilles' | 'ankles' | 'core' | 'back' | 'hips' | 'chest' | 'arms' | 'shoulders';
+export const PART_LABEL: Record<Part, string> = { quads: 'Quads', glutes: 'Glutes', hamstrings: 'Hamstrings', calves: 'Calves', achilles: 'Achilles', ankles: 'Ankles', core: 'Core', back: 'Back', hips: 'Hips', chest: 'Chest', arms: 'Arms', shoulders: 'Shoulders' };
 /** "Quads, glutes": the muscles in a sentence */
 export const worksLabel = (muscles: string[]) => muscles.map((m, i) => { const l = PART_LABEL[m as Part] ?? m; return i === 0 ? l : l.toLowerCase(); }).join(', ');
 
@@ -96,7 +96,7 @@ export function figure(p: Pose, muscles: string[], weights = false): Layer[] {
   push(capsule(at(p.sh, p.hip, 0.82, -2.8, tf), at(p.sh, p.hip, 1.05, -3.4, tf), 8.5, 9), lit('glutes') ? 'muscle' : 'body');
   push(capsule(p.sh, p.hip, 13, 11), 'body');
   push(capsule(at(p.sh, p.hip, 0.1, -2.6, tf), at(p.sh, p.hip, 0.55, -2.2, tf), 8, 6), 'body');
-  push(capsule(at(p.sh, p.hip, 0.08, 2.6, tf), at(p.sh, p.hip, 0.42, 2.2, tf), 9.5, 6), 'body');
+  push(capsule(at(p.sh, p.hip, 0.08, 2.6, tf), at(p.sh, p.hip, 0.42, 2.2, tf), 9.5, 6), lit('chest') ? 'muscle' : 'body');
   push(capsule(p.sh, lerp(p.sh, p.head, 0.5), 5.4, 5), 'body');
   push([circle(p.head, 6.4)], 'body');
   if (lit('back')) push(capsule(at(p.sh, p.hip, 0.15, -3.4, tf), at(p.sh, p.hip, 0.75, -3.6, tf), 5, 4.5), 'muscle');
@@ -110,8 +110,8 @@ export function figure(p: Pose, muscles: string[], weights = false): Layer[] {
   if (lit('achilles')) push(near.achilles, 'muscle');
   if (lit('ankles')) push(near.ankle, 'muscle');
   // Near arm
-  push([circle(add(p.sh, mul(tf, 0.6)), 4.8)], 'body');
-  push(capsule(p.sh, e, 6.2, 4.4), 'body');
+  push([circle(add(p.sh, mul(tf, 0.6)), 4.8)], lit('shoulders') ? 'muscle' : 'body');
+  push(capsule(p.sh, e, 6.2, 4.4), lit('arms') ? 'muscle' : 'body');
   push(capsule(e, p.hand, 4.6, 3.4), 'body');
   push([circle(p.hand, 2.5)], 'body');
   if (weights) {

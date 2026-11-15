@@ -12,6 +12,8 @@ export interface Exercise {
   /** Default dose: sets and reps, or seconds held */
   sets: number; reps?: number; seconds?: number; perSide?: boolean;
   load?: string; cues: string[]; tags: ExTag[];
+  /** Extra filter groups in the free-strength builder (update 4): upper body, HYROX stations */
+  groups?: ('upper' | 'hyrox')[];
 }
 
 export const EXERCISES: Exercise[] = [
@@ -63,6 +65,17 @@ export const EXERCISES: Exercise[] = [
   { id: 'hip-flexor', name: 'Kneeling hip-flexor stretch', pattern: 'mobility', muscles: ['hips'], equipment: 'none', sets: 2, seconds: 40, perSide: true, cues: ['Tuck the pelvis', 'Gentle lean forward'], tags: ['floor'] },
   { id: 'world-greatest', name: 'World\'s greatest stretch', pattern: 'mobility', muscles: ['hips', 'hamstrings', 'back'], equipment: 'none', sets: 2, reps: 5, perSide: true, cues: ['Long lunge', 'Rotate to the ceiling'], tags: ['floor'] },
   { id: 'ankle-rock', name: 'Ankle rocks', pattern: 'mobility', muscles: ['calves', 'ankles'], equipment: 'none', sets: 2, reps: 10, perSide: true, cues: ['Knee over toes', 'Heel down'], tags: [] },
+  // Upper body and HYROX stations (update 4): for free strength and HYROX training, not used by the runner's routines
+  { id: 'push-up', name: 'Push-up', pattern: 'plank', muscles: ['chest', 'arms', 'core'], equipment: 'none', sets: 3, reps: 10, cues: ['Body in one line', 'Chest to the floor'], tags: ['floor'], groups: ['upper'] },
+  { id: 'db-row', name: 'Dumbbell row', pattern: 'hinge', muscles: ['back', 'arms'], equipment: 'light', sets: 3, reps: 10, perSide: true, load: 'a dumbbell, 2 reps in reserve', cues: ['Flat back', 'Elbow past the ribs'], tags: ['weights'], groups: ['upper'] },
+  { id: 'band-pulldown', name: 'Band pull-down', pattern: 'mobility', muscles: ['back', 'arms'], equipment: 'light', sets: 3, reps: 15, load: 'a band fixed overhead', cues: ['Arms long', 'Pull to the hips, like the SkiErg'], tags: [], groups: ['upper', 'hyrox'] },
+  { id: 'overhead-press', name: 'Overhead press', pattern: 'mobility', muscles: ['shoulders', 'arms'], equipment: 'light', sets: 3, reps: 8, load: 'dumbbells', cues: ['Ribs down', 'Press straight up'], tags: ['weights'], groups: ['upper'] },
+  { id: 'wall-ball', name: 'Wall balls', pattern: 'squat', muscles: ['quads', 'glutes', 'shoulders'], equipment: 'light', sets: 3, reps: 20, load: 'a wall ball (4, 6 or 9 kg)', cues: ['Full squat', 'Throw to the target, catch and sink'], tags: ['knee-load', 'weights'], groups: ['hyrox'] },
+  { id: 'farmers-carry', name: 'Farmers carry', pattern: 'mobility', muscles: ['core', 'arms'], equipment: 'light', sets: 4, seconds: 40, load: 'two kettlebells or dumbbells', cues: ['Tall posture', 'Short, quick steps'], tags: ['weights'], groups: ['hyrox'] },
+  { id: 'sandbag-lunge', name: 'Sandbag lunges', pattern: 'lunge', muscles: ['quads', 'glutes'], equipment: 'light', sets: 3, reps: 12, perSide: true, load: 'a sandbag on the shoulders (10, 20 or 30 kg)', cues: ['Back knee to the floor', 'Stand up fully each step'], tags: ['knee-load', 'weights'], groups: ['hyrox'] },
+  { id: 'burpee-broad-jump', name: 'Burpee broad jumps', pattern: 'hop', muscles: ['quads', 'glutes', 'chest'], equipment: 'none', sets: 4, reps: 8, cues: ['Chest to the floor', 'Jump forward with both feet'], tags: ['jumping', 'floor'], groups: ['hyrox'] },
+  { id: 'sled-push', name: 'Sled push', pattern: 'lunge', muscles: ['quads', 'glutes', 'calves'], equipment: 'gym', sets: 4, seconds: 30, load: 'a loaded sled', cues: ['Arms straight, hips low', 'Short, powerful steps'], tags: ['gym', 'weights'], groups: ['hyrox'] },
+  { id: 'sled-pull', name: 'Sled pull', pattern: 'hinge', muscles: ['back', 'hamstrings', 'arms'], equipment: 'gym', sets: 4, seconds: 30, load: 'a loaded sled and rope', cues: ['Sit back', 'Hand over hand'], tags: ['gym', 'weights'], groups: ['hyrox'] },
 ];
 export const exById = new Map(EXERCISES.map((e) => [e.id, e]));
 
@@ -226,7 +239,7 @@ export function blockOf(weeks: { start: string; cutback?: boolean; phase?: strin
 }
 
 /** What the last session of an exercise says about the next one */
-export interface ExProgress { reps?: number; load?: number; seconds?: number; next: 'up' | 'repeat' | 'back'; at: string }
+export interface ExProgress { reps?: number; load?: number; seconds?: number; next: 'up' | 'repeat' | 'back'; at: string; /** The next session's target by double progression (update 4, task 4b) */ target?: { reps?: number; seconds?: number; load?: number; note: string } }
 /**
  * Session to session: all sets done and rated OK or easier (effort 7 or less): progress (+1 rep, +5 s, or +2 kg when
  * it has load). Rated hard (8 or more) or sets missed: repeat.
@@ -245,6 +258,14 @@ export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: Blo
   if (lighter) { base.sets = Math.max(2, base.sets - 1); if (base.reps) base.reps = Math.max(6, Math.round(base.reps * 0.8)); }
   if (!pr) return base;
   const k = pr.next === 'up' ? 1 : pr.next === 'back' ? -1 : 0;
+  // Double progression (update 4, task 4b): reps up to the top of the range, then more load and back to the bottom
+  if (pr.target && k >= 0) {
+    if (pr.target.load != null) base.load = pr.target.load;
+    if (pr.target.seconds && base.seconds) base.seconds = pr.target.seconds; else if (pr.target.reps && base.reps) base.reps = pr.target.reps;
+    base.note = pr.target.note;
+    if (lighter) { base.sets = Math.max(2, x.sets - 1); base.note = `${base.note}, lighter week`; }
+    return base;
+  }
   if (pr.load) { base.load = Math.max(0, pr.load + 2 * k); if (pr.reps) base.reps = pr.reps; base.note = k > 0 ? `+2 kg (to ${base.load} kg)` : k < 0 ? `a step back (${base.load} kg)` : `same as last time (${pr.load} kg)`; }
   else if (pr.seconds && base.seconds) { base.seconds = Math.max(10, pr.seconds + 5 * k); base.note = k > 0 ? `+5 s (to ${base.seconds} s)` : k < 0 ? `a step back (${base.seconds} s)` : `same as last time (${pr.seconds} s)`; }
   else if (pr.reps && base.reps) { base.reps = Math.max(4, Math.min((x.reps ?? 10) + 6, pr.reps + k)); base.note = k > 0 ? `+${base.reps - pr.reps} reps (to ${base.reps})` : k < 0 ? `a step back (${base.reps} reps)` : `same as last time (${pr.reps} reps)`; }

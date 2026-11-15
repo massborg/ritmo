@@ -215,7 +215,7 @@ export interface Profile {
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
   /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */
-  strength?: import('../training/strength').StrengthPrefs & { rest?: number };
+  strength?: import('../training/strength').StrengthPrefs & { rest?: number; /** Saved workouts (update 4, task 4) */ templates?: import('../training/strength-load').StrengthTemplate[]; /** Weights are stored in kg and shown in this unit */ units?: import('../training/strength-load').WeightUnit };
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
   pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[]; sessions?: { from: string; to: string; sessions: { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }[] } };
   /** PBs on the Hub profile (off by default, up to 4 distances) */
@@ -278,8 +278,13 @@ export interface LogEntry {
   strength?: StrengthLog;
 }
 export interface StrengthLog {
-  title: string; source: 'ritmo' | 'manual'; sessionId?: string; type?: 'home' | 'gym' | 'class';
-  exercises: { id: string; name: string; sets: { reps?: number; load?: number; seconds?: number }[]; /** Sets planned, for progression */ planned?: number }[];
+  /** 'free': the runner's own workout, built or from a saved workout (update 4, task 4) */
+  title: string; source: 'ritmo' | 'manual' | 'free'; sessionId?: string; type?: 'home' | 'gym' | 'class';
+  /** The saved workout it was started from */
+  templateId?: string;
+  /** Every set with its reps or time, load in kg, how it was loaded and its effort (update 4, task 4b) */
+  exercises: { id: string; name: string; sets: import('../training/strength-load').SetLog[]; /** Sets planned, for progression */ planned?: number }[];
+  notes?: string;
   avgHr?: number;
   /** The Hub post made for it, if any */
   postId?: string;
