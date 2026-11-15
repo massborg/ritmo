@@ -23,7 +23,10 @@ export default function ProfileStrength() {
           options={(['none', 'light', 'gym'] as Equipment[]).map((e) => ({ value: e, label: EQUIPMENT_LABEL[e] }))} />
         <p className="caption">Sessions use the best exercises for what you have. You can change any exercise on the session itself.</p>
         <Chips<number> label="Rest between sets" value={p.rest ?? 60} onChange={(v) => setStrengthPrefs({ rest: v })} options={[30, 45, 60, 90, 120].map((s) => ({ value: s, label: `${s} s` }))} />
+        <Chips<'kg' | 'lb'> label="Weights in" value={p.units ?? 'kg'} onChange={(v) => setStrengthPrefs({ units: v })} options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]} />
+        <p className="caption">Used for every set you log, and for volume and best sets.</p>
       </section>
+      <Link to="/strength" className="card card-link row-between"><span className="label">Your saved workouts</span><span className="caption">Build, start, edit</span></Link>
 
       <section className="card stack" aria-labelledby="never">
         <h2 id="never" className="title">Never give me…</h2>

@@ -107,6 +107,7 @@ export function NotFeeling({ onClose }: { onClose: () => void }) {
 /** "Log strength session" (update 3, §5): a gym session, a class or one at home, with its time and effort */
 function LogStrength({ onClose }: { onClose: () => void }) {
   const { saveStrength, plan, data } = useApp();
+  const nav = useNavigate();
   const [date, setDate] = useState(ymd(new Date()));
   const [type, setType] = useState<'gym' | 'class' | 'home'>('gym');
   const [minutes, setMinutes] = useState<number | undefined>(45);
@@ -119,6 +120,11 @@ function LogStrength({ onClose }: { onClose: () => void }) {
     <Sheet open onClose={onClose} title="Log strength session"
       footer={<button className="btn btn-primary btn-block" disabled={!minutes} onClick={() => { saveStrength({ date, minutes: minutes!, rpe, strength: { title, source: 'manual', type, sessionId: planned?.id, exercises: [], avgHr: hr } }); onClose(); }}>Save</button>}>
       <div className="stack">
+        {/* Update 4, task 3: log it with its exercises, sets and weights instead */}
+        <button type="button" className="choice" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} onClick={() => { onClose(); nav('/strength?log=1'); }}>
+          <span className="row-icon"><Dumbbell size={20} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Pick exercises</span><span className="caption">Log the exercises, sets and weights you did</span></span>
+        </button>
+        <p className="caption">Or log just the time and effort:</p>
         <DateField id="ls-date" label="Date" value={date} onChange={setDate} />
         <Chips<'gym' | 'class' | 'home'> label="Type" value={type} onChange={setType} options={[{ value: 'gym', label: 'Gym' }, { value: 'class', label: 'Class' }, { value: 'home', label: 'At home' }]} />
         <Stepper id="ls-min" label="Duration" value={minutes} min={5} max={240} step={5} unit="min" onChange={setMinutes} />
