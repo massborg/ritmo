@@ -443,3 +443,16 @@ describe('review #2 §9.7: race week and easy runs', () => {
     expect(validatePlan(plan, P63)).toEqual([]);
   });
 });
+
+describe('update 4: one time for a race, everywhere', () => {
+  it('the plan note quotes the same official time as the personal best', async () => {
+    const { officialTimeS, estimateFitness: est } = await import('./fitness');
+    // A 5.02 km race in 15:53 with no stops: the official time is 15:53, not the 15:49 that scaling to 5.00 km gives
+    const race = { id: 'r5', name: 'Run', startTime: '2026-09-20T07:00:00.000Z', distanceM: 5020, movingS: 952.6, durationS: 953.2, avgHr: 182, isRace: true, source: 'upload' } as never;
+    expect(officialTimeS(race, 5000)).toBe(953);
+    const f = est([race], { max: 190, rest: 45 } as never, new Date('2026-10-01T09:00:00'), [])!;
+    expect(f.basedOn).toMatch(/5K in 15:53 on 20 Sep/);
+    // Not a race distance: no official time
+    expect(officialTimeS({ distanceM: 6000, movingS: 1500, durationS: 1500 }, 5000)).toBeUndefined();
+  });
+});

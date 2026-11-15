@@ -886,7 +886,11 @@ p a, .caption a, .consent a, li > span a { padding-block: 14px; padding-inline: 
 .gps-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; background: var(--surface-raised); border: 1px solid var(--hairline); font: 600 14px/20px var(--font-body); color: var(--ink-muted); }
 .gps-pill.ok { color: var(--success); }
 .gps-pill.bad { color: var(--warning); }
-.run-controls-row { display: grid; grid-template-columns: 56px 128px 56px; justify-content: center; align-items: center; gap: var(--s6); padding: var(--s2) 0; }
+/* Pinned above the tab bar and the safe area (update 4), so Start is never below the fold on a short screen */
+.run-controls-row { display: grid; grid-template-columns: 56px 128px 56px; justify-content: center; align-items: center; gap: var(--s6); padding: var(--s2) 0; position: sticky; bottom: calc(88px + env(safe-area-inset-bottom)); z-index: 5; }
+@media (min-width: 820px) { .run-controls-row { bottom: var(--s4); } }
+@media (max-height: 700px) { .run-go { width: 104px; height: 104px; } .run-controls-row { grid-template-columns: 56px 104px 56px; } }
+.run-go-free { font-size: 20px; }
 .run-round { width: 56px; height: 56px; border-radius: 50%; border: 1px solid var(--hairline); background: var(--surface-raised); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 .run-round[aria-pressed='false'] { color: var(--ink-muted); }
 .run-go { width: 128px; height: 128px; border-radius: 50%; border: 0; background: var(--brand); color: var(--on-brand); font: 700 24px/1 var(--font-display, var(--font-body)); cursor: pointer; transition: transform 150ms; box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand) 18%, transparent); }

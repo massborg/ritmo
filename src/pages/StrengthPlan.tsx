@@ -3,7 +3,7 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
-import { blockOf, exById, LADDERS, levelFor, resolveStrength, skippedInARow, targetFor, WEEK_FOCUS, type BlockWeek } from '../training/strength';
+import { blockOf, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, targetFor, WEEK_FOCUS, type BlockWeek } from '../training/strength';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
 const HEIGHT: Record<BlockWeek, number> = { 1: 45, 2: 65, 3: 90, 4: 35 };
@@ -17,10 +17,29 @@ export default function StrengthPlan() {
   const logged = new Set(logs.map((e) => e.strength!.sessionId).filter(Boolean) as string[]);
   const skips = skippedInARow(plan?.sessions ?? [], logged, t);
   const next = (plan?.sessions ?? []).filter((s) => s.strengthPlan && s.date >= t && !logged.has(s.id)).sort((a, b) => a.date.localeCompare(b.date))[0];
-  // The movements in this runner's routines, as they get harder block by block
-  const base = new Set([...resolveStrength({ routine: 'A', intensity: 'heavy', why: '' }, prefs).items, ...resolveStrength({ routine: 'B', intensity: 'heavy', why: '' }, prefs).items].map((x) => x.id));
-  const rows = LADDERS.filter((l) => l.some((id) => base.has(id))).map((l) => { const start = l.find((id) => base.has(id))!; return [1, 2, 3].map((b) => levelFor(start, b, prefs)); });
+  // Every exercise in this runner's sessions (routines A and B), as each block makes it harder (update 4): a harder
+  // version of the movement, or more reps and then another set when there is none
+  const tables = (['A', 'B'] as const).map((routine) => {
+    const at = (b: number) => resolveStrength({ routine, intensity: 'heavy', why: '' }, prefs, { block: b, week: 1 }).items;
+    const cols = [at(1), at(2), at(3)];
+    const cell = (x?: (typeof cols)[number][number]) => (x ? `${x.ex.name}${x.harder ? ` ${x.harder}` : ''}` : '–');
+    return { routine, title: ROUTINE_TITLE[routine], rows: cols[0].map((_, i) => cols.map((c) => cell(c[i]))) };
+  });
   const last = logs[0];
+  // A long wait for the next session is explained (update 4): a race or taper, or how the week is laid out
+  const gapWhy = (() => {
+    if (!next) return undefined;
+    const lastDate = [last?.date, ...(plan?.sessions ?? []).filter((x) => x.strengthPlan && x.date < t).map((x) => x.date)].filter(Boolean).sort().pop();
+    if (!lastDate) return undefined;
+    const gap = Math.round((parseYmd(next.date).getTime() - parseYmd(lastDate).getTime()) / 86400000);
+    if (gap <= 8) return undefined;
+    const race = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date))[0];
+    const toRace = race ? Math.round((parseYmd(race.date).getTime() - parseYmd(next.date).getTime()) / 86400000) : 99;
+    const perWeek = data.profile.training?.strengthPerWeek;
+    return `That is ${gap} days after your last one. ${next.phase === 'taper' || toRace <= 14
+      ? `Strength is lighter in the taper and stops 4 days before ${race?.name ?? 'your race'}, so your legs are fresh.`
+      : `Your plan has ${perWeek === 1 ? 'one strength session' : `${perWeek ?? 'a few'} strength sessions`} a week, placed away from hard and long runs. Add one any time from the + menu.`}`;
+  })();
   return (
     <div className="stack-lg" style={{ maxWidth: 720 }}>
       <AppHeader title="Your strength plan" eyebrow={`Block ${block} · week ${week} of 4`} back />
@@ -38,17 +57,21 @@ export default function StrengthPlan() {
         <p className="caption">The lighter week lines up with your lighter running weeks and race weeks. A new block brings harder versions of each movement.</p>
         {skips >= 2 && <p className="caption">Two planned sessions were skipped, so the next one steps back a little.</p>}
         {next && <Link to={`/session/${next.id}`} className="btn btn-small" style={{ alignSelf: 'flex-start' }}>Next session: {longDate(parseYmd(next.date))}</Link>}
+        {gapWhy && <p className="caption strength-gap">{gapWhy}</p>}
       </section>
 
       <section className="card stack" aria-labelledby="sp-ladder">
         <h2 id="sp-ladder" className="title">How your exercises progress</h2>
-        <div className="table-wrap">
-          <table className="ladder-table">
-            <thead><tr><th scope="col">Block 1</th><th scope="col">Block 2</th><th scope="col">Block 3</th></tr></thead>
-            <tbody>{rows.map((r) => <tr key={r[0]}>{r.map((id, i) => <td key={i} className={i + 1 === Math.min(3, block) ? 'now' : undefined}>{exById.get(id)?.name}</td>)}</tr>)}</tbody>
-          </table>
-        </div>
-        <p className="caption">Your swaps and "Never give me…" list are respected: a harder version you can't do (or don't want) is skipped.</p>
+        {tables.map((tb) => (
+          <div key={tb.routine} className="table-wrap">
+            <table className="ladder-table">
+              <caption className="label" style={{ textAlign: 'left', paddingBottom: 4 }}>{tb.title}</caption>
+              <thead><tr><th scope="col">Block 1</th><th scope="col">Block 2</th><th scope="col">Block 3</th></tr></thead>
+              <tbody>{tb.rows.map((r, ri) => <tr key={ri}>{r.map((name, i) => <td key={i} className={i + 1 === Math.min(3, block) ? 'now' : undefined}>{name}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        ))}
+        <p className="caption">Every exercise in your sessions is listed. Each block is harder: a harder version of the movement, or more reps and then another set when there isn't one. Your swaps and "Never give me…" list are respected.</p>
       </section>
 
       <section className="card stack" aria-labelledby="sp-last">

@@ -117,7 +117,7 @@ const monday = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDa
   check(/Hills, spikes and fast strides/.test(cp), 'what to avoid for now');
   check(/See a physio if the pain is sharp, getting worse, makes you limp, or lasts more than 2 weeks/.test(cp) && /Chest pain, dizziness or fainting: stop everything/.test(cp), 'the safety text, always');
   await page.screenshot({ path: path.join(OUT, 'care-plan.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Done today' }).click(); await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: 'Done today' }).click(); await page.waitForTimeout(2500);
   check((prof().body?.care?.done ?? []).includes(t0), '"Done today" is saved');
   // Pain check 1/10 on day 1: good, but the stage needs 3 days
   await page.locator('#care-morning').fill('1');

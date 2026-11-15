@@ -424,7 +424,10 @@ export default function RunPage() {
             </div>
           : <div className="run-controls-row">
               <button className="run-round" aria-label="Run settings" onClick={() => setSettingsOpen(true)}><Settings2 size={24} strokeWidth={2} /></button>
-              <button className="run-go" onClick={openCheck} disabled={!gpsReady}>Start</button>
+              {/* Nothing planned (update 4): no faded Start with nothing to start; the button starts a free run instead */}
+              {what === 'planned' && !shown
+                ? <button className="run-go run-go-free" onClick={() => setWhat('free')}>Free run</button>
+                : <button className="run-go" onClick={openCheck} disabled={!gpsReady}>Start</button>}
               <button className="run-round" aria-label={cues ? 'Audio cues on. Tap to turn off, hold for voice settings' : 'Audio cues off. Tap to turn on, hold for voice settings'} aria-pressed={cues}
                 onPointerDown={audioDown} onPointerUp={audioUp} onPointerLeave={() => { if (holdAudio.current) { window.clearTimeout(holdAudio.current); holdAudio.current = undefined; } }} onContextMenu={(e) => e.preventDefault()}>
                 {cues ? <Volume2 size={24} strokeWidth={2} /> : <VolumeX size={24} strokeWidth={2} />}

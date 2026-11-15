@@ -1,7 +1,7 @@
 // Update 3, §9 (strength that progresses) and §10 (strength to help with an injury)
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
-import { blockOf, levelFor, nextAfter, resolveStrength, skippedInARow, targetFor } from './strength';
+import { blockOf, exById, levelFor, nextAfter, resolveStrength, skippedInARow, targetFor } from './strength';
 import { applyCheck, careAreaFor, careStep, physioAdvice, type CarePlans, type CareState } from './care';
 
 const weeks = ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30', '2026-12-07', '2026-12-14', '2026-12-21'].map((start, i) => ({ start, cutback: i === 3 || i === 7, phase: 'build' }));
@@ -15,8 +15,9 @@ describe('4-week blocks', () => {
     expect(blockOf([{ start: '2026-11-02', phase: 'build' }, { start: '2026-11-09', phase: 'taper' }], '2026-11-10').week).toBe(4);
   });
   it('a new block brings harder versions of each movement, as far as equipment and choices allow', () => {
-    expect([1, 2, 3].map((b) => levelFor('split-squat', b))).toEqual(['split-squat', 'bulgarian', 'bulgarian']); // no weights at home
-    expect([1, 2, 3].map((b) => levelFor('split-squat', b, { equipment: 'light' }))).toEqual(['split-squat', 'bulgarian', 'rfe-weighted']);
+    // One family for lunges and split squats (update 4): each block is a different, harder movement
+    expect([1, 2, 3, 4].map((b) => levelFor('split-squat', b))).toEqual(['split-squat', 'reverse-lunge', 'bulgarian', 'bulgarian']); // no weights at home
+    expect([1, 2, 3, 4].map((b) => levelFor('split-squat', b, { equipment: 'light' }))).toEqual(['split-squat', 'reverse-lunge', 'bulgarian', 'rfe-weighted']);
     expect([1, 2, 3].map((b) => levelFor('glute-bridge', b))).toEqual(['glute-bridge', 'sl-bridge', 'sl-hip-thrust']);
     expect([1, 2, 3].map((b) => levelFor('calf-raise', b, { equipment: 'light' }))).toEqual(['calf-raise', 'sl-calf-raise', 'weighted-sl-calf']);
     expect([1, 2, 3].map((b) => levelFor('plank', b))).toEqual(['plank', 'side-plank', 'side-plank-lift']);
@@ -24,6 +25,26 @@ describe('4-week blocks', () => {
     expect(levelFor('plank', 3, { never: ['tag:floor'] })).toBe('plank');
     const b2 = resolveStrength({ routine: 'core', intensity: 'heavy', why: '' }, {}, { block: 2, week: 1 });
     expect(b2.items.some((x) => x.id === 'side-plank')).toBe(true);
+  });
+  it('block 3 always goes beyond block 2, and a block never has two split-squat variants (update 4)', () => {
+    for (const equipment of ['none', 'light', 'gym'] as const) for (const routine of ['A', 'B'] as const) {
+      const at = (block: number) => resolveStrength({ routine, intensity: 'heavy', why: '' }, { equipment }, { block, week: 1 }).items;
+      const [b1, b2, b3] = [at(1), at(2), at(3)];
+      const sig = (x: (typeof b1)[number]) => `${x.id}:${x.sets}x${x.reps ?? x.seconds}`;
+      // Something gets harder from block 1 to 2, and again from 2 to 3
+      expect(b2.map(sig), `${routine} ${equipment} block 2`).not.toEqual(b1.map(sig));
+      expect(b3.map(sig), `${routine} ${equipment} block 3`).not.toEqual(b2.map(sig));
+      for (const items of [b1, b2, b3]) {
+        expect(items.filter((x) => ['split-squat', 'bulgarian', 'rfe-weighted'].includes(x.id)).length, `${routine} ${equipment}`).toBeLessThanOrEqual(1);
+        expect(new Set(items.map((x) => x.id)).size).toBe(items.length);
+      }
+    }
+    // With no harder version left, the block moves on with more reps, then another set
+    const calf = (block: number) => resolveStrength({ routine: 'B', intensity: 'heavy', why: '' }, {}, { block, week: 1 }).items.find((x) => x.ex.pattern === 'calf')!;
+    expect(calf(1).harder).toBeUndefined();
+    expect(calf(2).reps).toBe(calf(1).reps! + 2); expect(calf(2).harder).toBe('+ reps');
+    expect(calf(3).sets).toBe(calf(1).sets + 1); expect(calf(3).harder).toBe('+ reps and a set');
+    expect(exById.get('rfe-weighted')!.name).toBe('Bulgarian split squat + load');
   });
   it('week 2 builds reps, week 4 is lighter', () => {
     const w1 = resolveStrength({ routine: 'A', intensity: 'heavy', why: '' }, {}, { block: 1, week: 1 }).items[0];

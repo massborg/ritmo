@@ -26,7 +26,8 @@ export const EXERCISES: Exercise[] = [
   { id: 'bulgarian', name: 'Bulgarian split squat', pattern: 'lunge', muscles: ['quads', 'glutes'], equipment: 'none', sets: 3, reps: 8, perSide: true, load: 'body weight, then dumbbells', cues: ['Back foot on a bench', 'Lower straight down'], tags: ['knee-load', 'balance'] },
   { id: 'step-up', name: 'Step-up', pattern: 'step', muscles: ['quads', 'glutes'], equipment: 'none', sets: 3, reps: 10, perSide: true, cues: ['Whole foot on the step', 'Drive up, lower slowly'], tags: ['balance'] },
   { id: 'step-down', name: 'Slow step-down', pattern: 'step', muscles: ['quads'], equipment: 'none', sets: 3, reps: 8, perSide: true, cues: ['3 seconds down', 'Knee tracks over the toes'], tags: ['balance'] },
-  { id: 'rfe-weighted', name: 'Weighted rear-foot elevated split squat', pattern: 'lunge', muscles: ['quads', 'glutes'], equipment: 'light', sets: 3, reps: 8, perSide: true, load: 'dumbbells, 2 reps in reserve', cues: ['Back foot on a bench', 'Weights by your sides'], tags: ['knee-load', 'balance', 'weights'] },
+  { id: 'weighted-step-up', name: 'Step-up + load', pattern: 'step', muscles: ['quads', 'glutes'], equipment: 'light', sets: 3, reps: 8, perSide: true, load: 'dumbbells, 2 reps in reserve', cues: ['Whole foot on the step', 'Weights by your sides'], tags: ['knee-load', 'balance', 'weights'] },
+  { id: 'rfe-weighted', name: 'Bulgarian split squat + load', pattern: 'lunge', muscles: ['quads', 'glutes'], equipment: 'light', sets: 3, reps: 8, perSide: true, load: 'dumbbells, 2 reps in reserve', cues: ['Back foot on a bench', 'Weights by your sides'], tags: ['knee-load', 'balance', 'weights'] },
   // Hinge and posterior chain
   { id: 'sl-rdl', name: 'Single-leg Romanian deadlift', pattern: 'hinge', muscles: ['hamstrings', 'glutes'], equipment: 'none', sets: 3, reps: 8, perSide: true, cues: ['Hips square', 'Long line from head to heel'], tags: ['balance'] },
   { id: 'db-rdl', name: 'Dumbbell Romanian deadlift', pattern: 'hinge', muscles: ['hamstrings', 'glutes'], equipment: 'light', sets: 3, reps: 10, load: 'dumbbells you can lift 12 times', cues: ['Push the hips back', 'Weights close to the legs'], tags: ['weights'] },
@@ -105,7 +106,7 @@ export type Intensity = 'heavy' | 'moderate' | 'light';
 /** Slots of each routine: the first exercise that fits the runner's equipment and choices fills each slot */
 const SLOTS: Record<Routine, string[][]> = {
   A: [['back-squat', 'goblet-squat', 'bw-squat', 'wall-sit'], ['db-lunge', 'reverse-lunge', 'split-squat', 'step-up'], ['seated-calf', 'weighted-calf', 'sl-calf-raise', 'calf-raise'], ['hip-thrust', 'sl-bridge', 'glute-bridge'], ['pallof', 'plank', 'standing-march'], ['band-walk', 'clamshell', 'side-leg-raise'], ['pogo', 'ankle-rock']],
-  B: [['trap-deadlift', 'db-rdl', 'sl-rdl', 'glute-bridge'], ['bulgarian', 'step-up', 'split-squat', 'step-down'], ['bent-calf', 'calf-raise'], ['sl-bridge', 'glute-bridge'], ['side-plank', 'pallof', 'standing-march'], ['dead-bug', 'bird-dog'], ['skater', 'leg-swings']],
+  B: [['trap-deadlift', 'db-rdl', 'sl-rdl', 'glute-bridge'], ['weighted-step-up', 'step-up', 'step-down', 'split-squat'], ['bent-calf', 'calf-raise'], ['sl-bridge', 'glute-bridge'], ['side-plank', 'pallof', 'standing-march'], ['dead-bug', 'bird-dog'], ['skater', 'leg-swings']],
   core: [['plank', 'pallof', 'standing-march'], ['side-plank', 'standing-march'], ['dead-bug', 'bird-dog'], ['bird-dog', 'standing-march'], ['glute-bridge', 'clamshell'], ['calf-raise', 'bent-calf']],
   mobility: [['leg-swings'], ['hip-flexor', 'leg-swings'], ['world-greatest', 'ankle-rock'], ['ankle-rock'], ['glute-bridge', 'calf-raise']],
 };
@@ -117,7 +118,7 @@ export interface StrengthPlan {
   /** This session's own list, when the runner edited it (that day only) */
   custom?: StrengthItem[];
 }
-export interface StrengthItem { id: string; sets: number; reps?: number; seconds?: number }
+export interface StrengthItem { id: string; sets: number; reps?: number; seconds?: number; /** How this block is harder when there is no harder version of the exercise: "+ reps", "+ reps and a set" */ harder?: string }
 export interface StrengthPrefs { equipment?: Equipment; swaps?: Record<string, string>; never?: string[]; last?: Record<string, { reps?: number; load?: number; seconds?: number }>; /** What each exercise's last session means for the next (update 3, §9) */ progress?: Record<string, ExProgress> }
 
 /** Sets and reps for the intensity: heavy as planned, moderate one set fewer, light two sets and lighter */
@@ -139,15 +140,19 @@ export function resolveStrength(sp: StrengthPlan, p: StrengthPrefs = {}, at?: { 
     const fits = (e?: Exercise) => !!e && EQ_RANK[e.equipment] <= EQ_RANK[eq] && !excluded(e, never);
     for (const slot of slots) {
       const cands = [...slot.map(swap).map((id) => exById.get(id)), ...alternatives(slot[0], never).map((a) => a.ex)].filter(fits) as Exercise[];
-      let ex: Exercise | undefined;
+      let ex: Exercise | undefined, base: Exercise | undefined;
       for (const c of cands) {
         const up = exById.get(levelFor(c.id, level, p))!;
-        if (!used.has(up.id)) { ex = up; break; }
+        if (!used.has(up.id)) { ex = up; base = c; break; }
         if (!used.has(c.id)) { ex = c; break; }
       }
       if (!ex) continue;
       used.add(ex.id);
-      items.push(dose(ex, sp.intensity));
+      const d = dose(ex, sp.intensity);
+      // No harder version left for this block (update 4): the block still moves on, with more reps, then another set
+      const stuck = !base ? 0 : Math.min(2, Array.from({ length: Math.max(0, level - 1) }, (_, k) => k + 2).filter((k) => levelFor(base!.id, k, p) === levelFor(base!.id, k - 1, p)).length);
+      if (stuck >= 1) Object.assign(d, d.seconds ? { seconds: d.seconds + 10 * stuck } : { reps: (d.reps ?? 10) + 2 }, stuck >= 2 && !d.seconds ? { sets: d.sets + 1 } : {}, { harder: d.seconds ? '+ hold time' : stuck >= 2 ? '+ reps and a set' : '+ reps' });
+      items.push(d);
     }
   }
   const prog = p.progress ?? {};
@@ -171,13 +176,14 @@ export const doseText = (x: StrengthItem & { ex?: Exercise }) => `${x.sets} x ${
 
 /** Harder versions of each movement pattern, one step per block */
 export const LADDERS: string[][] = [
-  ['split-squat', 'bulgarian', 'rfe-weighted'],
-  ['reverse-lunge', 'db-lunge', 'bulgarian'],
+  // One family for split squats and lunges, so a block never has two split-squat variants
+  ['split-squat', 'reverse-lunge', 'bulgarian', 'rfe-weighted'],
+  ['db-lunge', 'rfe-weighted'],
   ['bw-squat', 'goblet-squat', 'back-squat'],
   ['glute-bridge', 'sl-bridge', 'sl-hip-thrust', 'hip-thrust'],
   ['calf-raise', 'sl-calf-raise', 'weighted-sl-calf'],
   ['plank', 'side-plank', 'side-plank-lift'],
-  ['step-down', 'step-up'],
+  ['step-down', 'step-up', 'weighted-step-up'],
   ['sl-rdl', 'db-rdl', 'trap-deadlift'],
   ['clamshell', 'side-leg-raise', 'band-walk'],
   ['dead-bug', 'bird-dog'],

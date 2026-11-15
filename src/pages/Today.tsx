@@ -240,7 +240,9 @@ export default function Today() {
     return { ran: `You ran ${labelOf(done).split(' · ')[0].toLowerCase().replace(/ run$/, '')} ${dist(done.distanceM, U)} instead · ${pace(done.movingS / (done.distanceM / 1000), U)} · ${duration(done.movingS)} · ${v.title.toLowerCase()}`, next: plan ? swapLine(s, done, plan.sessions) : '' };
   })() : undefined;
   const upcoming = (plan?.sessions ?? []).filter((x) => x.date >= t && x.type !== 'rest');
-  const isStarter = plan?.sessions.some((x) => x.type === 'runwalk' || x.type === 'timetrial');
+  // A starter plan (run/walk or a time trial), read from the plan itself: a return-to-run step during an injury is not
+  // one, so "Full plans unlocked" never shows to a runner whose plan was built from a race result or PB (update 4)
+  const isStarter = !!data.plan?.sessions.some((x) => (x.type === 'runwalk' && !/^Return to run/.test(x.title)) || x.type === 'timetrial');
 
   // Coaching insight: only recent plan changes (they carry their own date), otherwise a note from the last run, dated
   const recentChange = plan?.changes.filter((c) => c.id !== 'built' && daysBetween(new Date(c.at), today) <= 2).sort((a, b) => b.at.localeCompare(a.at))[0];
