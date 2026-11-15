@@ -116,7 +116,10 @@ export function adaptPlan(opts: {
       const ran = typeOf(pick.main);
       // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
       // even if the average pace over the whole run (warm-up and jogs included) looks easy
-      const outcome = repsDone(pick) ? { status: 'done' as const } : sessionOutcome(s.type, ran);
+      // The same goes for a run the runner logged by hand against this session ("Log this session", "I've done this
+      // run"), with or without rep times. A watch run linked to the session is still judged by what it was.
+      const byHand = !!linked && linked.source === 'manual';
+      const outcome = repsDone(pick) || byHand ? { status: 'done' as const } : sessionOutcome(s.type, ran);
       const all = parts.flatMap((g) => g.parts);
       s.status = partly ? 'partial' : outcome.status;
       s.partial = partly ? { doneM: all.reduce((x, a) => x + a.distanceM, 0), doneS: all.reduce((x, a) => x + a.movingS, 0), ran } : undefined;
@@ -523,6 +526,9 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
   } else if (kind === 'rest') {
     Object.assign(s, { ...restDay(s.date, s.phase, 'Swapped to rest because your readiness was low. Recovery today makes the next sessions count.'), id: s.id, title: 'Rest day (swapped)' });
   } else if (kind === 'easy') {
+    // A run/walk or time-trial session has no distance to shorten into a continuous run, and a starter plan has no
+    // paces yet: "Make it shorter" is the easier option there
+    if (s.type === 'runwalk' || s.type === 'timetrial') return plan;
     Object.assign(s, { ...easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces }), id: s.id, title: 'Easy run (swapped)' });
   } else if (kind === 'treadmill') {
     s.title = `${s.title.replace(/ \(treadmill\)$/, '')} (treadmill)`;

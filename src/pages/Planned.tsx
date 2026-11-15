@@ -117,7 +117,7 @@ export default function Planned() {
           <span className="label">Change this session</span>
           <div className="row wrap">
             <button className="btn btn-small" onClick={() => swap(s.id, 'shorter')}>Make it shorter</button>
-            {s.type !== 'easy' && s.type !== 'recovery' && <button className="btn btn-small" onClick={() => swap(s.id, 'easy')}>Easy run instead</button>}
+            {!['easy', 'recovery', 'runwalk', 'timetrial'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'easy')}>Easy run instead</button>}
             {['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'similar')}>Something similar</button>}
             <button className="btn btn-small" onClick={() => swap(s.id, 'treadmill')}>Treadmill version</button>
           </div>

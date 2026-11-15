@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, PlannedSession, Profile, SessionFeedback } from '../lib/types';
-import { adaptPlan, buildStarterPlan, pickStarterDays } from './plan';
+import { adaptPlan, buildStarterPlan, pickStarterDays, swapSession } from './plan';
 import { fitnessStage } from './stage';
 import { estimateFitness, hrSetup, predictTime, trainingPaces } from './fitness';
 import { readiness, loadSeries } from './load';
@@ -20,6 +20,14 @@ const run = (id: string, date: string, km: number, min: number, extra: Partial<A
 describe('starter plan', () => {
   const plan = buildStarterPlan({ today: monday, profile, canRun10: false, walksRegularly: true });
   const sessions = plan.sessions.filter((s) => s.type !== 'rest');
+
+  it('"Easy run instead" never turns a run/walk or time trial into a continuous run with a pace', () => {
+    for (const s of [sessions[0], sessions.find((x) => x.type === 'timetrial')!]) {
+      const after = swapSession(plan, s.id, 'easy', trainingPaces(40));
+      expect(after.sessions.find((x) => x.id === s.id)).toEqual(s);
+      expect(after.changes).toEqual(plan.changes);
+    }
+  });
 
   it('is 8 to 10 weeks, three days a week, with rest days between', () => {
     const weeks = Math.ceil((daysBetween(parseYmd(plan.startDate), parseYmd(plan.endDate)) + 1) / 7);
