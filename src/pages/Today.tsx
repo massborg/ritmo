@@ -218,7 +218,7 @@ export default function Today() {
   const week = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
   const ranOn = (d: string) => data.activities.some((a) => a.startTime.slice(0, 10) === d);
   const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest'), missed: !!session && session.type !== 'rest' && d < t && !ranOn(d) }; });
-  const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U }) : undefined;
+  const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U, today: t }) : undefined;
   const runsHere = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;

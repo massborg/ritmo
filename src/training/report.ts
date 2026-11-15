@@ -162,7 +162,7 @@ export function buildReport(o: {
 }
 
 /** "Your week in review": volume against plan, sessions done, one insight, the focus for next week. */
-export function weekReview(o: { weekStart: string; plan?: Plan; activities: Activity[]; units: Units }): { title: string; lines: string[] } | undefined {
+export function weekReview(o: { weekStart: string; plan?: Plan; activities: Activity[]; units: Units; /** Today (yyyy-mm-dd): a session planned for today or later is not missed yet */ today?: string }): { title: string; lines: string[] } | undefined {
   const { weekStart, plan, activities } = o;
   const end = ymd(addDays(parseYmd(weekStart), 6));
   const runs = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= weekStart && d <= end; });
@@ -171,7 +171,7 @@ export function weekReview(o: { weekStart: string; plan?: Plan; activities: Acti
   const km = runs.reduce((x, a) => x + a.distanceM, 0) / 1000;
   const plannedKm = sessions.reduce((x, s) => x + s.distanceM, 0) / 1000;
   const done = sessions.filter((s) => s.status === 'done').length;
-  const keyMissed = sessions.filter((s) => s.status !== 'done' && ['threshold', 'vo2max', 'long', 'tempo', 'hills'].includes(s.type));
+  const keyMissed = sessions.filter((s) => s.status !== 'done' && (!o.today || s.date < o.today || s.status === 'missed') && ['threshold', 'vo2max', 'long', 'tempo', 'hills'].includes(s.type));
   const next = (plan?.sessions ?? []).filter((s) => s.date > end && s.date <= ymd(addDays(parseYmd(end), 7)) && s.type !== 'rest');
   const nextKey = next.find((s) => ['threshold', 'vo2max', 'long', 'race'].includes(s.type));
   const lines = [
