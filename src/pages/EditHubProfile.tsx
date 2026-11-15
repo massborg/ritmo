@@ -10,7 +10,7 @@ import { duration } from '../lib/format';
 import { DurationInput } from '../components/TimeEntry';
 import * as hub from '../data/hub';
 import type { HubProfile } from '../data/hub';
-import { fasterThanOwn, MAX_PROFILE_PBS, parseTime, PROFILE_PB_DISTANCES, resolvePbs, ritmoBests, type HubPbSettings, type PbChoice } from '../training/profile-pbs';
+import { fasterThanOwn, MAX_PROFILE_PBS, PROFILE_PB_DISTANCES, resolvePbs, ritmoBests, validPbTime, type HubPbSettings, type PbChoice } from '../training/profile-pbs';
 
 export default function EditHubProfile() {
   const { session, data, updateProfile } = useApp();
@@ -18,7 +18,9 @@ export default function EditHubProfile() {
   const uid = session?.user.id;
   const [p, setP] = useState<HubProfile | null>();
   const [pbs, setPbs] = useState<HubPbSettings>(data.profile.hubPbs ?? { show: false, items: [] });
-  const [times, setTimes] = useState<Record<number, string>>(() => Object.fromEntries((data.profile.hubPbs?.items ?? []).filter((c) => c.timeS).map((c) => [c.m, duration(c.timeS!)])));
+  // The typed times, in seconds as typed: the 2:00 to 24 h check applies to the preview and on Save, not while typing
+  // (a backspace from 15:38 passes through 1:53 on the way to the corrected time)
+  const [times, setTimes] = useState<Record<number, number | undefined>>(() => Object.fromEntries((data.profile.hubPbs?.items ?? []).filter((c) => c.timeS).map((c) => [c.m, c.timeS!])));
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'danger'; text: string }>();
   useEffect(() => { if (uid) hub.myHubProfile(uid).then((x) => setP(x ?? null)).catch(() => setP(null)); }, [uid]);
@@ -37,13 +39,13 @@ export default function EditHubProfile() {
     return { ...s, items: [...s.items, { m, mode: (bests.has(m) ? 'ritmo' : 'own') as PbChoice['mode'] }].sort((a, b) => a.m - b.m) };
   });
   const setItem = (m: number, patch: Partial<PbChoice>) => setPbs((s) => ({ ...s, items: s.items.map((c) => (c.m === m ? { ...c, ...patch } : c)) }));
-  const badTimes = pbs.show ? pbs.items.filter((c) => c.mode === 'own' && !parseTime(times[c.m] ?? '')).map((c) => c.m) : [];
-  const preview = resolvePbs({ ...pbs, items: pbs.items.map((c) => (c.mode === 'own' ? { ...c, timeS: parseTime(times[c.m] ?? '') } : c)) }, bests);
+  const badTimes = pbs.show ? pbs.items.filter((c) => c.mode === 'own' && !validPbTime(times[c.m])).map((c) => c.m) : [];
+  const preview = resolvePbs({ ...pbs, items: pbs.items.map((c) => (c.mode === 'own' ? { ...c, timeS: validPbTime(times[c.m]) } : c)) }, bests);
 
   const save = async () => {
     if (badTimes.length) { setMsg({ kind: 'danger', text: 'Enter each time as m:ss or h:mm:ss, for example 15:38 or 1:13:37.' }); return; }
     setSaving(true); setMsg(undefined);
-    const items = pbs.items.map((c) => (c.mode === 'own' ? { ...c, timeS: parseTime(times[c.m] ?? '') } : { m: c.m, mode: c.mode } as PbChoice));
+    const items = pbs.items.map((c) => (c.mode === 'own' ? { ...c, timeS: validPbTime(times[c.m]) } : { m: c.m, mode: c.mode } as PbChoice));
     try {
       await hub.saveHubProfile({ ...p, display_name: p.display_name.trim() || 'Runner', area: p.area?.trim() || null, bio: p.bio?.trim() || null, pbs: resolvePbs({ ...pbs, items }, bests) });
       updateProfile({ hubPbs: { show: pbs.show, items } });
@@ -91,11 +93,11 @@ export default function EditHubProfile() {
                 {!b && <span className="caption">No Ritmo time yet at this distance from runs that can be shown. Runs from Strava can't be shown to others (Strava's rules), so enter your own.</span>}
                 {c.mode === 'own' && (
                   <div className="row wrap" style={{ gap: 8 }}>
-                    <DurationInput small id={`pb-${c.m}`} label={`${d.label} time`} value={parseTime(times[c.m] ?? '')} onChange={(v) => setTimes((t) => ({ ...t, [c.m]: v ? duration(v) : '' }))} invalid={badTimes.includes(c.m)} />
+                    <DurationInput small id={`pb-${c.m}`} label={`${d.label} time`} value={times[c.m]} onChange={(v) => setTimes((t) => ({ ...t, [c.m]: v || undefined }))} invalid={badTimes.includes(c.m)} />
                     <input className="input" style={{ flex: 1, minWidth: 140 }} aria-label={`${d.label} race or date (optional)`} placeholder="Race or date (optional)" value={c.race ?? ''} maxLength={60} onChange={(e) => setItem(c.m, { race: e.target.value })} />
                   </div>
                 )}
-                {badTimes.includes(c.m) && (times[c.m] ?? '') !== '' && <span className="caption" style={{ color: 'var(--danger)' }}>Use m:ss or h:mm:ss, for example 15:38.</span>}
+                {badTimes.includes(c.m) && times[c.m] != null && <span className="caption" style={{ color: 'var(--danger)' }}>Use m:ss or h:mm:ss, for example 15:38.</span>}
               </div>
             );
           })}

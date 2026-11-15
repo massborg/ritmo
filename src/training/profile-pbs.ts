@@ -66,9 +66,11 @@ export function parseTime(s: string): number | undefined {
   if (!m) return undefined;
   const [h, mi, se] = [Number(m[1] ?? 0), Number(m[2]), Number(m[3])];
   if (se > 59 || (m[1] !== undefined && mi > 59)) return undefined;
-  const total = h * 3600 + mi * 60 + se;
-  return total >= 120 && total < 24 * 3600 ? total : undefined;
+  return validPbTime(h * 3600 + mi * 60 + se);
 }
+
+/** A PB time in seconds a profile can show: from 2:00 up to (not including) 24 hours. Checked when saving, not while typing. */
+export const validPbTime = (s: number | undefined): number | undefined => (s !== undefined && s >= 120 && s < 24 * 3600 ? s : undefined);
 
 /** Weeks in a row (Monday to Sunday) with at least one run, up to this week; this week counts once it has a run */
 /** Weeks in a row with a run (or a strength session: update 3, §5) */
