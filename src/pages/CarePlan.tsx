@@ -32,6 +32,8 @@ export default function CarePlan() {
   const [limping, setLimping] = useState(false);
   const [urgent, setUrgent] = useState(false);
   const [result, setResult] = useState<string>();
+  // The check raised a red flag: training is paused, and there is nothing to undo on Training
+  const [paused, setPaused] = useState(false);
   const [physioText, setPhysioText] = useState<string>();
   const [healed, setHealed] = useState(false);
   if (err) return <div className="stack-lg"><AppHeader title="Care plan" back /><StatusLine kind="warning">{err}</StatusLine></div>;
@@ -76,12 +78,15 @@ export default function CarePlan() {
   const save = (next: CareState) => updateBody({ care: next });
   const submit = () => {
     if (urgent) { updateBody({ redFlagAt: new Date().toISOString() }); setResult(URGENT); return; }
-    const r = applyCheck(care, { date: t, morning, during, sharp: sharp || undefined, limping: limping || undefined }, plans);
-    save(r.state);
-    // The same check is a Body check-in: running follows the one rule set (0–2 easy, 3–5 cross-train, 6+ rest)
+    // The same check is a Body check-in: running follows the one rule set (0–2 easy, 3–5 cross-train, 6+ rest).
+    // It goes first, because a red flag (limping, pain 7+, not improving) pauses training and holds the stage.
     const pain = Math.max(morning, during ?? 0);
-    addBodyCheckin({ area: BODY_AREA[care.area], side: care.side, pain, when: [], onset: 'gradual', trend: undefined, signs: limping ? ['limping'] : [] });
+    const flags = addBodyCheckin({ area: BODY_AREA[care.area], side: care.side, pain, when: [], onset: 'gradual', trend: undefined, signs: limping ? ['limping'] : [] });
+    const r = applyCheck(care, { date: t, morning, during, sharp: sharp || undefined, limping: limping || undefined }, plans, flags.length > 0);
+    save(r.state);
+    if (flags.length) { setPaused(true); setResult(`${r.message} Training is paused until you have been checked by a professional (${flags.join('; ').toLowerCase()}).`); return; }
     const rule = painRule({ id: '', at: '', area: BODY_AREA[care.area], side: care.side, pain, when: [], onset: 'gradual', signs: [], redFlags: [] });
+    setPaused(false);
     setResult(`${r.message} Running: ${rule.short}`);
   };
   return (
@@ -112,7 +117,7 @@ export default function CarePlan() {
 
       <section className="card stack" aria-labelledby="care-check">
         <h2 id="care-check" className="title">Pain check</h2>
-        {checked && !result ? <p>This morning: {checked.morning}/10{checked.during != null ? `, during the exercises ${checked.during}/10` : ''}. Next check tomorrow morning.</p> : (
+        {checked ? <p>This morning: {checked.morning}/10{checked.during != null ? `, during the exercises ${checked.during}/10` : ''}. Next check tomorrow morning.</p> : (
           <>
             <label htmlFor="care-morning">This morning, 0 to 10: <span className="stat">{morning}</span></label>
             <input id="care-morning" type="range" min={0} max={10} value={morning} onChange={(e) => setMorning(Number(e.target.value))} style={{ minHeight: 44, accentColor: 'var(--brand)' }} />
@@ -125,7 +130,7 @@ export default function CarePlan() {
             <p className="caption">0–2: move forward · 3–5: stay at this stage · 6 or more: step back and rest that area.</p>
           </>
         )}
-        {result && result !== URGENT && <div role="status"><StatusLine kind="info">{result}</StatusLine><p className="caption"><Link to="/">See the change on Training</Link> (you can undo it there).</p></div>}
+        {result && result !== URGENT && <div role="status"><StatusLine kind="info">{result}</StatusLine><p className="caption">{paused ? <Link to="/">See what this means on Training</Link> : <><Link to="/">See the change on Training</Link> (you can undo it there).</>}</p></div>}
         {advice && <p className="row caption" style={{ gap: 8, color: 'var(--ink)' }}><AlertTriangle size={16} aria-hidden="true" style={{ flex: 'none' }} />{advice}</p>}
         {care.checks.length > 0 && <p className="caption">Recent checks: {care.checks.slice(-7).map((c) => `${parseYmd(c.date).getDate()}/${parseYmd(c.date).getMonth() + 1} ${Math.max(c.morning, c.during ?? 0)}`).join(' · ')}</p>}
       </section>

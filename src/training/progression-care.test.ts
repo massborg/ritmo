@@ -106,6 +106,16 @@ describe('care plans', () => {
     expect(back.state.stage).toBe(0);
     expect(back.message).toMatch(/step back to "Calm it down" and rest that area/);
   });
+  it('limping, sharp pain or a red flag never moves the stage forward, however low the number', () => {
+    const c: CareState = { area: 'calf', stage: 0, startedAt: '2026-11-01', stageSince: '2026-11-01', checks: [], done: [] };
+    const limp = applyCheck(c, { date: '2026-11-05', morning: 2, limping: true }, plans);
+    expect(limp).toMatchObject({ step: 'stay', state: { stage: 0, stageSince: '2026-11-01' } });
+    expect(limp.message).toMatch(/makes you limp: stay at "Calm it down" until you have been checked/);
+    expect(applyCheck(c, { date: '2026-11-05', morning: 2, sharp: true }, plans)).toMatchObject({ step: 'stay', state: { stage: 0 } });
+    expect(applyCheck(c, { date: '2026-11-05', morning: 2 }, plans, true)).toMatchObject({ step: 'stay', state: { stage: 0 } });
+    // A high number still steps back
+    expect(applyCheck({ ...c, stage: 1 }, { date: '2026-11-05', morning: 7, limping: true }, plans, true)).toMatchObject({ step: 'back', state: { stage: 0 } });
+  });
   it('advises a physio for sharp pain, limping, getting worse, or over 2 weeks', () => {
     const c: CareState = { area: 'knee', stage: 1, startedAt: '2026-11-01', stageSince: '2026-11-03', checks: [], done: [] };
     expect(physioAdvice({ ...c, checks: [{ date: '2026-11-05', morning: 2, sharp: true }] }, '2026-11-05')).toMatch(/Sharp pain/);
