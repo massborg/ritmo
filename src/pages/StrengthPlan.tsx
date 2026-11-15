@@ -1,9 +1,12 @@
 // Your strength plan (update 3, §9): the current block and week (a bar chart of learn, build, load, lighter), this
 // week's focus, how each movement gets harder across blocks, and the last session's result with the next change.
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { blockOf, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, targetFor, WEEK_FOCUS, type BlockWeek } from '../training/strength';
+import { exerciseSummary, sessionSummary, showLoad, type WeightUnit } from '../training/strength-load';
+import { ExerciseHistory } from '../components/StrengthBits';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
 const HEIGHT: Record<BlockWeek, number> = { 1: 45, 2: 65, 3: 90, 4: 35 };
@@ -12,6 +15,8 @@ export default function StrengthPlan() {
   const { plan, data } = useApp();
   const t = ymd(new Date());
   const prefs = data.profile.strength ?? {};
+  const unit: WeightUnit = prefs.units ?? 'kg';
+  const [history, setHistory] = useState<{ id: string; name: string }>();
   const { block, week } = blockOf(plan?.weeks, t);
   const logs = (data.profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength).sort((a, b) => b.at.localeCompare(a.at));
   const logged = new Set(logs.map((e) => e.strength!.sessionId).filter(Boolean) as string[]);
@@ -79,24 +84,30 @@ export default function StrengthPlan() {
         {last ? (
           <>
             <p className="caption">{last.strength!.title} · {longDate(parseYmd(last.date))}{last.rpe ? ` · effort ${last.rpe}/10` : ''}</p>
+            {(() => { const sum = sessionSummary(last.strength!.exercises); return sum.volumeKg > 0 ? (
+              <p className="caption last-volume">Volume {showLoad(sum.volumeKg, unit)}{sum.best ? ` · best set: ${sum.best.name}, ${showLoad(sum.best.load, unit)} × ${sum.best.reps} · estimated 1-rep max ${showLoad(sum.best.e1rm, unit)}` : ''}</p>
+            ) : null; })()}
             <ul className="list">
               {last.strength!.exercises.map((x) => {
                 const pr = prefs.progress?.[x.id];
                 const ex = exById.get(x.id);
                 const nx = ex && pr ? targetFor({ id: x.id, sets: x.planned ?? x.sets.length, reps: ex.reps, seconds: ex.seconds }, pr, week).note : undefined;
-                const first = x.sets[0] ?? {};
                 return (
-                  <li key={x.id} className="list-item row-between" style={{ alignItems: 'flex-start' }}>
-                    <span className="stack-sm" style={{ gap: 0 }}><span className="label">{x.name}</span><span className="caption">{x.sets.length}{x.planned ? ` of ${x.planned}` : ''} sets · {first.seconds ? `${first.seconds} s` : `${first.reps ?? '–'} reps`}{first.load ? ` · ${first.load} kg` : ''}</span></span>
-                    <span className="caption" style={{ textAlign: 'right' }}>{pr?.next === 'up' ? 'Progress' : pr?.next === 'back' ? 'Step back' : pr ? 'Repeat' : ''}{nx ? <><br />Next: {nx}</> : null}</span>
+                  <li key={x.id}>
+                    <button type="button" className="list-item row-between last-ex" style={{ alignItems: 'flex-start', width: '100%', textAlign: 'left' }} aria-label={`${x.name}: history`} onClick={() => setHistory({ id: x.id, name: x.name })}>
+                      <span className="stack-sm" style={{ gap: 0 }}><span className="label">{x.name}</span><span className="caption">{exerciseSummary(x.sets, unit).text}{x.planned && x.sets.length < x.planned ? ` · ${x.sets.length} of ${x.planned} sets` : ''}</span></span>
+                      <span className="caption" style={{ textAlign: 'right' }}>{pr?.next === 'up' ? 'Progress' : pr?.next === 'back' ? 'Step back' : pr ? 'Repeat' : ''}{nx ? <><br />Next: {nx}</> : null}</span>
+                    </button>
                   </li>
                 );
               })}
             </ul>
-            <p className="caption">All sets done at an effort of 7 or less: the next session goes up a little. Harder than that, or sets missed: the same again. Two skipped sessions: a step back.</p>
+            <p className="caption">Tap an exercise for its history.</p>
+            <p className="caption">All sets done at an effort of 7 or less: one more rep next time, up to the top of the range (4 above the starting reps). Then more weight, and back to the starting reps. Harder than that, or sets missed: the same again. Two skipped sessions: a step back.</p>
           </>
         ) : <p className="muted">No strength session recorded yet. Start one from Training.</p>}
       </section>
+      {history && <ExerciseHistory exerciseId={history.id} name={history.name} onClose={() => setHistory(undefined)} />}
     </div>
   );
 }

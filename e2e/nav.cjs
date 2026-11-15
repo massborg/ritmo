@@ -35,7 +35,7 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
 
   // The phone tab bar
   const labels = (await page.locator('.tabbar a').allInnerTexts()).map((x) => x.trim());
-  check(labels.join(' · ') === 'Training · Coach · Run · Hub · You', `five tabs in order (${labels.join(' · ')})`);
+  check(labels.join(' · ') === 'Training · Coach · Activity · Hub · You', `five tabs in order (${labels.join(' · ')})`);
   const bar = await page.locator('.tabbar').boundingBox();
   const btn = await page.locator('.tab-run-btn').boundingBox();
   check(Math.abs(btn.x + btn.width / 2 - 195) <= 2, 'Run is centred');
@@ -50,9 +50,9 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
   check(await page.locator('.tab.active').evaluate((el) => getComputedStyle(el).fontWeight) >= 700, 'the active tab label is bold');
   check(await page.locator('.coach-fab').count() === 0, 'no floating coach bubble');
 
-  await page.locator('.tabbar a[href="/run"]').click(); await page.waitForURL(/\/run$/); await page.waitForTimeout(500);
+  await page.locator('.tabbar a[href="/record"]').click(); await page.waitForURL(/\/record$/); await page.waitForTimeout(500); // update 4: Run is now Activity
   const ring = await page.locator('.tab-run-btn').evaluate((el) => getComputedStyle(el).boxShadow);
-  check(/3px/.test(ring), `on /run the Run button has the outline ring (${ring})`);
+  check(/3px/.test(ring), `on Activity the middle button has the outline ring (${ring})`);
   check(await page.locator('.tabbar').isVisible(), 'the bar stays visible on the Run screen before recording');
 
   // Redirects
@@ -90,7 +90,7 @@ const check = (ok, name) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); o
     if (t.length) seen.push(t.map((x) => x.trim()).join(','));
     await dp.waitForTimeout(50);
   }
-  check(seen.length > 0 && seen.every((x) => x === 'Training,Coach,Run,Hub,You'), `desktop menu never drops an item while loading (${[...new Set(seen)].join(' | ')})`);
+  check(seen.length > 0 && seen.every((x) => x === 'Training,Coach,Activity,Hub,You'), `desktop menu never drops an item while loading (${[...new Set(seen)].join(' | ')})`);
   check(await dp.locator('.sidebar-foot a', { hasText: 'Profile' }).isVisible(), 'Profile is at the bottom of the desktop menu');
   check(await dp.locator('.sidebar a.active').innerText().then((x) => x.trim()) === 'Coach', 'Coach is highlighted on /coach');
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors[0]}` : ''}`);

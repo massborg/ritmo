@@ -26,7 +26,8 @@ import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
-import { nextAfter, type StrengthPlan } from '../training/strength';
+import { exById, nextAfter, type StrengthPlan } from '../training/strength';
+import { doubleProgression, freeName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
@@ -182,6 +183,10 @@ interface Ctx extends Derived {
   updateLog: (id: string, patch: Partial<LogEntry>) => void;
   saveStrength: (e: { date: string; minutes: number; rpe?: number; strength: StrengthLog }) => string;
   setStrengthPrefs: (patch: Partial<NonNullable<Profile['strength']>>) => void;
+  saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[] }) => string;
+  deleteTemplate: (id: string) => void;
+  duplicateTemplate: (id: string) => void;
+  starTemplate: (id: string) => boolean;
   editStrength: (sessionId: string, patch: Partial<StrengthPlan> | null, summary: string) => void;
   resetSession: (sessionId: string) => void;
   fixRunTime: (run: Activity, seconds: number) => void;
@@ -1071,15 +1076,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const last = { ...(d.profile.strength?.last ?? {}) };
       const progress = { ...(d.profile.strength?.progress ?? {}) };
       const at = new Date().toISOString();
+      const unit = d.profile.strength?.units ?? 'kg';
       for (const x of e.strength.exercises) {
         const s0 = x.sets[x.sets.length - 1];
         if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds };
-        // Session to session (update 3, §9): progress after a good session, repeat after a hard one or missed sets
-        if (s0 && x.planned) progress[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds, next: nextAfter(x.sets, x.planned, e.rpe), at };
+        // Session to session: double progression (update 4, task 4b). All sets at effort 7 or less: more reps up to
+        // the top of the range, then more load; a hard session or missed sets: the same again.
+        const ex = exById.get(x.id);
+        if (s0 && x.planned && ex) {
+          const t = doubleProgression(ex, x.sets, x.planned, e.rpe, unit);
+          progress[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds, next: t.change === 'repeat' ? 'repeat' : 'up', at, target: { reps: t.reps, seconds: t.seconds, load: t.load, note: t.note } };
+        } else if (s0 && x.planned) progress[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds, next: nextAfter(x.sets, x.planned, e.rpe), at };
       }
-      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, last, progress }, log: [...(d.profile.log ?? []), { id, date: e.date, kind: 'strength', minutes: e.minutes, rpe: e.rpe, at: new Date().toISOString(), strength: e.strength }] } };
+      const templates = e.strength.templateId ? (d.profile.strength?.templates ?? []).map((t) => (t.id === e.strength.templateId ? { ...t, lastUsedAt: at } : t)) : d.profile.strength?.templates;
+      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, last, progress, templates }, log: [...(d.profile.log ?? []), { id, date: e.date, kind: 'strength', minutes: e.minutes, rpe: e.rpe, at: new Date().toISOString(), strength: e.strength }] } };
     });
     return id;
+  };
+  /** Saved workouts (update 4, task 4): kept with the runner's strength settings. Save (new or changed), delete,
+   *  duplicate, and star up to 2 as favourites. */
+  const saveTemplate = (t: { id?: string; name: string; exercises: TemplateExercise[] }): string => {
+    const id = t.id ?? uid();
+    setData((d) => {
+      const list = d.profile.strength?.templates ?? [];
+      const others = list.filter((x) => x.id !== id);
+      const was = list.find((x) => x.id === id);
+      const name = freeName(others, t.name.trim() || 'My workout');
+      const next: StrengthTemplate = { id, name, exercises: t.exercises, favourite: was?.favourite ?? false, createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
+      return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: was ? list.map((x) => (x.id === id ? next : x)) : [...list, next] } } };
+    });
+    return id;
+  };
+  const deleteTemplate = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: (d.profile.strength?.templates ?? []).filter((x) => x.id !== id) } } }));
+  const duplicateTemplate = (id: string) => setData((d) => {
+    const list = d.profile.strength?.templates ?? [];
+    const t = list.find((x) => x.id === id);
+    if (!t) return d;
+    return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: [...list, { ...t, id: uid(), name: freeName(list, `${t.name} copy`), favourite: false, createdAt: new Date().toISOString(), lastUsedAt: undefined }] } } };
+  });
+  /** Star or unstar a saved workout. False when 2 are starred already. */
+  const starTemplate = (id: string): boolean => {
+    const r = toggleFavourite(data.profile.strength?.templates ?? [], id);
+    if (!r.full) setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: toggleFavourite(d.profile.strength?.templates ?? [], id).list } } }));
+    return !r.full;
   };
   const setStrengthPrefs = (patch: Partial<NonNullable<Profile['strength']>>) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, ...patch } } }));
   /** Change one day's strength session (update 3, §8): its own exercise list, or another routine. Logged. */
@@ -1425,7 +1464,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     injuryCheckIn, healInjury, reopenInjury, markSegment,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

@@ -79,11 +79,11 @@ const monday = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDa
   check(prof().strength?.progress?.['bw-squat']?.next === 'up', 'all sets done at effort 6: the squat progresses');
   await page.goto(`${APP}/strength-plan`); await page.waitForTimeout(1200);
   const last = await page.locator('section', { hasText: 'Last session' }).innerText();
-  check(/Body-weight squat[\s\S]*3 of 3 sets · 12 reps[\s\S]*Progress[\s\S]*Next: \+1 reps \(to 13\)/.test(last), `the last session's result and the next change ("+1 reps (to 13)")`);
+  check(/Body-weight squat[\s\S]*3 × 12[\s\S]*Progress[\s\S]*Next: \+1 rep: 13 reps for all sets/.test(last), `the last session's result and the next change ("+1 rep: 13 reps for all sets")`);
   // The next session starts at 13 reps
   mock.state.tables.profiles.find((r) => r.user_id === uid).data.profile.log = [];
   await reload(`/strength/${s.id}`); await page.getByText(/Exercise 1 of/).waitFor();
-  check(/13 reps/.test(await page.locator('.set-row.now').innerText()) && /Today: \+1 reps \(to 13\)/.test(await page.locator('main').innerText()), 'the next session pre-fills 13 reps and says "+1 reps (to 13)"');
+  check(/13 reps/.test(await page.locator('.set-row.now').innerText()) && /Today: \+1 rep: 13 reps for all sets/.test(await page.locator('main').innerText()), 'the next session pre-fills 13 reps and says "+1 rep: 13 reps for all sets"');
   await doWorkout(9);
   check(prof().strength?.progress?.['bw-squat']?.next === 'repeat', 'rated hard (9): the next session repeats');
 
