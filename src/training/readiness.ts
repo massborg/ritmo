@@ -3,7 +3,7 @@
 // show the same number, band word and sentence. It only ever suggests: nothing in the plan changes unless the runner
 // taps a swap.
 import type { Activity, PlannedSession, Profile, Race, SessionFeedback, SessionType } from '../lib/types';
-import { parseYmd, ymd } from '../lib/format';
+import { dist, parseYmd, ymd } from '../lib/format';
 import { EASY_FAMILY, QUALITY_TYPES, SESSION_SHORT } from './analysis';
 import { acwr, type LoadDay, type Readiness } from './load';
 import { type TrainingPaces, zoneOf } from './fitness';
@@ -91,7 +91,7 @@ export function readinessScore(o: {
     loadEffect = Math.max(-25, ratioEff + formEff);
     const value = loadEffect <= -15 ? 'High' : loadEffect < 0 ? 'Building' : loadEffect > 0 ? 'Fresh' : 'Steady';
     const parts = [`Form ${tsb >= 0 ? '+' : ''}${Math.round(tsb)}`];
-    if (ratio.chronicWeekly > 0) parts.push(`${(ratio.acute / 1000).toFixed(0)} km in 7 days against ${(ratio.chronicWeekly / 1000).toFixed(0)} km a week (ratio ${ratio.ratio.toFixed(2)})`);
+    if (ratio.chronicWeekly > 0) parts.push(`${dist(ratio.acute, profile.units, 0)} in 7 days against ${dist(ratio.chronicWeekly, profile.units, 0)} a week (ratio ${ratio.ratio.toFixed(2)})`);
     factors.push({ key: 'load', name: 'Training load', value, tone: loadEffect <= -15 ? 'bad' : loadEffect < 0 ? 'warn' : 'good', effect: loadEffect, explain: `${parts.join(', ')}.` });
   }
 

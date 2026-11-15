@@ -33,6 +33,13 @@ describe('readiness score', () => {
     expect(r.lessAccurate).toBe(true);
     expect(r.factors.find((f) => f.key === 'checkin')?.value).toBe('Not logged');
   });
+  it('the load line uses the runner\'s unit', () => {
+    const km = readinessScore({ now, series: day(-5), activities: month, feedback: [], profile, typeOf }).factors.find((f) => f.key === 'load')!.explain;
+    const mi = readinessScore({ now, series: day(-5), activities: month, feedback: [], profile: { ...profile, units: 'mi' }, typeOf }).factors.find((f) => f.key === 'load')!.explain;
+    expect(km).toMatch(/\d+ km in 7 days against \d+ km a week/);
+    expect(mi).toMatch(/\d+ mi in 7 days against \d+ mi a week/);
+    expect(mi).not.toMatch(/km/);
+  });
   it('never shows a score built on broken inputs', () => {
     const r = readinessScore({ now, series: day(-362, 136), activities: month, feedback: [], profile, typeOf, todaySession: intervals });
     expect(r.score).toBeUndefined();
