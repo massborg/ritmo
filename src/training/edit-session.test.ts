@@ -28,6 +28,29 @@ describe('editing a running session', () => {
     expect(rec.type).toBe('recovery');
     expect(rec.title).toBe('Recovery run');
   });
+  it('a target pace goes into the step text and the time, and survives a later distance edit', () => {
+    const named = { ...thu, title: 'Easy run (after the long run)' };
+    const paced = applyEdit(named, { pace: [230, 240] }, P).session;
+    expect(paced.paceTarget).toEqual({ minSPerKm: 230, maxSPerKm: 240 });
+    expect(paced.steps[0].detail).toMatch(/^at 3:50–4:00\/km/);
+    expect(paced.steps[0].pace).toEqual([230, 240]);
+    expect(paced.durationS).toBe(Math.round(8 * 235));
+    expect(paced.durationS).toBeLessThan(thu.durationS);
+    // Only the distance changes: the runner's pace and the session's name stay
+    const longer = applyEdit(paced, { distanceM: 12000 }, P);
+    expect(longer.session.paceTarget).toEqual({ minSPerKm: 230, maxSPerKm: 240 });
+    expect(longer.session.steps[0].detail).toMatch(/3:50–4:00\/km/);
+    expect(longer.session.durationS).toBe(Math.round(12 * 235));
+    expect(longer.session.title).toBe('Easy run (after the long run)');
+    // An edit with no custom pace still gets the usual pace for its type
+    const rec = applyEdit(applyEdit(thu, { distanceM: 10000 }, P).session, { kind: 'recovery' }, P).session;
+    expect(rec.paceTarget).toEqual({ minSPerKm: P.recovery[0], maxSPerKm: P.recovery[1] });
+    // A hard session: the reps' text carries the new pace
+    const hard = { ...fri, steps: fri.steps.map((x) => (x.kind === 'work' ? { ...x, detail: 'at 3:40–3:45/km, comfortably hard' } : x)) };
+    const h = applyEdit(hard, { pace: [240, 250] }, P).session;
+    expect(h.steps[1].detail).toBe('at 4:00–4:10/km, comfortably hard');
+    expect(h.durationS).toBe(hard.durationS);
+  });
   it('a hard session keeps its reps when the distance changes', () => {
     const s = applyEdit(fri, { distanceM: 12000 }, P).session;
     expect(s.steps[1]).toEqual(fri.steps[1]);

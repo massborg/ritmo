@@ -3,7 +3,7 @@
 // that day only: no other day is cut to make up for it. The original is kept for "Reset to plan", and every edit is
 // logged in Plan changes. Run feedback then judges the run against the edited session.
 import type { Plan, PlannedSession } from '../lib/types';
-import { addDays, longDate, parseYmd, startOfWeek, ymd } from '../lib/format';
+import { addDays, longDate, pace as fmtPace, parseYmd, startOfWeek, ymd } from '../lib/format';
 import { easyRun } from './generator';
 import type { TrainingPaces } from './fitness';
 import { fitSteps } from './session-view';
@@ -32,12 +32,17 @@ const r1 = (x: number) => Math.round(x * 10) / 10;
 export function applyEdit(s: PlannedSession, e: SessionEdit, paces: TrainingPaces): { session: PlannedSession; summary: string } {
   const original: Original = s.edited?.original ?? { type: s.type, title: s.title, distanceM: s.distanceM, durationS: s.durationS, steps: s.steps, paceTarget: s.paceTarget, purpose: s.purpose, focus: s.focus, hrZones: s.hrZones };
   let next: PlannedSession = { ...s };
+  let carried: [number, number] | undefined;
   const easy = EASY_FAMILY.includes(s.type);
   const km = e.distanceM != null ? e.distanceM / 1000 : s.distanceM / 1000;
   if (easy && (e.kind || e.distanceM != null)) {
     // Easy family: built again from the same rules, so steps, time and pace all match
     const kind = e.kind ?? easyKind(s);
-    const built = easyRun(s.date, km, s.phase, { paces }, { strides: kind === 'strides', recovery: kind === 'recovery', title: KIND_TITLE[kind], why: s.purpose });
+    // The name stays when the type does not change ("Easy run (after the long run)")
+    const built = easyRun(s.date, km, s.phase, { paces }, { strides: kind === 'strides', recovery: kind === 'recovery', title: e.kind ? KIND_TITLE[kind] : s.title, why: s.purpose });
+    // A pace the runner set earlier (not the usual pace for the session's type) is what the sheet shows: keep it
+    const usual = s.type === 'recovery' ? paces.recovery : paces.easy;
+    if (!e.pace && s.edited && s.paceTarget && (Math.abs(s.paceTarget.minSPerKm - usual[0]) > 1 || Math.abs(s.paceTarget.maxSPerKm - usual[1]) > 1)) carried = [s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm];
     next = { ...next, type: built.type, title: built.title, focus: built.focus, steps: built.steps, distanceM: built.distanceM, durationS: built.durationS, paceTarget: built.paceTarget, hrZones: built.hrZones };
   } else if (e.distanceM != null && s.distanceM > 0) {
     // A hard session: the reps stay; warm-up, cool-down and steady parts take the change
@@ -46,7 +51,19 @@ export function applyEdit(s: PlannedSession, e: SessionEdit, paces: TrainingPace
     next = { ...next, durationS: next.steps.reduce((a, x) => a + (x.durationS ?? 0), 0) || next.durationS };
   }
   if (e.durationS != null && s.distanceM === 0) next = { ...next, durationS: Math.round(e.durationS) };
-  if (e.pace) next = { ...next, paceTarget: { minSPerKm: Math.round(e.pace[0]), maxSPerKm: Math.round(e.pace[1]) } };
+  const pace = e.pace ?? carried;
+  if (pace) {
+    // The pace goes into the main step too (its text, and the time of an easy step), so the page shows one pace
+    const pr: [number, number] = [Math.round(pace[0]), Math.round(pace[1])];
+    const main = easy ? next.steps.find((x) => x.kind === 'easy') : next.steps.find((x) => x.kind === 'work') ?? next.steps.find((x) => x.kind === 'easy');
+    const steps = next.steps.map((x) => {
+      if (x !== main) return x;
+      const detail = x.detail.replace(/\d+:\d\d–\d+:\d\d\/km/, `${fmtPace(pr[0], 'km', false)}–${fmtPace(pr[1], 'km', false)}/km`);
+      return { ...x, pace: pr, detail, durationS: x.kind === 'easy' && x.km ? Math.round(x.km * (pr[0] + pr[1]) / 2) : x.durationS };
+    });
+    const dS = steps.reduce((a, x) => a + (x.durationS ?? 0), 0) - next.steps.reduce((a, x) => a + (x.durationS ?? 0), 0);
+    next = { ...next, steps, durationS: next.durationS + dS, paceTarget: { minSPerKm: pr[0], maxSPerKm: pr[1] } };
+  }
   // What changed, in words: "You changed Thursday to 10 km (+2 km)"
   const parts: string[] = [];
   const dKm = r1((next.distanceM - original.distanceM) / 1000);
