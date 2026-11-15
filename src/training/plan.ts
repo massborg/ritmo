@@ -18,6 +18,7 @@ export function swapLine(s: PlannedSession, run: Activity | undefined, sessions:
 }
 import type { TrainingPaces } from './fitness';
 import { easyRun, generatePlan, type GenInput, type PlanProblem, restDay } from './generator';
+import { relabelKm } from './session-view';
 
 
 export class PlanNotPossible extends Error {
@@ -525,7 +526,12 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
   const before = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
   if (kind === 'shorter') {
     const f = 0.7;
-    s.steps = s.steps.map((x) => (x.kind === 'warmup' || x.kind === 'cooldown' || x.kind === 'easy' || x.kind === 'steady' ? { ...x, km: x.km ? Math.round(x.km * f * 10) / 10 : x.km, durationS: x.durationS ? Math.round(x.durationS * f) : x.durationS, label: x.kind === 'easy' && x.km ? `${Math.round(x.km * f * 10) / 10} km easy` : x.label } : x));
+    // The scaled parts say their new distance, in the label and the detail ("1.4 km easy", "last 2.8 km steady")
+    s.steps = s.steps.map((x) => {
+      if (!(x.kind === 'warmup' || x.kind === 'cooldown' || x.kind === 'easy' || x.kind === 'steady')) return x;
+      const km = x.km ? Math.round(x.km * f * 10) / 10 : x.km;
+      return { ...x, km, durationS: x.durationS ? Math.round(x.durationS * f) : x.durationS, label: km ? relabelKm(x.label, km) : x.label, detail: km ? relabelKm(x.detail, km) : x.detail };
+    });
     s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || Math.round(s.distanceM * f);
     s.durationS = Math.round(s.steps.reduce((a, x) => a + (x.durationS ?? 0), 0)) || Math.round(s.durationS * f);
     s.title = `${s.title.replace(/ \(shorter\)$/, '')} (shorter)`;
@@ -538,19 +544,25 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
     Object.assign(s, { ...easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces }), id: s.id, title: 'Easy run (swapped)' });
   } else if (kind === 'treadmill') {
     s.title = `${s.title.replace(/ \(treadmill\)$/, '')} (treadmill)`;
-    s.steps = [...s.steps, { label: 'Treadmill', detail: 'Set a 1% incline to match outdoor effort. Use the same paces; for reps, change the speed at the start of each rep and give the belt a few seconds to catch up.' }];
+    // Tapped again: the note is already there
+    if (!s.steps.some((x) => x.label === 'Treadmill')) s.steps = [...s.steps, { label: 'Treadmill', detail: 'Set a 1% incline to match outdoor effort. Use the same paces; for reps, change the speed at the start of each rep and give the belt a few seconds to catch up.' }];
   } else {
+    // The warm-up and cool-down by what they are, not by position: a treadmill note may be the last step. It stays last.
+    const notes = s.steps.filter((x) => !x.kind && x.label === 'Treadmill');
+    const body = s.steps.filter((x) => !notes.includes(x));
+    const wu = body.find((x) => x.kind === 'warmup') ?? body[0];
+    const cd = body.find((x) => x.kind === 'cooldown') ?? body[body.length - 1];
     const alt: Record<string, string> = { threshold: 'vo2max', vo2max: 'threshold', tempo: 'threshold', hills: 'threshold', long: 'long', easy: 'easy', recovery: 'easy' };
     if (s.type === 'threshold' || s.type === 'tempo' || s.type === 'hills') {
       s.title = 'Fartlek: 8 x 2 min'; s.focus = 'Threshold'; s.type = 'threshold';
-      s.steps = [s.steps[0], { kind: 'work', label: '8 x 2 min comfortably hard', detail: `at about ${pace(paces.threshold[0], 'km', false)}–${pace(paces.threshold[1], 'km', false)}/km, 1 min easy jog between, on any route`, km: Math.round((16 * 60 / ((paces.threshold[0] + paces.threshold[1]) / 2) + 7 * 60 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 16 * 60 + 7 * 60, zones: [4] }, s.steps[s.steps.length - 1]];
+      s.steps = [wu, { kind: 'work', label: '8 x 2 min comfortably hard', detail: `at about ${pace(paces.threshold[0], 'km', false)}–${pace(paces.threshold[1], 'km', false)}/km, 1 min easy jog between, on any route`, km: Math.round((16 * 60 / ((paces.threshold[0] + paces.threshold[1]) / 2) + 7 * 60 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 16 * 60 + 7 * 60, zones: [4] }, cd, ...notes];
       s.purpose = 'A flexible version of today\'s threshold work that needs no track or measured route.';
     } else if (s.type === 'vo2max') {
       s.title = 'Hill reps: 8 x 90 s'; s.focus = 'Intervals';
-      s.steps = [s.steps[0], { kind: 'work', label: '8 x 90 s uphill', detail: 'hard but controlled on a steady hill, jog back down', km: Math.round((8 * 90 / ((paces.interval[0] + paces.interval[1]) / 2) * 0.85 + 8 * 90 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 8 * 180, zones: [5] }, s.steps[s.steps.length - 1]];
+      s.steps = [wu, { kind: 'work', label: '8 x 90 s uphill', detail: 'hard but controlled on a steady hill, jog back down', km: Math.round((8 * 90 / ((paces.interval[0] + paces.interval[1]) / 2) * 0.85 + 8 * 90 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 8 * 180, zones: [5] }, cd, ...notes];
       s.purpose = 'Hill reps give a similar VO2 max stimulus with less impact, and work anywhere with a slope.';
     } else {
-      s.title = `${s.title} (any route)`;
+      s.title = `${s.title.replace(/ \(any route\)$/, '')} (any route)`;
     }
     void alt;
     s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || s.distanceM;

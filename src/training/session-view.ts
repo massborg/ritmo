@@ -21,8 +21,10 @@ export function sessionAmount(s: Pick<PlannedSession, 'distanceM' | 'durationS'>
 export const structureLine = (s: Pick<PlannedSession, 'steps'>) => s.steps.map((x) => x.label).join(' · ');
 
 const FLEX: (SessionStep['kind'] | undefined)[] = ['easy', 'warmup', 'cooldown', 'steady'];
-const KM_AT_START = /^(\d+(?:\.\d+)?) km\b/;
-const relabel = (text: string, km: number) => text.replace(KM_AT_START, `${r1(km)} km`);
+const KM_AT_START = /^(last )?(\d+(?:\.\d+)?) km\b/;
+/** A step's label or detail with its leading distance rewritten: "2 km easy" and "last 4 km steady" take the new km */
+export const relabelKm = (text: string, km: number) => text.replace(KM_AT_START, (_, last) => `${last ?? ''}${r1(km)} km`);
+const relabel = relabelKm;
 
 /**
  * Bring a session's steps back in line with its distance after the plan was adapted (a lighter week, a pain check-in,
