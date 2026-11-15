@@ -10,7 +10,7 @@ import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
 import { dist, duration, longDate, pace, type Units, ymd } from '../lib/format';
-import { EASY_FAMILY, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
+import { EASY_FAMILY, SESSION_SHORT, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import { buildVerdict } from '../training/verdict';
 import { ReadinessStrip } from '../components/training';
 import { swapLine } from '../training/plan';
@@ -158,6 +158,7 @@ export default function ActivityPage() {
   const session = sessionOfRun(a.id);
   const d0 = a.startTime.slice(0, 10);
   const planTag = session?.status === 'swapped' ? { cls: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
+    : session?.status === 'partial' ? { cls: 'muted', icon: null, text: `Part of your planned ${(SESSION_SHORT[session.type] ?? session.title).toLowerCase()} · ${TYPE_LABEL[typeOf(a)]}` }
     : session?.status === 'done' ? { cls: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `Matched plan · ${TYPE_LABEL[typeOf(a)]}` }
     : plan && d0 >= plan.startDate ? { cls: 'extra', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' } : undefined;
   const nextSession = plan?.sessions.find((x) => x.date > ymd(today) && x.type !== 'rest' && x.status === 'planned');

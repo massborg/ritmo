@@ -27,7 +27,8 @@ import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { nextAfter, type StrengthPlan } from '../training/strength';
-import { activeNiggle, applyBody, areaLabel, painRule, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
+import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
+import { checkIn as injuryCheck, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
@@ -63,6 +64,9 @@ export interface ManualRun {
 
 
 interface Derived {
+  /** The plan to keep in storage: Ritmo's own adaptations and the full change log, but never the injury changes,
+   *  which are applied on top each time (so the original sessions come back when the injury is over) */
+  planToStore?: Plan;
   today: Date;
   hr: HrSetup;
   zones: Zones;
@@ -138,7 +142,13 @@ interface Ctx extends Derived {
   moveSession: (sessionId: string, toDate: string) => void;
   linkRunToSession: (activityId: string, sessionId: string) => void;
   /** Body: save a check-in (red flags are worked out here, by rules); returns the red flags found */
-  addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>) => string[];
+  addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean }) => string[];
+  /** The short daily check-in for the injury being looked after (update 4): applies the progression rules */
+  injuryCheckIn: (day: Omit<InjuryDay, 'date'>) => { result?: CheckResult; flags: string[] };
+  /** "It feels healed": end the injury, ease back in or go straight back, and rebuild the plan from today */
+  healInjury: (how: 'ease' | 'straight') => void;
+  /** "It's back", within 30 days: the same injury again at the last step reached */
+  reopenInjury: (id: string, pain: number) => void;
   updateBody: (patch: Partial<BodyState>) => void;
   /** Save a run recorded with the Run tab; returns its id */
   saveRecordedRun: (r: { startedAt: number; streams: StreamPoint[]; movingS: number; elapsedS: number; distanceM: number; laps: Lap[]; sessionId?: string; gaps?: Activity['gpsGaps'] }) => string;
@@ -291,6 +301,7 @@ function computeDerived(data: AppData): Derived {
   const bodied = adapted && bodyOn ? applyBody(adapted, data.profile.body, today) : adapted;
   // One session, one truth: steps always add up to the session's distance after every adaptation
   const plan = bodied ? fitPlan(bodied) : bodied;
+  const planToStore = adapted && bodied ? { ...adapted, changes: bodied.changes } : adapted;
   const t = ymd(today);
   const todaySession = plan?.sessions.find((s) => s.date === t);
   const upcoming = data.races.filter((r) => r.date >= t).sort((a, b) => a.date.localeCompare(b.date));
@@ -300,6 +311,9 @@ function computeDerived(data: AppData): Derived {
   const hrIssue = paces ? hrCheck(acts, hr, paces.easy[0], today) : undefined;
   // Readiness (brief 4A): worked out once here, so every screen shows the same score, word and sentence
   const readinessToday = readinessScore({ now: today, series, activities: acts, feedback: data.feedback, profile: data.profile, typeOf, zones, paces, todaySession, race: aRace, simple: !stage.predictions, hrSuspect: !!hrIssue });
+  // While an injury is looked after, readiness never says "Ready for hard" (update 4): capped at "Easy day"
+  const injuredNow = data.mode === 'real' ? injuryMode(data.profile.body, today) : undefined;
+  if (injuredNow && readinessToday.band === 'hard') Object.assign(readinessToday, { band: 'easy', word: 'Easy day', capped: 'injury', line: 'Easy day, capped by injury.', summary: `Your numbers are good, but your ${injuredNow} is still being looked after, so today stays easy. ${readinessToday.summary}`, swap: undefined });
   const readiness = asReadiness(readinessToday);
   const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
   const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
@@ -318,7 +332,8 @@ function computeDerived(data: AppData): Derived {
   const groups = groupIndex(groupRuns(acts, new Set(data.profile.splitRuns ?? [])));
   const groupOf = (id: string) => groups.get(id);
   const niggleNow = bodyOn ? activeNiggle(data.profile.body, today) : undefined;
-  const target = weekTarget(plan, data.plan, wkKey, ymd(addDays(startOfWeek(today), 6)), niggleNow ? areaLabel(niggleNow) : undefined);
+  const returning = bodyOn && (!!stepNow(data.profile.body) || !!data.profile.body?.care);
+  const target = weekTarget(plan, data.plan, wkKey, ymd(addDays(startOfWeek(today), 6)), niggleNow ? areaLabel(niggleNow) : undefined, returning);
   // One label per run, everywhere: its own type, plus what it replaced when it was a swapped session
   // Every part of a session in parts belongs to the session it completed
   const sessionByRun = new Map((plan?.sessions ?? []).filter((s) => s.completedActivityId).flatMap((s) => (s.completedParts ?? [s.completedActivityId!]).map((id) => [id, s] as const)));
@@ -333,7 +348,7 @@ function computeDerived(data: AppData): Derived {
     if (!s && day?.completedActivityId) return `${base} · extra`;
     return base;
   };
-  return { hrIssue, readinessToday, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf, weekTarget: target };
+  return { planToStore, hrIssue, readinessToday, today, hr, zones, fitness, paces, stage, series, readiness, plan, todaySession, typeOf, labelOf, sessionOfRun, aRace, nextRace, aRaceReadiness, typicalMovingS, athlete, groupOf, weekTarget: target };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -533,8 +548,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep the plan's change log once adaptations happen
   useEffect(() => {
     if (data.mode === 'sample' || !derived.plan || !data.plan) return;
-    if (derived.plan.changes.length !== data.plan.changes.length) setData((d) => ({ ...d, plan: derived.plan }));
-  }, [derived.plan, data.plan, data.mode]);
+    if (derived.plan.changes.length !== data.plan.changes.length) setData((d) => ({ ...d, plan: derived.planToStore ?? derived.plan }));
+  }, [derived.plan, derived.planToStore, data.plan, data.mode]);
 
   const analysisCache = useRef(new Map<string, Analysis>());
   useEffect(() => { analysisCache.current.clear(); }, [derived, data.feedback]);
@@ -671,16 +686,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return id;
   };
 
-  const addBodyCheckin = (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>): string[] => {
+  const addBodyCheckin = (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean }): string[] => {
     const prev = data.profile.body ?? { checkins: [] };
     const flags = redFlags(c, prev.checkins);
     const entry: BodyCheckin = { ...c, id: uid(), at: new Date().toISOString(), redFlags: flags };
     const step = prev.rtrStep;
-    // Return to run: a check-in at 2/10 or lower unlocks the next step; pain above that holds the step
+    // Return to run (older, stand-alone): a check-in at 2/10 or lower unlocks the next step; pain above that holds it
     const rtrStep = flags.length ? undefined : step ? (stepUnlocked(entry) ? Math.min(step + 1, 7) : step) : undefined;
+    const t = ymd(new Date());
     // Merged into the body state as it is now (a care plan may have just been updated in the same tap)
-    setData((d) => { const cur = d.profile.body ?? { checkins: [] }; return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], ...(flags.length ? { redFlagAt: entry.at } : {}), rtrStep: rtrStep && rtrStep > 6 ? undefined : rtrStep } } }; });
+    setData((d) => {
+      const cur = d.profile.body ?? { checkins: [] };
+      const same = cur.injury && cur.injury.area === c.area && cur.injury.side === c.side;
+      // The first report of an injury (update 4): it becomes the injury Ritmo looks after, at the step the answers
+      // allow. A red flag pauses running instead; a report of 0/10 starts nothing.
+      let injury = cur.injury, injuryHistory = cur.injuryHistory;
+      if (report && !flags.length && c.pain >= 1 && !same) {
+        if (cur.injury) injuryHistory = [...(injuryHistory ?? []), heal(cur.injury, 'straight', new Date()).past];
+        const st = startingStep({ pain: c.pain, running: report.running });
+        injury = { id: entry.id, area: c.area, side: c.side, startedAt: t, onset: c.onset, running: report.running, seenPhysio: report.seenPhysio, days: [{ date: t, pain: c.pain }], step: st, stepSince: t };
+      } else if (same && report) {
+        // "Update details" on the same injury: the facts change, the step and the days stay
+        injury = { ...cur.injury!, onset: c.onset, running: report.running, seenPhysio: report.seenPhysio ?? cur.injury!.seenPhysio };
+      }
+      return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], ...(flags.length ? { redFlagAt: entry.at } : {}), rtrStep: injury ? undefined : rtrStep && rtrStep > 6 ? undefined : rtrStep, injury, injuryHistory, ...(injury && injury !== cur.injury ? { easeBack: undefined } : {}) } } };
+    });
     return flags;
+  };
+  const injuryCheckIn = (day: Omit<InjuryDay, 'date'>): { result?: CheckResult; flags: string[] } => {
+    const cur = dataRef.current.profile.body;
+    const inj = cur?.injury;
+    if (!inj) return { flags: [] };
+    const t = ymd(new Date());
+    const c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'> = { area: inj.area, side: inj.side, pain: day.pain, when: day.run === 'high' ? ['worse-running'] : inj.running === 'eases' ? ['start-eases'] : ['after'], onset: inj.onset, trend: day.vs, signs: [] };
+    const flags = redFlags(c, cur!.checkins);
+    const entry: BodyCheckin = { ...c, id: uid(), at: new Date().toISOString(), redFlags: flags };
+    const result = injuryCheck(inj, { ...day, date: t });
+    setData((d) => { const b = d.profile.body ?? { checkins: [] }; return { ...d, profile: { ...d.profile, body: { ...b, checkins: [...b.checkins, entry], injury: result.injury, ...(flags.length ? { redFlagAt: entry.at } : {}) } } }; });
+    return { result, flags };
+  };
+  const healInjury = (how: 'ease' | 'straight') => {
+    const b = dataRef.current.profile.body;
+    const inj: Injury | undefined = b?.injury ?? (() => {
+      // An older niggle or stand-alone return to run, with no injury record: make one from what is known
+      const n = activeNiggle(b, new Date());
+      const first = n && [...(b?.checkins ?? [])].filter((x) => x.area === n.area && x.side === n.side).sort((x, y) => x.at.localeCompare(y.at))[0];
+      return n ? { id: n.id, area: n.area, side: n.side, startedAt: (first ?? n).at.slice(0, 10), onset: n.onset, running: 'same' as const, days: (b?.checkins ?? []).filter((x) => x.area === n.area && x.side === n.side).map((x) => ({ date: x.at.slice(0, 10), pain: x.pain })), step: b?.rtrStep ?? 1, stepSince: n.at.slice(0, 10) } : undefined;
+    })();
+    const now = new Date();
+    const h = inj ? heal(inj, how, now) : undefined;
+    const summary = h?.change ?? `Marked healed on ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Your plan is rebuilt from today.`;
+    setData((d) => {
+      const cur = d.profile.body ?? { checkins: [] };
+      // A last check-in at 0/10 closes the niggle, so no pain rule applies any more
+      const closing: BodyCheckin[] = inj ? [{ id: uid(), at: now.toISOString(), area: inj.area, side: inj.side, pain: 0, when: [], onset: inj.onset, trend: 'better', signs: [], redFlags: [] }] : [];
+      return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, ...closing], injury: undefined, rtrStep: undefined, care: undefined, careful: undefined, undone: undefined, easeBack: h?.easeBack, injuryHistory: h ? [...(cur.injuryHistory ?? []).filter((x) => x.id !== h.past.id), h.past] : cur.injuryHistory } } };
+    });
+    // Rebuild from today; if a rebuild isn't possible (too little history), the change is still logged
+    const r = rebuildMyPlan({ why: summary });
+    if (!r.ok) setData((d) => (d.plan ? { ...d, plan: { ...d.plan, changes: [...d.plan.changes, { id: uid(), at: now.toISOString(), reason: 'pain' as const, summary }] } } : d));
+  };
+  const reopenInjury = (id: string, pain: number) => {
+    const now = new Date();
+    setData((d) => {
+      const cur = d.profile.body ?? { checkins: [] };
+      const past = (cur.injuryHistory ?? []).find((x) => x.id === id);
+      if (!past) return d;
+      const injury = reopen(past, pain, now);
+      const entry: BodyCheckin = { id: uid(), at: now.toISOString(), area: past.area, side: past.side, pain, when: ['after'], onset: past.onset, trend: 'worse', signs: [], redFlags: [] };
+      const summary = `${injuryLabel(past).charAt(0).toUpperCase()}${injuryLabel(past).slice(1)} is back (${pain}/10): return to run resumes at step ${injury.step} of 6, the last step you reached.`;
+      return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], injury, easeBack: undefined, injuryHistory: (cur.injuryHistory ?? []).filter((x) => x.id !== id) } }, plan: d.plan ? { ...d.plan, changes: [...d.plan.changes, { id: uid(), at: now.toISOString(), reason: 'pain' as const, summary }] } : d.plan };
+    });
   };
   /** What Body answers may use: logged pain, recent load and plan changes (never shared on the Hub) */
   /** What the AI may be told is built without Strava runs (Strava's terms): the same model, computed without them. */
@@ -1329,6 +1405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
+    injuryCheckIn, healInjury, reopenInjury,
     loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),

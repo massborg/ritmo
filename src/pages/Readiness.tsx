@@ -45,7 +45,7 @@ export default function ReadinessPage() {
             <div className="row" style={{ gap: 'var(--s4)', alignItems: 'center' }}>
               <Ring score={r.score} colour={BAND_COLOUR[r.band]} />
               <div className="stack-sm" style={{ gap: 4 }}>
-                <p className="title" style={{ color: BAND_COLOUR[r.band] }}>{r.word}</p>
+                <p className="title" style={{ color: BAND_COLOUR[r.band] }}>{r.word}{r.capped ? ' · capped by injury' : ''}</p>
                 <p>{r.summary}</p>
                 {r.lessAccurate && <p className="caption">Less accurate today: {r.factors.find((f) => f.key === 'checkin')?.value === 'Not logged' ? 'no morning check-in.' : 'not enough history yet.'}</p>}
               </div>

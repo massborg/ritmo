@@ -13,7 +13,8 @@ import { QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_SHORT, distanceLabel, duration, MONTHS, MONTHS_LONG, pace, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
 import { PB_BASIS_LABEL, personalBests, raceReadiness } from '../training/insights';
 import { predictRace } from '../training/fitness';
-import { TYPE_LABEL } from '../training/analysis';
+import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
+import { planTagText } from '../training/sessions';
 import { forStats } from '../data/quality';
 import { isStravaRun } from '../data/strava';
 import { garminAttribution } from '../data/garmin';
@@ -102,13 +103,13 @@ function RouteThumb({ a }: { a: Activity }) {
 
 /** A run as a card: route, date and name, km · pace · time, its plan tag, and the device */
 function RunCard({ a, press }: { a: Activity; press: Record<string, unknown> }) {
-  const { data, today, plan, sessionOfRun, labelOf, typeOf } = useApp();
+  const { data, today, plan, sessionOfRun, labelOf, typeOf, groupOf } = useApp();
   const U = data.profile.units;
   const d = dayOf(a), t = ymd(today);
   const when = d === t ? 'Today' : d === ymd(addDays(today, -1)) ? 'Yesterday' : `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()} ${MONTHS[parseYmd(d).getMonth()]}${d.slice(0, 4) !== t.slice(0, 4) ? ` ${d.slice(0, 4)}` : ''}`;
   const s = sessionOfRun(a.id);
-  const tag = s?.status === 'swapped' ? { kind: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
-    : s?.status === 'done' ? { kind: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `${d === t ? "Matched today's plan" : 'Matched your plan'} · ${TYPE_LABEL[typeOf(a)]}` }
+  const pt = planTagText({ status: s?.status, today: d === t, typeLabel: TYPE_LABEL[typeOf(a)], plannedShort: s ? (SESSION_SHORT[s.type] ?? s.title.toLowerCase()) : undefined, group: groupOf(a.id), runId: a.id, swappedLabel: labelOf(a) });
+  const tag = pt ? { kind: pt.kind === 'swapped' ? 'ok' : pt.kind, icon: pt.kind === 'swapped' ? <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" /> : pt.kind === 'ok' ? <Check size={14} strokeWidth={2.5} aria-hidden="true" /> : null, text: pt.text }
     : plan && d >= plan.startDate ? { kind: 'muted', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' }
     : { kind: 'muted', icon: null, text: TYPE_LABEL[typeOf(a)] };
   const device = a.device ?? (isStravaRun(a) ? 'From Strava' : garminAttribution(a) ?? (a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'manual' ? 'Logged by hand' : a.source === 'upload' ? 'File upload' : undefined));

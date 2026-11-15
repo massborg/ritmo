@@ -47,3 +47,20 @@ export function groupIndex(groups: RunGroup[]): Map<string, RunGroup> {
   for (const g of groups) for (const p of g.parts) m.set(p.id, g);
   return m;
 }
+
+/**
+ * What a run was to the plan, in the same words on every screen (update 4): all runs matched to one planned session
+ * are shown as one session in parts, and a part says which part it is.
+ */
+export function planTagText(o: { status?: string; today: boolean; typeLabel: string; plannedShort?: string; group?: RunGroup; runId: string; swappedLabel: string }): { kind: 'ok' | 'muted' | 'swapped'; text: string } | undefined {
+  const n = o.group?.parts.length ?? 1;
+  const role = o.group && n > 1 ? o.group.roles[o.runId] : undefined;
+  if (o.status === 'swapped') return { kind: 'swapped', text: o.swappedLabel };
+  if (o.status === 'partial') return { kind: 'muted', text: `Part of your planned ${o.plannedShort ?? 'session'} · ${o.typeLabel}` };
+  if (o.status === 'done') {
+    const matched = o.today ? "Matched today's plan" : 'Matched your plan';
+    if (n > 1 && role && role !== 'main') return { kind: 'ok', text: `${ROLE_LABEL[role]} · part of a session of ${n}` };
+    return { kind: 'ok', text: n > 1 ? `${matched} · session of ${n} parts` : `${matched} · ${o.typeLabel}` };
+  }
+  return undefined;
+}
