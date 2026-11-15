@@ -17,7 +17,7 @@ import type { BackgroundLevel, GoalType, Injury, Plan, Profile, Race, RunningBac
 import {
   ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, kmInUnit, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
 } from '../training/setup';
-import { vdotFromPerformance } from '../training/fitness';
+import { trainingPaces, vdotFromPerformance } from '../training/fitness';
 import type { PlanProblem } from '../training/generator';
 import { pickStarterDays } from '../training/plan';
 
@@ -340,12 +340,14 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const [goal, setGoal] = useState<GoalType | ''>(data.profile.goalType ?? (existingA || athlete === 'hyrox' ? 'race' : ''));
   const [isHyrox, setIsHyrox] = useState(athlete === 'hyrox' || (athlete === 'both' && !existingA));
   const [hx, setHx] = useState<HyroxPrefs>(data.profile.hyrox ?? {});
-  const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS) : data.profile.hyrox?.targets } });
+  const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS, undefined, thresholdS) : data.profile.hyrox?.targets } });
   const [race, setRace] = useState<Partial<Race>>(existingA ?? { name: '', distanceM: 10000, courseType: 'road', priority: 'A' });
   const [warn, setWarn] = useState<ReturnType<typeof checkGoal>>();
   const [err, setErr] = useState<string>();
   const opts = GOALS.filter((g) => g.for === 'all' || (beginner ? g.for === 'beginner' : g.for === 'runner'));
   const estVdot = vdot ?? (bg?.recentRace && bg.recentRace !== 'unknown' ? vdotFromPerformance(bg.recentRace.distanceM, bg.recentRace.timeS) : bg?.weeklyKm ? vdotFromWeeklyKm(bg.weeklyKm) : undefined);
+  // Threshold pace, the same value the plan uses: the HYROX run pace shown here is never faster than it
+  const thresholdS = estVdot ? ((t: [number, number]) => Math.round((t[0] + t[1]) / 2))(trainingPaces(estVdot).threshold) : undefined;
 
   const commit = (g: GoalType, r?: Partial<Race>) => {
     if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, ...hyroxPatch() }); return; }
@@ -374,7 +376,7 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
       )}
       {goal === 'race' && isHyrox && (
         <section className="card" aria-label="Your HYROX race">
-          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} />
+          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} thresholdS={thresholdS} />
         </section>
       )}
       {goal === 'race' && !isHyrox && (

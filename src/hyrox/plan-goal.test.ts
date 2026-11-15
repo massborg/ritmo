@@ -45,6 +45,9 @@ describe('HYROX run pace and targets', () => {
     expect(stationExercises(['sled_push', 'wall_balls'], ['sled'])).toEqual(['sled-push', 'goblet-squat']);
     const t = targetsFromGoal(75 * 60);
     expect(t.run).toBe(264);
+    // A goal that asks for runs faster than threshold pace: the run target is held at threshold
+    expect(targetsFromGoal(60 * 60).run).toBe(212);
+    expect(targetsFromGoal(60 * 60, 0.47, 265).run).toBe(265);
     expect(t.wall_balls).toBeGreaterThan(t.farmers_carry!);
   });
 });
