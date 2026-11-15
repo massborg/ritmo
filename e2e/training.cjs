@@ -72,7 +72,7 @@ function gpx(startIso, km, paceS) {
   await page.getByRole('radio', { name: 'Enter manually' }).or(page.getByRole('button', { name: 'Enter manually' })).first().click();
   const reps = await page.locator('.rep-table tbody tr').count();
   check(reps >= 3, `the rep table is built from the plan (${reps} rows)`);
-  const timeInputs = page.locator('.rep-table input[aria-label$=" time"]');
+  const timeInputs = page.locator('.rep-table input[aria-label*=" time"]');
   const n = await timeInputs.count();
   for (let i = 0; i < n; i++) await timeInputs.nth(i).fill('3:12');
   await page.locator('#ls-km').fill(String(Math.round(q.distanceM / 100) / 10));
@@ -125,7 +125,7 @@ function gpx(startIso, km, paceS) {
     await page.locator('.rep-table').waitFor({ timeout: 10000 });
     const kinds = await page.locator('.rep-table tbody th').allTextContents();
     check(kinds.filter((k) => /^Rep \d/.test(k)).length === 6 && kinds.some((k) => /Warm-up/.test(k)) && kinds.some((k) => /Cool-down/.test(k)), `two screenshots give an editable table of 6 reps plus warm-up and cool-down (${kinds.length} rows)`);
-    check(await page.locator('.rep-table input.unsure').count() === 1, 'the value the reader was not sure about is highlighted to check');
+    check(await page.locator('.rep-table td.unsure, .rep-table input.unsure').count() === 1, 'the value the reader was not sure about is highlighted to check');
     await page.screenshot({ path: path.join(OUT, 'screenshots-table.png') });
     check([...mock.state.files.keys()].filter((k) => k.startsWith(`run-media/${uid}/`)).length === 2, 'both screenshots are stored in the runner\'s private folder');
     await page.getByRole('radio', { name: 'Strong' }).or(page.getByRole('button', { name: 'Strong' })).first().click();
