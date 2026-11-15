@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, PlannedSession, Profile, SessionFeedback } from '../lib/types';
-import { adaptPlan, buildStarterPlan, pickStarterDays, swapSession } from './plan';
+import { adaptPlan, buildStarterPlan, daysSpaced, pickStarterDays, swapSession } from './plan';
 import { fitnessStage } from './stage';
 import { estimateFitness, hrSetup, predictTime, trainingPaces } from './fitness';
 import { readiness, loadSeries } from './load';
@@ -65,6 +65,11 @@ describe('starter plan', () => {
     expect(pickStarterDays([0, 1, 2, 3, 4, 5, 6])).toEqual([0, 2, 4]);
     expect(pickStarterDays([1, 2, 3])).toEqual([1, 3]);
     expect(pickStarterDays([5, 6])).toEqual([5, 6]);
+    // Whether the days used leave a rest day between each, Sunday to Monday included
+    expect(daysSpaced([0, 2, 4])).toBe(true);
+    expect(daysSpaced([5, 6])).toBe(false);
+    expect(daysSpaced(pickStarterDays([0, 6]))).toBe(false);
+    expect(daysSpaced([1, 3, 6])).toBe(true);
   });
 });
 

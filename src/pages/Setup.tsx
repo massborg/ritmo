@@ -19,7 +19,7 @@ import {
 } from '../training/setup';
 import { trainingPaces, vdotFromPerformance } from '../training/fitness';
 import type { PlanProblem } from '../training/generator';
-import { pickStarterDays } from '../training/plan';
+import { daysSpaced, pickStarterDays } from '../training/plan';
 
 const TITLES: Record<SetupStep, string> = {
   consent: 'Your data', basics: 'About you', health: 'Health check', background: 'Your running', goal: 'Your goal',
@@ -427,7 +427,7 @@ function ScheduleStep({ onNext }: StepProps) {
           <legend className="label" style={{ marginBottom: 6 }}>Days you could run</legend>
           <div className="row wrap">{DAY_SHORT.map((d, k) => <button type="button" key={d} className="chip" aria-pressed={days.includes(k)} aria-label={DAY_NAMES[k]} onClick={() => setDays((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k].sort()))}>{d}</button>)}</div>
           {days.length >= 2
-            ? <p className="caption">{beginner ? `Your plan will use ${used.map((x) => DAY_NAMES[x]).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with a rest day between each.` : `${days.length} days a week.`}</p>
+            ? <p className="caption">{beginner ? `Your plan will use ${used.map((x) => DAY_NAMES[x]).join(', ').replace(/, ([^,]*)$/, ' and $1')}${daysSpaced(used) ? ', with a rest day between each.' : '. These days are next to each other: add a day with a gap and your plan can put a rest day between runs.'}` : `${days.length} days a week.`}</p>
             : <p className="caption">Choose at least two days.</p>}
         </fieldset>
         {!beginner && days.length >= 2 && <Chips label="Long run day" value={ld} onChange={setLongDay} options={days.map((k) => ({ value: k, label: DAY_SHORT[k] }))} />}

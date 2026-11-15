@@ -89,6 +89,12 @@ describe('first plan from setup', () => {
     expect(r.confidence).toBe('none');
     expect(r.plan!.sessions.some((s) => s.type === 'runwalk')).toBe(true);
     expect(r.plan!.basis).toMatch(/new to running/);
+    // Monday and Sunday are next to each other: the plan does not claim three days or rest days between
+    const adj = planFromSetup({ profile: { ...complete, daysAvailable: [0, 6], background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
+    expect(adj.basis).toMatch(/two days a week on the days you chose, which are next to each other/);
+    expect(adj.basis).not.toMatch(/rest days between/);
+    const ok = planFromSetup({ profile: { ...complete, daysAvailable: [1, 3, 5], background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
+    expect(ok.basis).toMatch(/three days a week with full rest days between/);
   });
   it('a runner with only weekly distance gets estimated paces, labelled as such', () => {
     const r = planFromSetup({ profile: complete, races: [], activities: [], today });

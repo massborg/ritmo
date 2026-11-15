@@ -401,6 +401,12 @@ function timeTrialSession(date: string, phase: Phase): PlannedSession {
   };
 }
 
+/** True when every training day has a rest day before the next one, Sunday to Monday included */
+export function daysSpaced(days: number[]): boolean {
+  const d = [...new Set(days)].sort((x, y) => x - y);
+  return d.every((x, i) => (i + 1 < d.length ? d[i + 1] - x : d[0] + 7 - x) >= 2);
+}
+
 /** Pick up to three training days with at least one rest day between them. */
 export function pickStarterDays(available: number[]): number[] {
   const days = [...new Set(available)].sort((a, b) => a - b);

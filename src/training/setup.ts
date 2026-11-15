@@ -2,7 +2,7 @@
 import type { Activity, BackgroundLevel, GoalType, Plan, Profile, Race } from '../lib/types';
 import { addDays, daysBetween, distanceLabel, duration, parseYmd, ymd } from '../lib/format';
 import { estimateFitness, hrSetup, predictTime, trainingPaces, vdotFromPerformance } from './fitness';
-import { buildStarterPlan } from './plan';
+import { buildStarterPlan, daysSpaced, pickStarterDays } from './plan';
 import { generatePlan, type PlanProblem } from './generator';
 
 export const MIN_AGE = 18;
@@ -120,9 +120,13 @@ export function planFromSetup(opts: { profile: Profile; races: Race[]; activitie
   if (beginner || (bg?.level === 'returning' && !activities.length)) {
     const canRun10 = !!bg?.canRun10;
     const plan = buildStarterPlan({ today: start, profile, canRun10, walksRegularly: bg?.walksRegularly ?? true });
+    // Say what the plan really does: the days it uses, and rest days between only when the days leave room for them
+    const used = pickStarterDays(profile.daysAvailable.length ? profile.daysAvailable : [1, 3, 5]);
+    const spaced = daysSpaced(used);
+    const perWeek = `${['one day', 'two days', 'three days'][used.length - 1] ?? `${used.length} days`} a week`;
     const why = bg?.level === 'returning'
-      ? `You are returning after a break, so the plan restarts gently with run/walk${canRun10 ? ' at the point where you can already run 10 minutes' : ''}, three days a week with rest days between.`
-      : `You are new to running, so the plan uses short run/walk intervals three days a week with full rest days between, building to 30 minutes of running.`;
+      ? `You are returning after a break, so the plan restarts gently with run/walk${canRun10 ? ' at the point where you can already run 10 minutes' : ''}, ${perWeek}${spaced ? ' with rest days between' : ' on the days you chose, which are next to each other'}.`
+      : `You are new to running, so the plan uses short run/walk intervals ${perWeek}${spaced ? ' with full rest days between' : ' on the days you chose, which are next to each other'}, building to 30 minutes of running.`;
     result = { plan, basis: `${why} Sessions are set by effort, not pace, until Ritmo has enough of your runs to estimate it.`, confidence: 'none' };
   } else {
     const hr = hrSetup(profile, activities, start);
