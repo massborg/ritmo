@@ -90,8 +90,12 @@ export function adaptPlan(opts: {
   // A strength-only day is done once its workout is saved (update 3, §5): it counts toward sessions done
   const strengthDone = new Set((profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength?.sessionId).map((e) => e.strength!.sessionId!));
   for (const s of plan.sessions) if (s.type === 'rest' && s.strengthPlan && strengthDone.has(s.id)) s.status = 'done';
+  // A HYROX simulation or race is done once a HYROX session is recorded that day (update 4, task 6)
+  const hyroxDays = new Set((profile.log ?? []).filter((e) => e.kind === 'hyrox').map((e) => e.date));
+  const hyroxDone = (s: PlannedSession) => !!s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) && hyroxDays.has(s.date);
+  for (const s of plan.sessions) if (hyroxDone(s)) s.status = 'done';
   for (const s of plan.sessions) {
-    if (s.type === 'rest' || s.date > t) continue;
+    if (s.type === 'rest' || s.date > t || hyroxDone(s)) continue;
     // A run logged against this session ("I've done this run", or "Change plan" on the day) completes it
     const linked = activities.find((a) => a.plannedSessionId === s.id && !used.has(a.id));
     const pick = (linked && unitOf.get(linked.id)) ?? best(s, unitsOn(s.date))

@@ -418,7 +418,7 @@ export function generatePlan(input: GenInput): GenResult {
   const goal = planGoal(profile, input.race, input.today);
   const hxGoal = goal.hyrox;
   const race = hxGoal ? hxGoal.race : input.race;
-  const hx = hxGoal ? { ...hxGoal, pace: ((p) => [p - 3, p + 5] as [number, number])(hyroxRunPace(hxGoal.goalS, hxGoal.runShare, Math.round(mid(paces.threshold)))) } : undefined;
+  const hx = hxGoal ? { ...hxGoal, pace: ((p) => [p - 4, p + 4] as [number, number])(hyroxRunPace(hxGoal.goalS, hxGoal.runShare, Math.round(mid(paces.threshold)))) } : undefined;
   const r = resolveSettings(profile, race, input.recentWeeklyKm, !!hx);
   // A running plan that keeps HYROX going: at least one station strength session a week
   if (goal.keepHyrox && r.strengthPerWeek < 1 && !r.week) r.strengthPerWeek = 1;
@@ -713,7 +713,7 @@ export function generatePlan(input: GenInput): GenResult {
   };
   // HYROX taper: the last easy run 2 to 4 days out becomes a light station run-through
   if (hx && raceDate) {
-    const c = sessions.filter((x) => x.type === 'easy' && !x.steps.some((y) => y.kind === 'strides') && (() => { const d = daysBetween(parseYmd(x.date), raceDate); return d >= 2 && d <= 4; })()).sort((a, b) => b.date.localeCompare(a.date))[0];
+    const c = sessions.filter((x) => x.type === 'easy' && (() => { const d = daysBetween(parseYmd(x.date), raceDate); return d >= 2 && d <= 5; })()).sort((a, b) => b.date.localeCompare(a.date))[0];
     if (c) Object.assign(c, { title: 'Easy run and light station run-through', hyrox: { kind: 'run_through' as const }, purpose: 'An easy run, then walk through each station once at a light effort: a few pulls on the SkiErg and rower, one short sled length, 10 lunges, 10 wall balls. Rehearse the movements, do not train them.' });
   }
   // B and C races inside the plan: the race replaces that day; a B race gets two easy days before; the day after is easy or rest

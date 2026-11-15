@@ -79,8 +79,8 @@ describe('a HYROX plan (update 4, task 6)', () => {
     expect(reps.some((s) => /(1 min|45 s) easy jog/.test(s.steps[1].detail))).toBe(true);
     // 75 min × 0.47 ÷ 8 = 4:24/km, slower than threshold, so it is used as it is
     const pace = reps[0].steps[1].pace!;
-    expect(Math.round((pace[0] + pace[1]) / 2)).toBe(Math.max(264, T) + 1);
-    expect(pace[0]).toBeGreaterThanOrEqual(T - 3);
+    expect(Math.round((pace[0] + pace[1]) / 2)).toBe(Math.max(264, T));
+    expect(pace[0]).toBeGreaterThanOrEqual(T - 4);
   });
   it('compromised runs use the hardest stations, with swaps for missing equipment', () => {
     const c = of('compromised');
