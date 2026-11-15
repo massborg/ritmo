@@ -53,14 +53,16 @@ const ProfileBody = lazyPage(() => import('./pages/ProfileSections').then((m) =>
 const ReadinessPage = lazyPage(() => import('./pages/Readiness'));
 const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
+const RecordPage = lazyPage(() => import('./pages/Record'));
+const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** The five main screens, in this order on the phone tab bar and the desktop menu. A fixed list, never built from
- *  loaded data, so no item drops out while a page is loading. Run sits in the middle as the raised orange button. */
+ *  loaded data, so no item drops out while a page is loading. Activity (record a run or a workout) sits in the middle as the raised orange button. */
 const TABS: Tab[] = [
   { to: '/', label: 'Training', icon: Sun, also: ['/session/', '/goals', '/readiness'] },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
-  { to: '/run', label: 'Run', icon: Play },
+  { to: '/record', label: 'Activity', icon: Play, also: ['/run', '/strength'] },
   { to: '/hub', label: 'Hub', icon: Users },
   { to: '/you', label: 'You', icon: User, also: ['/activity/', '/race/', '/story', '/review'] },
 ];
@@ -241,7 +243,7 @@ function PlanProblemSheet() {
 function Shell() {
   const { pathname } = useLocation();
   const { session } = useApp();
-  const on = (t: Tab, isActive: boolean) => isActive || !!t.also?.some((p) => pathname.startsWith(p));
+  const on = (t: Tab, isActive: boolean) => isActive || !!t.also?.some((p) => pathname === p || pathname.startsWith(p.endsWith('/') ? p : `${p}/`));
   const bare = BARE.includes(pathname) || !session;
   return (
     <div className={`app${bare ? ' app-bare' : ''}`}>
@@ -279,6 +281,8 @@ function Shell() {
               <Route path="/calendar/:date" element={<ToDay />} />
               <Route path="/readiness" element={<ReadinessPage />} />
               <Route path="/session/:id" element={<PlannedPage />} />
+              <Route path="/record" element={<RecordPage />} />
+              <Route path="/strength" element={<StrengthFreePage />} />
               <Route path="/strength/:id" element={<StrengthPlayerPage />} />
               <Route path="/strength-plan" element={<StrengthPlanPage />} />
               <Route path="/care" element={<CarePlanPage />} />
@@ -330,8 +334,8 @@ function Shell() {
       </main>
       {!bare && (
         <nav className="tabbar" aria-label="Main">
-          {TABS.map((t) => t.to === '/run'
-            ? <NavLink key={t.to} to={t.to} className={({ isActive }) => `tab tab-run${isActive ? ' active' : ''}`} onClick={() => void tapHaptic()}><span className="tab-run-btn" aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>{t.label}</NavLink>
+          {TABS.map((t) => t.to === '/record'
+            ? <NavLink key={t.to} to={t.to} className={({ isActive }) => `tab tab-run${on(t, isActive) ? ' active' : ''}`} onClick={() => void tapHaptic()}><span className="tab-run-btn" aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>{t.label}</NavLink>
             : <NavLink key={t.to} to={t.to} end={t.to === '/'} className={({ isActive }) => `tab${on(t, isActive) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
         </nav>
       )}

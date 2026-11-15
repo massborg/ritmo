@@ -67,7 +67,7 @@ export default function RunPage() {
   // Profile's "Run settings" link opens the settings sheet here
   useEffect(() => { if (params.get('settings') === '1') { setSettingsOpen(true); setParams({}, { replace: true }); } }, [params, setParams]);
   const [autoStart, setAutoStart] = useState(quick);
-  const [what, setWhat] = useState<'planned' | 'free'>(todays && !quick ? 'planned' : 'free');
+  const [what, setWhat] = useState<'planned' | 'free'>(todays && !quick && params.get('free') !== '1' ? 'planned' : 'free');
   const [settings, setSettings] = useState<Settings>(() => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('ritmo:run:settings') ?? '{}') }; } catch { return DEFAULTS; } });
   const [phase, setPhase] = useState<Phase>('ready');
   const [acc, setAcc] = useState<number>();
