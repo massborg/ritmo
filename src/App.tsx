@@ -55,6 +55,9 @@ const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
 const RecordPage = lazyPage(() => import('./pages/Record'));
 const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
+const HyroxPage = lazyPage(() => import('./pages/Hyrox'));
+const HyroxLivePage = lazyPage(() => import('./pages/HyroxLive'));
+const HyroxSessionPage = lazyPage(() => import('./pages/HyroxSession'));
 
 interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 /** The five main screens, in this order on the phone tab bar and the desktop menu. A fixed list, never built from
@@ -62,7 +65,7 @@ interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 const TABS: Tab[] = [
   { to: '/', label: 'Training', icon: Sun, also: ['/session/', '/goals', '/readiness'] },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
-  { to: '/record', label: 'Activity', icon: Play, also: ['/run', '/strength'] },
+  { to: '/record', label: 'Activity', icon: Play, also: ['/run', '/strength', '/hyrox'] },
   { to: '/hub', label: 'Hub', icon: Users },
   { to: '/you', label: 'You', icon: User, also: ['/activity/', '/race/', '/story', '/review'] },
 ];
@@ -70,7 +73,7 @@ const TABS: Tab[] = [
 /** Pages anyone can open without an account */
 const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/privacy', '/terms', '/about'];
 /** Pages shown without the app's navigation */
-const BARE = ['/setup', ...PUBLIC];
+const BARE = ['/setup', '/hyrox/live', ...PUBLIC];
 /** Pages a signed-in person can open before finishing setup */
 const BEFORE_SETUP = ['/setup', '/profile/privacy', '/reset-password', ...PUBLIC];
 
@@ -283,6 +286,9 @@ function Shell() {
               <Route path="/session/:id" element={<PlannedPage />} />
               <Route path="/record" element={<RecordPage />} />
               <Route path="/strength" element={<StrengthFreePage />} />
+              <Route path="/hyrox" element={<HyroxPage />} />
+              <Route path="/hyrox/live" element={<HyroxLivePage />} />
+              <Route path="/hyrox/session/:id" element={<HyroxSessionPage />} />
               <Route path="/strength/:id" element={<StrengthPlayerPage />} />
               <Route path="/strength-plan" element={<StrengthPlanPage />} />
               <Route path="/care" element={<CarePlanPage />} />

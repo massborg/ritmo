@@ -339,8 +339,8 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
           <div className="stack-sm">
             <div className="hub-stats">
               <div><span className="caption">Time</span><span className="stat">{duration(Math.round(s.movingS))}</span></div>
-              <div><span className="caption">Exercises</span><span className="stat">{s.strength?.exercises ?? 0}</span></div>
-              <div><span className="caption">Sets</span><span className="stat">{s.strength?.sets ?? 0}</span></div>
+              <div><span className="caption">{s.hyrox ? 'Stations' : 'Exercises'}</span><span className="stat">{s.strength?.exercises ?? 0}</span></div>
+              <div><span className="caption">{s.hyrox ? 'Runs' : 'Sets'}</span><span className="stat">{s.strength?.sets ?? 0}</span></div>
             </div>
             {!!s.strength?.top.length && (
               <ul className="hub-strength-box">

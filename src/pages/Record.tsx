@@ -56,6 +56,7 @@ export default function Record() {
         <h2 id="rec-else" className="record-eyebrow dim">{s ? 'Record something else' : 'Record'}</h2>
         <Card to="/run?free=1" tone="brand" icon={<Play size={20} fill="currentColor" />} title="Free run" sub="Just run, or set a distance, time or pace." />
         <Card to="/strength" tone="accent" icon={<Dumbbell size={20} strokeWidth={2.2} />} title="Strength" sub="Pick your exercises or start a saved workout." isNew />
+        <Card to="/hyrox" tone="dark" icon={<span className="hx-mark">HX</span>} title="HYROX" sub="Full or half simulation, custom stations, or race day." isNew />
         <Card onClick={() => setAdding(true)} tone="plain" icon={<Plus size={20} strokeWidth={2.4} />} title="Log something done" sub="Add a run, strength or cross-training after the fact." />
       </section>
       <QuickAdd open={adding} onClose={() => setAdding(false)} />
