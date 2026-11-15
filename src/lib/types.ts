@@ -215,6 +215,8 @@ export interface Profile {
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
   /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */
+  /** How the athlete trains (update 4, task 6). Missing means runner. */
+  athleteType?: 'runner' | 'hyrox' | 'both';
   /** HYROX: division, Roxzone timing, swaps, saved sessions and targets (update 4, task 5) */
   hyrox?: import('../hyrox/hyrox').HyroxPrefs;
   strength?: import('../training/strength').StrengthPrefs & { rest?: number; /** Saved workouts (update 4, task 4) */ templates?: import('../training/strength-load').StrengthTemplate[]; /** Weights are stored in kg and shown in this unit */ units?: import('../training/strength-load').WeightUnit };
@@ -347,6 +349,8 @@ export interface PlannedSession {
   date: string; // YYYY-MM-DD
   type: SessionType;
   title: string;
+  /** A HYROX session (update 4, task 6): 1 km repeats, compromised runs, a simulation, the run-through or the race */
+  hyrox?: { kind: 'km_repeats' | 'compromised' | 'sim_half' | 'sim_full' | 'run_through' | 'race'; blocks?: string[] };
   focus: string; // e.g. "VO2 max"
   purpose: string; // why it matters
   howItHelps: string; // link to goal
@@ -397,6 +401,8 @@ export interface Plan {
   basis?: string;
   paceConfidence?: 'measured' | 'estimated' | 'none';
   raceId?: string;
+  /** Built for HYROX (update 4, task 6), not for a running race */
+  goal?: 'hyrox';
   createdAt: string;
   startDate: string;
   endDate: string;

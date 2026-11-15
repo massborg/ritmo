@@ -6,6 +6,7 @@ import { ROUTINE_TITLE, type Intensity, type Routine } from './strength';
 import type { Phase, Plan, PlannedSession, PlanWeek, Profile, Race, SessionStep, SessionType, TrainingSettings } from '../lib/types';
 import { addDays, DAY_NAMES, daysBetween, distanceLabel, duration, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 import type { TrainingPaces } from './fitness';
+import { hyroxRunPace, planGoal, stationBlocks, stationExercises, type HyroxGoal } from '../hyrox/plan-goal';
 
 const P = (s: number) => pace(s, 'km', false);
 const PR = (r: [number, number]) => `${P(r[0])}–${P(r[1])}/km`;
@@ -15,14 +16,17 @@ const DAYS_PLURAL = DAY_NAMES.map((d) => `${d}s`);
 /** "5K", "10K", "half marathon", "marathon" for use mid-sentence */
 const raceWord = (m: number) => { const l = distanceLabel(m); return /K$/.test(l) ? l : l.toLowerCase(); };
 
-export type DistanceClass = '5K' | '10K' | 'HM' | 'M';
+/** 'HX' is HYROX (update 4, task 6): less running than a road race, with station work */
+export type DistanceClass = '5K' | '10K' | 'HM' | 'M' | 'HX';
 export const distanceClass = (m?: number): DistanceClass => (!m ? '10K' : m >= 40000 ? 'M' : m >= 18000 ? 'HM' : m >= 8000 ? '10K' : '5K');
 
 /** Longest long run per goal (km, and minutes unless the runner sets their own) */
-export const LONG_CAP_KM: Record<DistanceClass, number> = { '5K': 22, '10K': 24, HM: 28, M: 35 };
-const LONG_CAP_MIN: Record<DistanceClass, number> = { '5K': 105, '10K': 110, HM: 135, M: 180 };
-const TAPER_DAYS: Record<DistanceClass, number> = { '5K': 9, '10K': 10, HM: 12, M: 19 };
-const PEAK_DEFAULT: Record<DistanceClass, number> = { '5K': 45, '10K': 55, HM: 65, M: 80 };
+export const LONG_CAP_KM: Record<DistanceClass, number> = { '5K': 22, '10K': 24, HM: 28, M: 35, HX: 16 };
+const LONG_CAP_MIN: Record<DistanceClass, number> = { '5K': 105, '10K': 110, HM: 135, M: 180, HX: 85 };
+const TAPER_DAYS: Record<DistanceClass, number> = { '5K': 9, '10K': 10, HM: 12, M: 19, HX: 10 };
+const PEAK_DEFAULT: Record<DistanceClass, number> = { '5K': 45, '10K': 55, HM: 65, M: 80, HX: 40 };
+/** A HYROX plan runs about 70% of a road plan's volume */
+export const HX_VOLUME = 0.7;
 const RATE = { maintain: 0, steady: 0.05, progressive: 0.08, aggressive: 0.12 };
 /** No single run may be more than this share of the week */
 export const MAX_SHARE = 0.35;
@@ -53,11 +57,11 @@ export interface Resolved {
   week?: WeekChoice;
 }
 
-export function resolveSettings(profile: Profile, race: Race | undefined, recentWeeklyKm: number): Resolved {
+export function resolveSettings(profile: Profile, race: Race | undefined, recentWeeklyKm: number, hyrox = false): Resolved {
   const t = profile.training ?? {};
-  const dc = distanceClass(race?.distanceM);
+  const dc: DistanceClass = hyrox ? 'HX' : distanceClass(race?.distanceM);
   const available = (profile.daysAvailable.length ? [...new Set(profile.daysAvailable)] : [0, 1, 3, 4, 5, 6]).sort((a, b) => a - b);
-  const weeklyKm = Math.max(10, Math.round(t.weeklyKm ?? recentWeeklyKm));
+  const weeklyKm = Math.max(10, Math.round(t.weeklyKm ?? (hyrox ? recentWeeklyKm * HX_VOLUME : recentWeeklyKm)));
   const progression = t.progression ?? 'progressive';
   const peakKm = Math.max(weeklyKm, Math.round(t.peakKm ?? (progression === 'maintain' ? weeklyKm : Math.max(weeklyKm, Math.min(PEAK_DEFAULT[dc], weeklyKm * 1.3)))));
   const longDay = available.includes(profile.longRunDay) ? profile.longRunDay : available.includes(5) ? 5 : available.includes(6) ? 6 : available[available.length - 1];
@@ -71,7 +75,7 @@ export function resolveSettings(profile: Profile, race: Race | undefined, recent
     startMode: t.startMode ?? 'today', dc,
     doubles: (t.doubles ?? []).filter((d) => available.includes(d) && d !== longDay), hardSessions: Math.max(0, Math.min(2, t.hardSessions ?? 2)),
     difficulty: t.difficulty ?? 'normal', longRunStyle: t.longRunStyle ?? 'auto', strides: t.strides ?? true,
-    strengthPerWeek: Math.max(0, Math.min(3, t.strengthPerWeek ?? 0)), planWeeks: Math.max(4, Math.min(24, t.planWeeks ?? 12)),
+    strengthPerWeek: Math.max(0, Math.min(3, t.strengthPerWeek ?? (hyrox ? 2 : 0))), planWeeks: Math.max(4, Math.min(24, t.planWeeks ?? 12)),
     week: t.week?.mode === 'custom' ? t.week : undefined,
   };
 }
@@ -183,7 +187,7 @@ export function checkVolumeFit(r: Resolved, paces: TrainingPaces, vol = r.peakKm
 
 // ---------------------------------------------------------------------------
 // Session builders. Every step carries its km and duration; the session totals are their sums.
-interface Ctx { paces: TrainingPaces; race?: Race; dc: DistanceClass; vol: number }
+interface Ctx { paces: TrainingPaces; race?: Race; dc: DistanceClass; vol: number; hx?: HyroxGoal & { pace: [number, number] } }
 
 function st(kind: NonNullable<SessionStep['kind']>, km: number, p: [number, number], label: string, detail: string, zones?: number[]): SessionStep {
   return { kind, km: r1(km), durationS: Math.round(r1(km) * mid(p)), pace: p, zones, label, detail };
@@ -298,6 +302,13 @@ function racePace(date: string, km: number, phase: Phase, ctx: Ctx, sharpener = 
   const rp: [number, number] = dc === '5K' ? [pc.interval[1], pc.interval[1] + 5] : dc === '10K' ? [Math.round((pc.interval[1] + pc.threshold[0]) / 2) - 2, Math.round((pc.interval[1] + pc.threshold[0]) / 2) + 3]
     : dc === 'HM' ? [Math.round((pc.threshold[1] + pc.marathon[0]) / 2) - 2, Math.round((pc.threshold[1] + pc.marathon[0]) / 2) + 3] : pc.marathon;
   const name = dc === 'M' ? 'marathon' : dc === 'HM' ? 'half marathon' : dc;
+  if (ctx.hx) {
+    // HYROX: a short race-pace touch, 4 x 1 km at the HYROX run pace
+    const hp = ctx.hx.pace;
+    const tgt = Math.max(7, Math.min(km, 9));
+    const w = fitReps(4, 2, tgt, (k) => reps(k, 1, hp, 90, pc.recovery, `${k} x 1 km at HYROX pace`, 'your race-day run rhythm', [4]));
+    return make(date, phase, 'vo2max', `Race-pace sharpener: ${w.label.split(' ')[0]} x 1 km`, 'HYROX', 'Short and crisp: keeps your legs sharp while fatigue drops before the race.', 'Knowing exactly how race pace feels is the best pacing tool you have.', withWuCd(w, tgt, ctx), hp, [4], { hyrox: { kind: 'km_repeats' } });
+  }
   let n: number, rep: number, rec: number, lbl: string;
   if (sharpener) { n = dc === 'M' || dc === 'HM' ? 3 : 4; rep = dc === 'M' ? 2 : 1; rec = 120; lbl = dc === 'M' ? '2 km' : '1 km'; }
   else if (dc === '5K') { n = 4; rep = 1.2; rec = 150; lbl = '1.2 km'; }
@@ -311,6 +322,49 @@ function racePace(date: string, km: number, phase: Phase, ctx: Ctx, sharpener = 
   return make(date, phase, dc === 'M' ? 'tempo' : 'vo2max', title, 'Race pace',
     sharpener ? 'Short and crisp: keeps your legs sharp while fatigue drops before the race.' : `Rehearses your ${name} rhythm so it feels familiar and controlled on race day.`,
     'Knowing exactly how race pace feels is the best pacing tool you have.', withWuCd(work, tgt, ctx), rp, [dc === 'M' ? 3 : 4]);
+}
+
+// ---- HYROX sessions (update 4, task 6)
+/** 1 km repeats at HYROX run pace. 6 x 1 km with 90 s rest, building to 8; then shorter rests (60 s, 45 s). */
+function hxRepeats(date: string, km: number, phase: Phase, ctx: Ctx, stage: number): PlannedSession {
+  const hp = ctx.hx!.pace;
+  const n0 = Math.min(8, 6 + stage), rec = stage <= 2 ? 90 : stage === 3 ? 60 : 45;
+  const work = fitReps(n0, ctx.vol >= 32 ? 6 : 4, km, (n) => reps(n, 1, hp, rec, ctx.paces.recovery, `${n} x 1 km at HYROX pace`, 'the pace you will run between stations: controlled, never a sprint', [4]));
+  const n = Number(work.label.split(' ')[0]);
+  return make(date, phase, 'vo2max', `HYROX 1 km repeats: ${n} x 1 km`, 'HYROX',
+    `Teaches your legs the exact pace of the 8 race runs, ${rec < 90 ? `with only ${rec} s between them, so it starts to feel like the race` : 'with enough rest to hold it evenly'}.`,
+    'Even 1 km splits are where most HYROX time is won or lost.', withWuCd(work, Math.min(km, (work.km ?? 0) + 4), ctx), hp, [4], { hyrox: { kind: 'km_repeats' } });
+}
+/** Compromised runs: 4 to 8 x (a short station block, then 1 km at HYROX pace straight away) */
+function hxCompromised(date: string, km: number, phase: Phase, ctx: Ctx, stage: number): PlannedSession {
+  const hx = ctx.hx!, hp = hx.pace;
+  const blocks = stationBlocks(hx.hardest, hx.equipment).slice(0, 3);
+  const BLOCK_S = 100;
+  const mk = (n: number): SessionStep => ({ kind: 'work', km: n, durationS: Math.round(n * mid(hp) + n * BLOCK_S), pace: hp, zones: [4], label: `${n} x 1 km at HYROX pace`,
+    detail: `each one straight after a station block (${blocks.join(', ')}; take them in turn). Run at ${PR(hp)}: the first 200 m feel heavy, then settle. No rest between the block and the run` });
+  const work = fitReps(Math.min(8, 4 + stage), 3, km, mk);
+  const n = Number(work.label.split(' ')[0]);
+  return make(date, phase, 'vo2max', `Compromised runs: ${n} x (station + 1 km)`, 'HYROX',
+    'Running on legs that have just done a station is the skill of HYROX. This practises it with your hardest stations.',
+    'The runs after sleds, lunges and wall balls stop costing you time.', withWuCd(work, Math.min(km, (work.km ?? 0) + 4), ctx), hp, [4], { hyrox: { kind: 'compromised', blocks } });
+}
+/** A half or full simulation, recorded with the HYROX recorder */
+function hxSim(date: string, full: boolean, phase: Phase, ctx: Ctx): PlannedSession {
+  const hx = ctx.hx!, n = full ? 8 : 4;
+  const est = Math.round((hx.goalS ?? mid(hx.pace) * 8 / hx.runShare) * (full ? 1 : 0.5) * (full ? 1.03 : 1.02));
+  return make(date, phase, 'tempo', full ? 'HYROX full simulation' : 'HYROX half simulation', 'HYROX',
+    full ? 'The whole race in order, once: 8 x (1 km run + station). Pace it like race day and note where it gets hard.' : `Half the race in order: ${n} x (1 km run + station). Alternate the front and back half from one time to the next.`,
+    'Nothing shows your pacing, transitions and weak stations like doing them in order.',
+    [{ kind: 'work', km: n, durationS: est, pace: hx.pace, zones: [3, 4], label: `${n} x (1 km run + station)`, detail: `runs at ${PR(hx.pace)}; stations at a steady effort you could repeat. Start it from Activity, HYROX` }], hx.pace, [3, 4], { hyrox: { kind: full ? 'sim_full' : 'sim_half' } });
+}
+function hxRaceDay(date: string, race: Race, ctx: Ctx): PlannedSession {
+  const est = Math.round(race.goalS ?? (mid(ctx.hx!.pace) * 8) / ctx.hx!.runShare);
+  return {
+    id: uid(), date, phase: 'race', status: 'planned', type: 'race', title: 'HYROX', focus: 'Race', hyrox: { kind: 'race' },
+    purpose: 'Race day. Everything you have done has been building to this.', howItHelps: 'Run the first kilometre slower than feels right, keep the stations steady, and save something for the wall balls.',
+    steps: [{ label: 'Race', detail: `8 x (1 km run + station)${race.goalS ? `, goal ${duration(race.goalS)}` : ''}. Runs at about ${P(mid(ctx.hx!.pace))}/km`, km: 8, durationS: est, kind: 'work' }],
+    distanceM: 8000, durationS: est,
+  };
 }
 
 function hills(date: string, km: number, phase: Phase, ctx: Ctx): PlannedSession {
@@ -359,8 +413,16 @@ export function phaseForWeeks(W: number): Phase[] {
 }
 
 export function generatePlan(input: GenInput): GenResult {
-  const { profile, race, paces } = input;
-  const r = resolveSettings(profile, race, input.recentWeeklyKm);
+  const { profile, paces } = input;
+  // HYROX athletes (update 4, task 6): the plan is for HYROX; "Both" is for whichever race is nearer
+  const goal = planGoal(profile, input.race, input.today);
+  const hxGoal = goal.hyrox;
+  const race = hxGoal ? hxGoal.race : input.race;
+  const hx = hxGoal ? { ...hxGoal, pace: ((p) => [p - 3, p + 5] as [number, number])(hyroxRunPace(hxGoal.goalS, hxGoal.runShare, Math.round(mid(paces.threshold)))) } : undefined;
+  const r = resolveSettings(profile, race, input.recentWeeklyKm, !!hx);
+  // A running plan that keeps HYROX going: at least one station strength session a week
+  if (goal.keepHyrox && r.strengthPerWeek < 1 && !r.week) r.strengthPerWeek = 1;
+  const hxExtra = hx || goal.keepHyrox ? stationExercises(hx?.hardest ?? (profile.hyrox?.hardest?.length ? profile.hyrox.hardest : ['sled_push', 'sandbag_lunges', 'wall_balls']), hx?.equipment ?? profile.hyrox?.equipment ?? []) : undefined;
   const warnings: string[] = [];
 
   // 1) Does the volume fit the days? Never fix it silently.
@@ -382,7 +444,7 @@ export function generatePlan(input: GenInput): GenResult {
     options.push({ label: `Lower to ${fit.maxKm} km a week on ${r.daysPerWeek} days`, training: { weeklyKm: fit.maxKm, peakKm: fit.maxKm } });
     return { ok: false, problem: {
       kind: 'doesNotFit', fit, options,
-      message: `${Math.round(fit.weeklyKm)} km a week does not fit safely into ${r.daysPerWeek} days: some runs would be longer than is safe or sensible for ${race ? `a ${raceWord(race.distanceM)}` : 'your goal'}. The most that fits in ${r.daysPerWeek} days is about ${fit.maxKm} km.${fit.recommendedDays ? ` ${fit.recommendedDays} days a week would spread ${Math.round(fit.weeklyKm)} km well.` : ''}`,
+      message: `${Math.round(fit.weeklyKm)} km a week does not fit safely into ${r.daysPerWeek} days: some runs would be longer than is safe or sensible for ${hx ? 'HYROX' : race ? `a ${raceWord(race.distanceM)}` : 'your goal'}. The most that fits in ${r.daysPerWeek} days is about ${fit.maxKm} km.${fit.recommendedDays ? ` ${fit.recommendedDays} days a week would spread ${Math.round(fit.weeklyKm)} km well.` : ''}`,
     } };
   }
   if (fit.easyHeavy) warnings.push(`Easy runs are a little long at ${Math.round(r.weeklyKm)} km on ${r.daysPerWeek} days.${fit.recommendedDays && fit.recommendedDays > r.daysPerWeek ? ` A ${fit.recommendedDays}th day would spread the volume better.` : ''}`);
@@ -414,6 +476,8 @@ export function generatePlan(input: GenInput): GenResult {
   const rate = RATE[r.progression];
   let normal = r.weeklyKm;
   let qVariant = 0;
+  // HYROX: how far the 1 km repeats and compromised runs have progressed, and whether the full simulation is done
+  let hxStage = 0, hxBuildWeeks = 0, hxFullDone = false;
   let strengthN = 0;
   let strengthDows: number[] = [];
   for (let w = 0; w < totalWeeks; w++) {
@@ -427,9 +491,17 @@ export function generatePlan(input: GenInput): GenResult {
     const oneQ = !keepTypes && (cutback || vol < 25 || phase === 'base');
     const nDoubles = r.doubles.filter((d) => roles[d] !== 'rest' && roles[d] !== 'long').length;
     const split = splitWeek(vol, oneQ ? Math.min(1, counts.nQ) : counts.nQ, counts.nEasy + nDoubles + (oneQ && counts.nQ > 1 ? 1 : 0), counts.hasLong, caps);
+    // HYROX sessions need room for 6 x 1 km even at a modest weekly volume (still under the 35% rule). The easy
+    // runs give the distance back, so the week's total stays where it should be.
+    let hxQ: number | undefined;
+    if (hx && phase !== 'base' && !cutback && !oneQ) {
+      hxQ = Math.min(caps.qualityKm, Math.max(split.qKm, Math.min(12.5, vol * 0.33)));
+      const nEasy = counts.nEasy + nDoubles;
+      if (nEasy > 0) split.easyKm = Math.max(Math.min(4, split.easyKm), split.easyKm - ((hxQ - split.qKm) * counts.nQ) / nEasy);
+    }
     const k = r.difficulty === 'easier' ? 1.02 : r.difficulty === 'harder' ? 0.99 : 1;
     const qp: TrainingPaces = k === 1 ? paces : { ...paces, threshold: [paces.threshold[0] * k, paces.threshold[1] * k], interval: [paces.interval[0] * k, paces.interval[1] * k], repetition: [paces.repetition[0] * k, paces.repetition[1] * k] };
-    const ctx: Ctx = { paces: qp, race, dc: r.dc, vol };
+    const ctx: Ctx = { paces: qp, race, dc: r.dc, vol, hx };
     const autoStyle = phase === 'peak' ? (r.dc === 'M' || r.dc === 'HM' ? 'mp' : 'progressive') : phase === 'build' ? 'progressive' : 'steady';
     const longStyle: 'steady' | 'progressive' | 'mp' = r.longRunStyle === 'auto' ? autoStyle : r.longRunStyle === 'fast-finish' ? 'mp' : r.longRunStyle;
     let weekKm = 0;
@@ -489,12 +561,12 @@ export function generatePlan(input: GenInput): GenResult {
       if (raceDate && dateD > raceDate) break;
       const toRace = raceDate ? daysBetween(dateD, raceDate) : 99;
       const dayPhase: Phase = taperStart && dateD >= taperStart ? 'taper' : phase;
-      const taperScale = r.dc === 'M' ? (toRace > 13 ? 0.75 : toRace > 6 ? 0.6 : 0.5) : r.dc === 'HM' ? (toRace > 6 ? 0.75 : 0.6) : toRace > 6 ? 0.8 : 0.7;
+      const taperScale = r.dc === 'HX' ? 0.6 : r.dc === 'M' ? (toRace > 13 ? 0.75 : toRace > 6 ? 0.6 : 0.5) : r.dc === 'HM' ? (toRace > 6 ? 0.75 : 0.6) : toRace > 6 ? 0.8 : 0.7;
       let s: PlannedSession;
       const force = forced.get(d);
       const role: Role = force === 'rest' ? 'rest' : force === 'easy' ? 'easy' : roles[d];
       const prevSession = weekSessions[weekSessions.length - 1] ?? sessions[sessions.length - 1];
-      if (race && toRace === 0) s = raceDay(date, race, paces);
+      if (race && toRace === 0) s = hx ? hxRaceDay(date, race, ctx) : raceDay(date, race, paces);
       else if (force === 'sharpener') s = racePace(date, Math.max(5, split.qKm * 0.7), 'taper', ctx, true);
       else if (race && toRace === 1) s = roles[d] !== 'rest' ? easyRun(date, Math.min(5, Math.max(3, split.easyKm * 0.4)), 'taper', ctx, { strides: true, title: 'Shakeout run with strides', why: 'A short, easy run with a few strides the day before the race keeps your legs fresh and loose.' }) : restDay(date, 'taper', 'The day before the race: rest, or a 15 minute walk.');
       else if (role === 'rest' && chosen.strengthOnly[d] && !(raceDate && toRace <= 3)) s = { ...restDay(date, dayPhase, 'Strength only today, at a moderate effort. Treat the day as recovery.'), title: 'Strength (no run)', focus: 'Strength' };
@@ -502,10 +574,14 @@ export function generatePlan(input: GenInput): GenResult {
       else if (role === 'long') {
         const km = dayPhase === 'taper' ? (toRace <= 6 ? Math.min(r.dc === 'M' ? 16 : 12, split.longKm * 0.55) : split.longKm * taperScale) : cutback ? split.longKm : split.longKm;
         const mkLong = (k: number) => (dayPhase === 'taper' && toRace <= 6 ? easyRun(date, k, 'taper', ctx, { title: 'Easy run (race week)' }) : longRun(date, Math.round(k), dayPhase, ctx, dayPhase === 'taper' || cutback ? 'steady' : longStyle));
-        s = mkLong(km);
-        rebuild.set(s.id, mkLong);
+        // HYROX: a half simulation every third build week, and the full one once, 3 to 4 weeks before the race
+        const simOk = !!hx && dayPhase !== 'taper' && !cutback && (phase === 'build' || phase === 'peak');
+        if (simOk && !hxFullDone && toRace >= 21 && toRace <= 34) { s = hxSim(date, true, dayPhase, ctx); hxFullDone = true; }
+        else if (simOk && hxBuildWeeks % 3 === 1 && !(toRace >= 14 && toRace < 21)) s = hxSim(date, false, dayPhase, ctx);
+        else { s = mkLong(km); rebuild.set(s.id, mkLong); }
       } else if (role === 'q1' || role === 'q2') {
-        const qKm = split.qKm;
+        // HYROX sessions need room for 6 x 1 km even at a modest weekly volume (still under the 35% rule)
+        const qKm = hxQ ?? split.qKm;
         if (dayPhase === 'taper') {
           s = toRace <= 3 ? easyRun(date, Math.max(5, split.easyKm * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
             : toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true }); // race week has one sharpener (set above)
@@ -519,7 +595,9 @@ export function generatePlan(input: GenInput): GenResult {
         else if (!keepTypes && phase === 'base' && role === 'q2') s = easyRun(date, split.easyKm, phase, ctx, { strides: r.strides });
         else {
           const v = qVariant, ww = w;
-          const mkQ = (k: number) => (k < 5 ? easyRun(date, Math.max(2.5, k), phase, ctx, { strides: true, why: 'Your weekly volume is still small, so this is an easy run with a few relaxed strides instead of a hard session. Hard sessions come in as your weekly distance grows.' }) : phase === 'base' ? (ww % 2 === 0 ? threshold(date, k, phase, ctx, 0, true) : hills(date, k, phase, ctx))
+          const hs = hxStage;
+          const mkHx = (k: number) => (role === 'q1' ? (cutback || hx!.keepRunning ? threshold(date, k, phase, ctx, v) : hxRepeats(date, k, phase, ctx, hs)) : hx!.keepRunning && ww % 2 === 0 ? hxRepeats(date, k, phase, ctx, hs) : hxCompromised(date, k, phase, ctx, hs));
+          const mkQ = (k: number) => (hx && k >= 5 && phase !== 'base' ? mkHx(k) : k < 5 ? easyRun(date, Math.max(2.5, k), phase, ctx, { strides: true, why: 'Your weekly volume is still small, so this is an easy run with a few relaxed strides instead of a hard session. Hard sessions come in as your weekly distance grows.' }) : phase === 'base' ? (ww % 2 === 0 ? threshold(date, k, phase, ctx, 0, true) : hills(date, k, phase, ctx))
             : phase === 'build' || cutback ? (role === 'q1' ? threshold(date, k, phase, ctx, v) : intervals(date, k, phase, ctx, v))
             : role === 'q1' ? (r.dc === 'HM' || r.dc === 'M' ? threshold(date, k, phase, ctx, v) : intervals(date, k, phase, ctx, v)) : racePace(date, k, phase, ctx));
           s = mkQ(qKm);
@@ -571,7 +649,9 @@ export function generatePlan(input: GenInput): GenResult {
           : beforeHard ? `Core and hips only: ${next(x)!.title.toLowerCase()} is tomorrow, so no heavy leg work today.`
           : phase === 'base' ? 'Builds the strength in your legs, hips and core that lets you run more without injury.'
           : 'Keeps the strength you have built while running is the priority.';
-        x.strengthPlan = { routine, intensity, why };
+        // HYROX: extra work for the hardest stations, on the days with leg work (never the day before a hard session)
+        const stationWork = !!hxExtra && !taper && !beforeHard;
+        x.strengthPlan = stationWork ? { routine, intensity, why: `${why} With extra work for your hardest HYROX stations.`, extra: hxExtra } : { routine, intensity, why };
         x.strength = `${ROUTINE_TITLE[routine]}${only ? ' (no run today)' : ' after the run'}: ${why}`;
         if (only) Object.assign(x, { title: 'Strength (no run)', focus: 'Strength', purpose: `${why} Treat the day as recovery: stop well before you are tired.` });
       };
@@ -613,6 +693,7 @@ export function generatePlan(input: GenInput): GenResult {
     }
     for (const x of weekSessions) { weekKm += (x.distanceM + (x.second?.distanceM ?? 0)) / 1000; sessions.push(x); }
     qVariant++;
+    if (hx && (phase === 'build' || phase === 'peak') && !cutback) { hxStage++; hxBuildWeeks++; }
     if (weekKm > 0 || w === 0) weeks.push({ start: ymd(ws), targetKm: Math.round(ws < start ? vol : weekKm), phase, cutback });
     const last = phases[phases.length - 1];
     const pEnd = ymd(addDays(ws, 6) > end ? end : addDays(ws, 6));
@@ -627,9 +708,14 @@ export function generatePlan(input: GenInput): GenResult {
   }
 
   const plan: Plan = {
-    id: uid(), raceId: race?.id, createdAt: new Date().toISOString(), startDate: ymd(start), endDate: ymd(end), phases, sessions, weeks,
-    changes: [{ id: 'built', at: new Date().toISOString(), reason: 'rebuilt', summary: describePlan(r, roles, race, input, totalWeeks, caps) }],
+    id: uid(), raceId: hx ? undefined : race?.id, ...(hx ? { goal: 'hyrox' as const } : {}), createdAt: new Date().toISOString(), startDate: ymd(start), endDate: ymd(end), phases, sessions, weeks,
+    changes: [{ id: 'built', at: new Date().toISOString(), reason: 'rebuilt', summary: describePlan(r, roles, race, input, totalWeeks, caps) + (hx ? ` This is a HYROX plan: about ${Math.round(HX_VOLUME * 100)}% of the running of a road plan, with 1 km repeats and compromised runs at your HYROX run pace of ${P(mid(hx.pace))}/km (${hx.goalS ? `your goal of ${duration(hx.goalS)} with ${Math.round(hx.runShare * 100)}% of it running` : 'a little slower than threshold, until you set a goal time'}, never faster than your threshold pace), a half simulation every third build week${race ? ', one full simulation 3 to 4 weeks out' : ''}, and strength with extra work for ${hx.hardest.map((k) => k.replace(/_/g, ' ')).join(', ')}.${hx.keepRunning ? ' You also have a running race within 8 weeks, so one threshold run a week is kept.' : ''}` : goal.keepHyrox ? ' You also train for HYROX, so one strength session a week includes your hardest stations.' : '') }],
   };
+  // HYROX taper: the last easy run 2 to 4 days out becomes a light station run-through
+  if (hx && raceDate) {
+    const c = sessions.filter((x) => x.type === 'easy' && !x.steps.some((y) => y.kind === 'strides') && (() => { const d = daysBetween(parseYmd(x.date), raceDate); return d >= 2 && d <= 4; })()).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (c) Object.assign(c, { title: 'Easy run and light station run-through', hyrox: { kind: 'run_through' as const }, purpose: 'An easy run, then walk through each station once at a light effort: a few pulls on the SkiErg and rower, one short sled length, 10 lunges, 10 wall balls. Rehearse the movements, do not train them.' });
+  }
   // B and C races inside the plan: the race replaces that day; a B race gets two easy days before; the day after is easy or rest
   for (const o of input.otherRaces ?? []) {
     const i = sessions.findIndex((x) => x.date === o.date);
@@ -660,7 +746,7 @@ function describePlan(r: Resolved, roles: Role[], race: Race | undefined, input:
   const q = [...dayOf('q1'), ...dayOf('q2')];
   const easy = dayOf('easy');
   const vol = r.peakKm > r.weeklyKm ? `starting at ${r.weeklyKm} km a week and building to about ${r.peakKm} km` : `holding about ${r.weeklyKm} km a week`;
-  return `Built a ${weeks}-week plan${race ? ` for ${race.name} (${raceWord(race.distanceM)}) on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} The taper starts ${TAPER_DAYS[r.dc]} days before race day.`.replace(/\s+\./g, '.').trim();
+  return `Built a ${weeks}-week plan${race ? ` for ${race.name}${race.id === 'hyrox' ? '' : ` (${raceWord(race.distanceM)})`} on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} The taper starts ${TAPER_DAYS[r.dc]} days before race day.`.replace(/\s+\./g, '.').trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -692,7 +778,7 @@ export function validatePlan(plan: Plan, paces: TrainingPaces): string[] {
     // and not a first week that starts part-way through (its earlier days are not in the plan)
     const partialFirst = wk < plan.startDate;
     if (partialFirst || runs.length < 3 || total === 0 || runs.some((s) => s.type === 'race' || s.phase === 'taper')) continue;
-    for (const s of runs) if (s.distanceM > total * MAX_SHARE + 500) out.push(`${s.date} ${s.title}: ${Math.round(s.distanceM / total * 100)}% of the week of ${wk}`);
+    for (const s of runs) if (!s.hyrox?.kind.startsWith('sim') && s.distanceM > total * MAX_SHARE + 500) out.push(`${s.date} ${s.title}: ${Math.round(s.distanceM / total * 100)}% of the week of ${wk}`);
   }
   const sorted = [...plan.sessions].sort((a, b) => a.date.localeCompare(b.date));
   for (let i = 1; i < sorted.length; i++) {

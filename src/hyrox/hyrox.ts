@@ -44,6 +44,8 @@ export interface HyroxPrefs {
   /** Target time per station and per 1 km run, in seconds (from onboarding) */
   targets?: Partial<Record<StationKey | 'run', number>>;
   goalS?: number;
+  /** From onboarding (update 4, task 6) */
+  raceDate?: string; previousS?: number; hardest?: StationKey[]; equipment?: string[];
 }
 
 const run = (n: number): SegmentPlan => ({ kind: 'run', key: 'run', n, distanceM: RUN_M });
