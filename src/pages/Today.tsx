@@ -224,6 +224,12 @@ export default function Today() {
   const isToday = selected === t;
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = athlete.weekM;
+  // The "This week" tile is always the current week, whichever week is selected above: done and planned together
+  const nowWs = startOfWeek(today);
+  const nowWeek = Array.from({ length: 7 }, (_, i) => ymd(addDays(nowWs, i)));
+  const nowSessions = (plan?.sessions ?? []).filter((x) => nowWeek.includes(x.date) && x.type !== 'rest');
+  const nowPlannedM = nowSessions.reduce((x, p) => x + p.distanceM, 0);
+  const nowDurationBased = nowSessions.length > 0 && nowPlannedM === 0 || nowSessions.some((x) => x.type === 'runwalk' && !x.changedFor);
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk' && !x.changedFor); // a return-to-run step is not a starter plan
   const lastAn = last ? analysisFor(last) : undefined;
@@ -298,7 +304,7 @@ export default function Today() {
             );
           })()}
           <SyncNote />
-          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} />}
+          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} />}
         </div>
       )}
       {/* Strava shoes not matched to a Ritmo shoe yet: asked once (also on Profile › Shoes) */}
@@ -483,9 +489,9 @@ export default function Today() {
 
       <SectionTitle action={<Link to="/you" className="btn btn-ghost btn-small">You</Link>}>At a glance</SectionTitle>
       <div className="tiles">
-        {durationBased
-          ? <Tile to="/#month" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
-          : <Tile to="/you" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? `of ${toUnit(plannedM, U).toFixed(0)} ${U} planned` : 'run so far'} />}
+        {nowDurationBased
+          ? <Tile to="/#month" label="This week" value={nowSessions.filter((x) => x.status === 'done').length} unit={`of ${nowSessions.length}`} sub="sessions done" />
+          : <Tile to="/you" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={nowPlannedM > 0 ? `of ${toUnit(nowPlannedM, U).toFixed(0)} ${U} planned` : 'run so far'} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
         {fitness && stage.predictions && <Tile to="/you" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race preparation ${aRaceReadiness.score}` : undefined} />}
         {!stage.predictions && <Tile to="/you" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}

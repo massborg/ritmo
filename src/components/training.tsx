@@ -24,19 +24,21 @@ import { StrengthCard } from './StrengthSession';
 const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'var(--success)' } as const;
 const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
 
-/** "This week  16.3 / 100 km" with a bar */
-export function WeekBar({ doneM, plannedM, thisWeek }: { doneM: number; plannedM: number; thisWeek?: boolean }) {
+/** "This week  16.3 / 100 km" with a bar. For another week (weekStart given, thisWeek false) it names that week. */
+export function WeekBar({ doneM, plannedM, thisWeek, weekStart }: { doneM: number; plannedM: number; thisWeek?: boolean; /** The Monday of the week shown, as yyyy-mm-dd */ weekStart?: string }) {
   const { data, weekTarget: wt } = useApp();
   const U = data.profile.units;
   // Never past 100%: anything over the target is said in words
   const pct = plannedM > 0 ? Math.min(100, (doneM / plannedM) * 100) : 0;
   const over = plannedM > 0 ? doneM - plannedM : 0;
   const n = (m: number) => plannedNum(m, U);
+  const other = !thisWeek && !!weekStart;
+  const name = other ? `Week of ${parseYmd(weekStart!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'This week';
   return (
-    <div className="week-bar" aria-label="This week">
-      <div className="row-between"><span className="label">This week</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${n(plannedM)}` : ''} <small>{U}</small></span></div>
-      {plannedM > 0 && <div className="week-bar-track" role="progressbar" aria-label="Distance this week" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: `${pct}%` }} /></div>}
-      {over >= 100 && <p className="caption week-over">+{n(over)} {U} over this week's target</p>}
+    <div className="week-bar" aria-label={name}>
+      <div className="row-between"><span className="label">{name}</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${n(plannedM)}` : ''} <small>{U}</small></span></div>
+      {plannedM > 0 && <div className="week-bar-track" role="progressbar" aria-label={other ? 'Distance that week' : 'Distance this week'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: `${pct}%` }} /></div>}
+      {over >= 100 && <p className="caption week-over">+{n(over)} {U} over {other ? "that week's" : "this week's"} target</p>}
       {thisWeek && wt.lowered?.returning && plannedM > 0 && <p className="caption week-why">This week: <strong>{reducedLine(wt, U)}</strong></p>}
       {thisWeek && wt.lowered && !wt.lowered.returning && plannedM > 0 && <p className="caption week-why">Lowered from {n(wt.originalM)} {U} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}. <a href="#changes" onClick={(e) => { e.preventDefault(); const el = document.getElementById('changes'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.closest('section')?.querySelector('details')?.setAttribute('open', ''); }}>Why?</a></p>}
     </div>
