@@ -265,7 +265,7 @@ export default function Today() {
   const lastRunNote = last && lastAn && daysBetween(new Date(last.startTime), today) <= 7
     ? `From your run on ${longDate(new Date(last.startTime))}: ${lastAn.patternNotes[0] ? `${lastAn.patternNotes[0]} ${lastAn.improve[0]}` : lastAn.wentWell[0]}`
     : undefined;
-  const insight = recentChange?.summary ?? lastRunNote;
+  const insight = (recentChange ? localise(recentChange.summary, U) : undefined) ?? lastRunNote;
 
   const sessionAmount = (x: PlannedSession) => x.distanceM > 0
     ? <div><span className="stat-xl">{plannedNum(x.distanceM, U)}</span><span className="label"> {U}</span></div>

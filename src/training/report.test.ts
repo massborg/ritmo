@@ -21,3 +21,13 @@ describe('week review', () => {
     expect(r.lines.find((l) => l.startsWith('Missed:'))).toMatch(/long run/);
   });
 });
+
+describe('week review units', () => {
+  it('a runner who uses miles gets the distances in miles', () => {
+    const acts = [{ startTime: '2026-11-10T07:00:00Z', distanceM: 16093.44 }] as unknown as Parameters<typeof weekReview>[0]['activities'];
+    const mi = weekReview({ weekStart: '2026-11-09', plan, activities: acts, units: 'mi', today: '2026-11-16' })!;
+    expect(mi.lines[0]).toBe('10.0 mi of 14 mi planned in 1 run.');
+    const km = weekReview({ weekStart: '2026-11-09', plan, activities: acts, units: 'km', today: '2026-11-16' })!;
+    expect(km.lines[0]).toBe('16.1 km of 22 km planned in 1 run.');
+  });
+});

@@ -372,7 +372,7 @@ export function PlanChanges() {
       <h2 id="changes" className="title">Plan changes</h2>
       <p className="caption">Every change Ritmo makes is explained here.</p>
       {wt.m > 0 && <p className="week-target-line"><span className="label">This week's target: {wt.lowered?.returning ? reducedLine(wt, data.profile.units) : `${plannedNum(wt.m, data.profile.units)} ${data.profile.units}`}</span>{wt.lowered && !wt.lowered.returning && <span className="caption"> · lowered from {plannedNum(wt.originalM, data.profile.units)} {data.profile.units} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}</span>}</p>}
-      {latest && <p><span className="caption">{shortDate(new Date(latest.at))} · {REASON[latest.reason] ?? ''}</span><br />{latest.summary}</p>}
+      {latest && <p><span className="caption">{shortDate(new Date(latest.at))} · {REASON[latest.reason] ?? ''}</span><br />{localise(latest.summary, data.profile.units)}</p>}
       {canRestore(data.plan) && <div className="row wrap" style={{ gap: 8 }}><button className="btn btn-small" onClick={restorePreviousPlan}>Restore previous plan</button><span className="caption">Available for 24 hours after a rebuild.</span></div>}
       <details className="plan-more">
         <summary className="label">{changes.length > 1 ? `All changes and your plan (${changes.length})` : 'Your plan'}</summary>
@@ -380,7 +380,7 @@ export function PlanChanges() {
           {changes.slice(1, 12).map((c) => (
             <li key={c.id} className="stack-sm" style={{ padding: 'var(--s3) 0' }}>
               <span className="caption">{shortDate(new Date(c.at))} · {REASON[c.reason] ?? ''}</span>
-              <span>{c.summary}</span>
+              <span>{localise(c.summary, data.profile.units)}</span>
             </li>
           ))}
         </ul>

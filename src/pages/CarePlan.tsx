@@ -99,7 +99,7 @@ export default function CarePlan() {
         </div>
         <h2 id="care-stage" className="title">Stage {care.stage + 1}: {stage.name}</h2>
         <p>{stage.goal}</p>
-        <p className="caption">For now: {ap.avoid}</p>
+        <p className="caption">Avoid: {ap.avoid}</p>
       </section>
 
       <section className="card stack" aria-labelledby="care-ex">
