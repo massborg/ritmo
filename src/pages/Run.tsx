@@ -23,6 +23,7 @@ import { cue, resetVoice, setVoiceSource, unlockAudio, type VoiceSource } from '
 import { primeNativeVoice } from '../run/native-voice';
 import { hasBackgroundGps, watchGps } from '../run/native-gps';
 import { RunCheck } from '../components/RunCheck';
+import { PaceInput } from '../components/TimeEntry';
 import { PocketMode } from '../components/PocketMode';
 import { VoicePicker } from '../components/VoicePicker';
 import type { Lap, PlannedSession } from '../lib/types';
@@ -398,8 +399,10 @@ export default function RunPage() {
             {goal !== 'none' && (
               <div className="field run-goal">
                 <label htmlFor="run-goal">{goal === 'distance' ? `Distance (${U})` : goal === 'time' ? 'Time (minutes)' : `Pace (min:sec per ${U})`}</label>
-                <input id="run-goal" className="input" inputMode={goal === 'pace' ? 'text' : 'decimal'} value={goalValue} onChange={(e) => setGoalValue(e.target.value)} placeholder={goal === 'distance' ? '5' : goal === 'time' ? '30' : '5:00'} />
-                {goal === 'pace' && goalValue && !goalPace && <span className="caption">Type the pace like 5:00.</span>}
+                {goal === 'pace'
+                  ? <PaceInput id="run-goal" label={`Pace per ${U}`} value={goalPace} placeholderS={300} onChange={(v) => setGoalValue(v ? `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}` : '')} />
+                  : <input id="run-goal" className="input" inputMode="decimal" value={goalValue} onChange={(e) => setGoalValue(e.target.value)} placeholder={goal === 'distance' ? '5' : '30'} />}
+                {goal === 'pace' && <span className="caption">Type the digits: 5 0 0 becomes 5:00.</span>}
               </div>
             )}
             {todays && <button className="link-btn run-switch" onClick={() => { setWhat('planned'); setShownIdx(0); }}><span className="caption">Today's plan: {todays.title}</span><span>Switch to plan <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></span></button>}

@@ -387,6 +387,25 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 
 .pick { display: flex; align-items: center; gap: var(--s3); text-align: left; cursor: pointer; }
 .stepper { display: flex; align-items: center; gap: var(--s2); background: var(--surface-sunken); border-radius: var(--r-pill); padding: 4px; }
+/* Time and pace entry (update 4): boxes for h : min : sec, with the real input laid over them */
+.time-entry { position: relative; display: inline-flex; align-self: flex-start; border-radius: var(--r-input); }
+.time-boxes { display: inline-flex; align-items: flex-start; }
+.time-box-wrap { display: inline-flex; align-items: flex-start; }
+.time-colon { font: 600 24px/52px var(--font-mono); padding: 0 6px; color: var(--ink-muted); }
+.time-box { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 60px; min-height: 60px; padding: 4px 8px; background: var(--surface-raised); border: 1.5px solid var(--border); border-radius: var(--r-input); }
+.time-num { font: 600 24px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.time-unit { font-size: 11px; line-height: 1.2; color: var(--ink-muted); }
+.time-entry.empty .time-num { color: var(--ink-muted); opacity: 0.55; }
+.time-entry.bad .time-box { border-color: var(--danger); }
+.time-entry-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; font-size: 16px; cursor: text; }
+.time-entry:focus-within .time-box { border-color: var(--ink); }
+.time-entry:focus-within { outline: 2px solid var(--focus); outline-offset: 3px; }
+.time-entry-sm .time-box { min-width: 40px; min-height: 44px; padding: 2px 6px; }
+.time-entry-sm .time-num { font-size: 16px; }
+.time-entry-sm .time-colon { font: 600 16px/44px var(--font-mono); padding: 0 3px; }
+td.unsure .time-box { border-color: var(--warning); border-style: dashed; }
+.time-readback { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 10px 12px; border-radius: var(--r-input); background: color-mix(in srgb, var(--success) 12%, var(--surface-raised)); border: 1px solid color-mix(in srgb, var(--success) 35%, transparent); }
+.time-readback.odd { background: color-mix(in srgb, var(--warning) 14%, var(--surface-raised)); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
 .stepper-input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; text-align: center; font: 500 22px/1 var(--font-mono); }
 .stepper .icon-btn { background: var(--surface-raised); }
 .duration { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
