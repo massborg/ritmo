@@ -16,7 +16,7 @@ import { SessionSheet } from '../components/training';
 import { moveTargets } from '../training/plan';
 import { ZONE_NAMES } from '../training/fitness';
 import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
-import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, paceGoalStep, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
 import { primeVoices, type SpeakOptions } from '../run/voice';
 import { cue, resetVoice, setVoiceSource, unlockAudio, type VoiceSource } from '../run/cues';
@@ -95,7 +95,7 @@ export default function RunPage() {
   // A free run with a goal is followed like a one-step session: distance or time left, or a pace to hold
   const goalSteps: WorkStep[] = goal === 'distance' && goalNum > 0 ? [{ kind: 'work', label: `Run ${goalNum} ${U}`, distanceM: goalNum * unitM }]
     : goal === 'time' && goalNum > 0 ? [{ kind: 'work', label: `Run ${goalNum} min`, durationS: goalNum * 60 }]
-    : goal === 'pace' && goalPace ? [{ kind: 'work', label: `Hold ${fmtPace(goalPace * (U === 'km' ? 1 : 1.609344), U)}`, pace: [goalPace - 5, goalPace + 5] }]
+    : goal === 'pace' && goalPace ? [paceGoalStep(goalPace, U, (p) => fmtPace(p, U))]
     : [];
   const steps: WorkStep[] = sessionPlan ? stepsFor(sessionPlan) : goalSteps;
   const cues = settings.cues !== 'off';

@@ -15,7 +15,7 @@ import { targetsFromGoal, type AthleteType } from '../hyrox/plan-goal';
 import { addDays, DAY_NAMES, DAY_SHORT, dist, duration, durationWords, longDate, MONTHS_LONG, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import type { BackgroundLevel, GoalType, Injury, Plan, Profile, Race, RunningBackground, TrainingSchedule } from '../lib/types';
 import {
-  ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
+  ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, kmInUnit, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
 } from '../training/setup';
 import { vdotFromPerformance } from '../training/fitness';
 import type { PlanProblem } from '../training/generator';
@@ -247,14 +247,15 @@ function BackgroundStep({ onNext }: StepProps) {
   const [months, setMonths] = useState<number | 0>(b0?.monthsSinceLastRan ?? 0);
   const [exDays, setExDays] = useState<number | undefined>(b0?.exerciseDaysPerWeek);
   const [exTypes, setExTypes] = useState<string[]>(b0?.exerciseTypes ?? []);
-  const [weeklyKm, setWeeklyKm] = useState<number | undefined>(b0?.weeklyKm ?? fromRuns?.weeklyKm);
-  const [longest, setLongest] = useState<number | undefined>(b0?.longestRecentKm ?? fromRuns?.longestRecentKm);
+  const unit = data.profile.units === 'mi' ? 'mi' : 'km';
+  // Stored in km; shown and typed in the runner's unit (converted back when saved)
+  const [weeklyKm, setWeeklyKm] = useState<number | undefined>(kmInUnit(b0?.weeklyKm ?? fromRuns?.weeklyKm, unit));
+  const [longest, setLongest] = useState<number | undefined>(kmInUnit(b0?.longestRecentKm ?? fromRuns?.longestRecentKm, unit));
   const r0 = b0?.recentRace && b0.recentRace !== 'unknown' ? b0.recentRace : undefined;
   const [raceM, setRaceM] = useState<number | 0>(r0?.distanceM ?? 0);
   const [raceS, setRaceS] = useState<number | undefined>(r0?.timeS);
   const [noRace, setNoRace] = useState(b0?.recentRace === 'unknown');
   const [err, setErr] = useState<string>();
-  const unit = data.profile.units === 'mi' ? 'mi' : 'km';
   const runner = level === 'sometimes' || level === 'regular' || level === 'racer';
 
   const save = () => {
@@ -273,7 +274,7 @@ function BackgroundStep({ onNext }: StepProps) {
       if (raceM && raceS) bg.recentRace = { distanceM: raceM, timeS: raceS };
       else if (noRace) bg.recentRace = 'unknown';
       else if (level === 'racer') { setErr('Add a recent race time, or choose "I do not have one".'); return; }
-      bg.filledFromRuns = !!fromRuns && weeklyKm === fromRuns.weeklyKm;
+      bg.filledFromRuns = !!fromRuns && weeklyKm === kmInUnit(fromRuns.weeklyKm, unit);
     }
     onNext({ background: bg });
   };

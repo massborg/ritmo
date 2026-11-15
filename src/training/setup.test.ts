@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, Profile } from '../lib/types';
-import { ageOn, ALL_STEPS, backgroundFromRuns, checkGoal, HEALTH_QUESTIONS, isOldEnough, planFromSetup, stepsNeeded, vdotFromWeeklyKm } from './setup';
+import { ageOn, ALL_STEPS, backgroundFromRuns, checkGoal, HEALTH_QUESTIONS, isOldEnough, kmInUnit, planFromSetup, stepsNeeded, vdotFromWeeklyKm } from './setup';
 import { avatarFileProblem } from '../data/avatar';
 import { addDays, parseYmd, ymd } from '../lib/format';
 
@@ -127,5 +127,17 @@ describe('profile picture files', () => {
   it('rejects other types and large files with a clear message', () => {
     expect(avatarFileProblem(file('me.gif', 'image/gif', 1e5))).toMatch(/not supported/);
     expect(avatarFileProblem(file('me.jpg', 'image/jpeg', 11 * 1024 * 1024))).toMatch(/10 MB/);
+  });
+});
+
+describe('running background in miles', () => {
+  it('stored km come back as the miles the runner typed, so saving again changes nothing', () => {
+    for (const mi of [3, 9, 10, 25, 40, 62]) {
+      const km = Math.round(mi * 1.609);
+      expect(kmInUnit(km, 'mi')).toBe(mi);
+      expect(Math.round(kmInUnit(km, 'mi')! * 1.609)).toBe(km);
+    }
+    expect(kmInUnit(40, 'km')).toBe(40);
+    expect(kmInUnit(undefined, 'mi')).toBeUndefined();
   });
 });

@@ -151,6 +151,17 @@ export function toStreams(s: TrackState): StreamPoint[] {
 // ---------------- Workout steps ----------------
 export interface WorkStep { label: string; kind: 'warmup' | 'work' | 'recovery' | 'cooldown' | 'steady'; distanceM?: number; durationS?: number; pace?: [number, number] }
 
+/**
+ * A free run's pace goal as one step. The runner types the pace in their own unit (per km or per mile); targets are
+ * kept in seconds per km like every other step, so the gauge and the cues judge it correctly. The band is 5 s either
+ * side in the runner's unit.
+ */
+export function paceGoalStep(sPerUnit: number, unit: 'km' | 'mi', fmt: (sPerKm: number) => string): WorkStep {
+  const k = unit === 'km' ? 1 : 1.609344;
+  const perKm = sPerUnit / k;
+  return { kind: 'work', label: `Hold ${fmt(perKm)}`, pace: [perKm - 5 / k, perKm + 5 / k] };
+}
+
 /** The planned session as a list of steps to follow: warm-up, each rep and recovery, cool-down. */
 export function stepsFor(s: PlannedSession): WorkStep[] {
   const out: WorkStep[] = [];

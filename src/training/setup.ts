@@ -158,6 +158,9 @@ export function planFromSetup(opts: { profile: Profile; races: Race[]; activitie
   return result;
 }
 
+/** A stored distance in km, as a whole number in the runner's unit (the setup fields show and take whole numbers) */
+export const kmInUnit = (km: number | undefined, unit: 'km' | 'mi'): number | undefined => (km === undefined ? undefined : unit === 'mi' ? Math.round(km / 1.609) : km);
+
 /** Fill running background from imported runs, so setup does not ask for what is already known. */
 export function backgroundFromRuns(activities: Activity[], today: Date): { weeklyKm: number; longestRecentKm: number } | undefined {
   const last8 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 56; });
