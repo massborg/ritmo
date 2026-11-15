@@ -1,6 +1,7 @@
 // Keeps the runner's Hub up to date in the background (update 2, §6 and §7), once they have joined the Hub:
 // - their Hub profile carries their photo setting, the small copy of their photo, and a searchable name
 // - runs are posted automatically (never Strava runs), with their audience and map privacy settings
+import { clock, summarise } from '../hyrox/hyrox';
 import { useEffect, useRef } from 'react';
 import type { LogEntry } from '../lib/types';
 import { useApp } from '../app/AppContext';
@@ -53,7 +54,7 @@ export function HubSync() {
     if (!joined || !uid) return;
     const t = setTimeout(async () => {
       const runs = shareableRuns(data.activities);
-      const stats = { runs: runs.length, weekStreak: weekStreak(data.activities, new Date(), (data.profile.log ?? []).filter((e) => e.kind === 'strength').map((e) => e.date)) };
+      const stats = { runs: runs.length, weekStreak: weekStreak(data.activities, new Date(), (data.profile.log ?? []).filter((e) => e.kind === 'strength' || e.kind === 'hyrox').map((e) => e.date)) };
       const pbs = resolvePbs(pbSettings, ritmoBests(data.activities, data.races));
       const me = await hub.myHubProfile(uid).catch(() => undefined);
       if (!me) return;
@@ -103,7 +104,8 @@ export function HubSync() {
   useEffect(() => {
     if (!joined || !uid || !prefs?.autoSince || !on || prefs?.autoPostStrength === false) return;
     const t = setTimeout(async () => {
-      const recent = (data.profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength && !e.strength.postId && !strengthTried.current.has(e.id)
+      // HYROX sessions too (update 4, task 5), under the same setting
+      const recent = (data.profile.log ?? []).filter((e) => (e.kind === 'strength' && e.strength && !e.strength.postId || e.kind === 'hyrox' && e.hyrox && !e.hyrox.postId) && !strengthTried.current.has(e.id)
         && e.at >= prefs.autoSince! && Date.now() - new Date(e.at).getTime() < 3 * 86400e3);
       for (const e of recent) {
         strengthTried.current.add(e.id);
@@ -112,8 +114,8 @@ export function HubSync() {
           // (another tab, a reload before the id was saved) can never post it twice
           const id = await stablePostId(e.id);
           const have = await hub.postById(id).catch(() => undefined);
-          if (!have) await hub.createPost(buildStrengthPost(e, { uid, id, visibility: prefs?.audience ?? 'followers' }));
-          fns.current.updateLog(e.id, { strength: { ...e.strength!, postId: id } });
+          if (!have) await hub.createPost((e.hyrox ? buildHyroxPost : buildStrengthPost)(e, { uid, id, visibility: prefs?.audience ?? 'followers' }));
+          fns.current.updateLog(e.id, e.hyrox ? { hyrox: { ...e.hyrox, postId: id } } : { strength: { ...e.strength!, postId: id } });
         } catch { strengthTried.current.delete(e.id); }
       }
     }, 2000);
@@ -142,5 +144,17 @@ export function buildStrengthPost(e: LogEntry, o: { uid: string; id: string; vis
     id: o.id, user_id: o.uid, activity_id: null, title: st.title, body: null, visibility: o.visibility, show_map: false, show_hr: false, route: null, city: null,
     stats: { distanceM: 0, paceS: 0, movingS: (e.minutes ?? 0) * 60, startedAt: e.at, device: st.source === 'ritmo' ? 'Recorded in Ritmo' : undefined,
       type: 'strength', typeLabel: asPlanned ? 'Strength · as planned' : 'Strength', strength: { exercises: st.exercises.length, sets, top } },
+  };
+}
+
+/** The Hub post for a HYROX session: total time, stations and runs, and the running and station totals */
+export function buildHyroxPost(e: LogEntry, o: { uid: string; id: string; visibility: hub.Visibility }): Omit<hub.Post, 'ritmo_count' | 'comment_count' | 'created_at'> {
+  const h = e.hyrox!;
+  const sum = summarise(h);
+  const top = [{ name: 'Total', dose: clock(h.totalMs) }, ...(sum.runningMs ? [{ name: 'Running', dose: clock(sum.runningMs) }] : []), ...(sum.stationsMs ? [{ name: 'Stations', dose: clock(sum.stationsMs) }] : []), ...(sum.roxzoneMs ? [{ name: 'Roxzone', dose: clock(sum.roxzoneMs) }] : [])];
+  return {
+    id: o.id, user_id: o.uid, activity_id: null, title: h.title, body: null, visibility: o.visibility, show_map: false, show_hr: false, route: null, city: null,
+    stats: { distanceM: 0, paceS: 0, movingS: Math.round(h.totalMs / 1000), startedAt: h.startedAt, device: h.entered ? undefined : 'Recorded in Ritmo',
+      type: 'strength', typeLabel: h.isRace ? 'HYROX race' : 'HYROX', hyrox: true, strength: { exercises: h.segments.filter((x) => x.kind === 'station').length, sets: h.segments.filter((x) => x.kind === 'run').length, top } },
   };
 }

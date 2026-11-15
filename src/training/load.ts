@@ -28,6 +28,8 @@ const CROSS_TRANSFER: Record<string, number> = { Bike: 0.7, Elliptical: 0.8, Swi
 export function crossLoad(e: LogEntry): number {
   // Strength counts as light load (update 3, §5): never as running
   if (e.kind === 'strength' && e.minutes) return (e.minutes / 60) * 100 * (Math.min(10, Math.max(1, e.rpe ?? 5)) / 7) ** 2 * 0.4;
+  // HYROX (update 4, task 5): half running, half stations, usually hard
+  if (e.kind === 'hyrox' && e.minutes) return (e.minutes / 60) * 100 * (Math.min(10, Math.max(1, e.rpe ?? 7)) / 7) ** 2 * 0.8;
   if (e.kind !== 'cross' || !e.minutes) return 0;
   const rpe = Math.min(10, Math.max(1, e.rpe ?? 4));
   return (e.minutes / 60) * 100 * (rpe / 7) ** 2 * (CROSS_TRANSFER[e.sport ?? 'Other'] ?? 0.6);

@@ -215,6 +215,8 @@ export interface Profile {
   /** Runs split off from a session in parts ("Split" on the day view): each starts a session of its own */
   splitRuns?: string[];
   /** Strength (update 3, §4–5, §8): equipment, swaps that apply to future sessions, exercises never to give, and the reps and load used last time */
+  /** HYROX: division, Roxzone timing, swaps, saved sessions and targets (update 4, task 5) */
+  hyrox?: import('../hyrox/hyrox').HyroxPrefs;
   strength?: import('../training/strength').StrengthPrefs & { rest?: number; /** Saved workouts (update 4, task 4) */ templates?: import('../training/strength-load').StrengthTemplate[]; /** Weights are stored in kg and shown in this unit */ units?: import('../training/strength-load').WeightUnit };
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
   pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[]; sessions?: { from: string; to: string; sessions: { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }[] } };
@@ -273,9 +275,11 @@ export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string
 
 /** Things logged that are not runs */
 export interface LogEntry {
-  id: string; date: string; kind: 'cross' | 'note' | 'strength'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string;
+  id: string; date: string; kind: 'cross' | 'note' | 'strength' | 'hyrox'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string;
   /** Strength (update 3, §5): what was done, recorded in Ritmo or logged by hand */
   strength?: StrengthLog;
+  /** A HYROX simulation, station practice or race (update 4, task 5) */
+  hyrox?: import('../hyrox/hyrox').HyroxSession;
 }
 export interface StrengthLog {
   /** 'free': the runner's own workout, built or from a saved workout (update 4, task 4) */
