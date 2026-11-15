@@ -96,6 +96,16 @@ describe('first plan from setup', () => {
     const ok = planFromSetup({ profile: { ...complete, daysAvailable: [1, 3, 5], background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
     expect(ok.basis).toMatch(/three days a week with full rest days between/);
   });
+  it('a beginner with a HYROX goal is told the plan builds running first, with the race date kept in view', () => {
+    const newRunner = { level: 'new' as const, canRun10: false, walksRegularly: true };
+    const r = planFromSetup({ profile: { ...complete, athleteType: 'both', goalType: 'race', goal: 'HYROX in 1:20:00', hyrox: { goalS: 4800, raceDate: '2027-04-03' }, background: newRunner }, races: [], activities: [], today });
+    expect(r.basis).toMatch(/has no HYROX sessions yet: HYROX training starts after it\. Your HYROX race on 3 Apr 2027 is kept\./);
+    const noDate = planFromSetup({ profile: { ...complete, athleteType: 'hyrox', goalType: 'race', goal: 'HYROX', background: newRunner }, races: [], activities: [], today });
+    expect(noDate.basis).toMatch(/HYROX training starts after it\.$/);
+    // A beginner without a HYROX goal reads nothing about HYROX
+    const plain = planFromSetup({ profile: { ...complete, background: newRunner }, races: [], activities: [], today });
+    expect(plain.basis).not.toMatch(/HYROX/);
+  });
   it('a runner with only weekly distance gets estimated paces, labelled as such', () => {
     const r = planFromSetup({ profile: complete, races: [], activities: [], today });
     expect(r.confidence).toBe('estimated');

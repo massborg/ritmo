@@ -1,6 +1,6 @@
 // Athlete setup: which steps a person still needs, age rules, goal realism and the first plan.
 import type { Activity, BackgroundLevel, GoalType, Plan, Profile, Race } from '../lib/types';
-import { addDays, daysBetween, distanceLabel, duration, parseYmd, ymd } from '../lib/format';
+import { addDays, daysBetween, distanceLabel, duration, parseYmd, shortDate, ymd } from '../lib/format';
 import { estimateFitness, hrSetup, predictTime, trainingPaces, vdotFromPerformance } from './fitness';
 import { buildStarterPlan, daysSpaced, pickStarterDays } from './plan';
 import { generatePlan, type PlanProblem } from './generator';
@@ -127,7 +127,13 @@ export function planFromSetup(opts: { profile: Profile; races: Race[]; activitie
     const why = bg?.level === 'returning'
       ? `You are returning after a break, so the plan restarts gently with run/walk${canRun10 ? ' at the point where you can already run 10 minutes' : ''}, ${perWeek}${spaced ? ' with rest days between' : ' on the days you chose, which are next to each other'}.`
       : `You are new to running, so the plan uses short run/walk intervals ${perWeek}${spaced ? ' with full rest days between' : ' on the days you chose, which are next to each other'}, building to 30 minutes of running.`;
-    result = { plan, basis: `${why} Sessions are set by effort, not pace, until Ritmo has enough of your runs to estimate it.`, confidence: 'none' };
+    // A HYROX goal is not dropped without a word: this plan is running only, and says so
+    const hx = profile.hyrox;
+    const hyroxGoal = (profile.athleteType === 'hyrox' || profile.athleteType === 'both') && profile.goalType === 'race' && /^HYROX/.test(profile.goal ?? '');
+    const raceDay = hx?.raceDate ? shortDate(parseYmd(hx.raceDate)) : undefined;
+    const hyroxNote = !hyroxGoal ? ''
+      : ` This plan builds your running first and has no HYROX sessions yet: HYROX training starts after it.${raceDay ? ` Your HYROX race on ${raceDay} is kept${hx!.raceDate! <= plan.endDate ? ', which is before this plan ends' : ''}.` : ''}`;
+    result = { plan, basis: `${why} Sessions are set by effort, not pace, until Ritmo has enough of your runs to estimate it.${hyroxNote}`, confidence: 'none' };
   } else {
     const hr = hrSetup(profile, activities, start);
     const measured = estimateFitness(activities, hr, start);
