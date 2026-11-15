@@ -15,9 +15,11 @@ interface Props {
   /** Shown faintly while empty, in seconds */
   placeholderS?: number;
   invalid?: boolean; describedBy?: string;
+  /** The caller shows the error text itself (DurationField does, in its hint line) */
+  quietError?: boolean;
 }
 
-function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid, describedBy, onError }: Props & { kind: EntryKind; onError?: (e: 'seconds' | 'minutes' | undefined) => void }) {
+function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid, describedBy, quietError, onError }: Props & { kind: EntryKind; onError?: (e: 'seconds' | 'minutes' | undefined) => void }) {
   const [digits, setDigits] = useState(() => toDigits(value, kind));
   const ref = useRef<HTMLInputElement>(null);
   const e = fromDigits(digits, kind);
@@ -49,7 +51,12 @@ function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid,
     ? [[String(v.h * 60 + v.m), 'min'], [p2(v.s), 'sec']]
     : [[String(v.h), 'hours'], [p2(v.m), 'min'], [p2(v.s), 'sec']];
   const bad = invalid || !!e.error;
+  // Unless the caller shows the error itself, the field says why the time is not valid, under the boxes.
+  // The wrapper is always there, so the input is not rebuilt (and does not lose the keypad) when the line appears.
+  const ownErr = !quietError && digits && e.error ? e.error : undefined;
+  const described = [describedBy, ownErr ? `${id}-err` : undefined].filter(Boolean).join(' ') || undefined;
   return (
+    <span className="time-entry-wrap">
     <span className={`time-entry${small ? ' time-entry-sm' : ''}${digits ? '' : ' empty'}${bad ? ' bad' : ''}`}>
       <span className="time-boxes" aria-hidden="true">
         {boxes.map(([n, unit], i) => (
@@ -60,9 +67,11 @@ function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid,
         ))}
       </span>
       <input ref={ref} id={id} className="time-entry-input" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={shown}
-        aria-label={`${label}: ${digits ? sayEntry(e) : 'empty'}`} aria-invalid={bad || undefined} aria-describedby={describedBy}
+        aria-label={`${label}: ${digits ? sayEntry(e) : 'empty'}`} aria-invalid={bad || undefined} aria-describedby={described}
         onChange={(ev) => change(ev.target.value)} onClick={caretToEnd}
         onPaste={(ev) => { ev.preventDefault(); set(textToDigits(ev.clipboardData.getData('text'), kind)); }} />
+    </span>
+    {ownErr && <span id={`${id}-err`} className="caption time-entry-err" role="alert">{ERR[ownErr]}</span>}
     </span>
   );
 }
@@ -84,7 +93,7 @@ export function DurationField({ label, value, onChange, id, distanceM, units = '
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <DurationInput id={id} label={label} value={value} onChange={onChange} onError={setErr} describedBy={`${id}-h`} />
+      <DurationInput id={id} label={label} value={value} onChange={onChange} onError={setErr} quietError describedBy={`${id}-h`} />
       <span id={`${id}-h`} className="caption" role={err ? 'alert' : undefined}>{err ? ERR[err] : <>Just type the digits: <strong>2 0 0 5</strong> becomes <strong>20:05</strong>. The colons fill in for you.</>}</span>
       {value && distanceM ? (
         <p className={`time-readback${odd ? ' odd' : ''}`} role="status">
