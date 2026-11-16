@@ -74,8 +74,12 @@ export function redFlags(c: Omit<BodyCheckin, 'redFlags' | 'id' | 'at'>, history
   const same = history.filter((h) => h.area === c.area && h.side === c.side).sort((a, b) => a.at.localeCompare(b.at));
   const recent = [...same, { ...c, at: now.toISOString() } as BodyCheckin].filter((h) => (now.getTime() - new Date(h.at).getTime()) / 86400000 <= 3.5);
   if (recent.length >= 3 && recent.slice(-3).every((h) => h.trend === 'worse')) out.push('Getting worse for 3 days or more');
-  const first = same[0];
-  if (first && (now.getTime() - new Date(first.at).getTime()) / 86400000 >= 10 && c.pain >= first.pain) out.push('Not improving after 10 days or more');
+  // "Not improving": 10 days or more into this episode (since the last pain-free check), and no better than at its
+  // start. Pain of 0 to 2 is the band where easy running is fine and a care plan moves forward, so a steady 2/10 is
+  // not a warning sign on its own: flagging it paused all training while the care plan said "move forward".
+  const lastClear = same.map((h) => h.pain).lastIndexOf(0);
+  const first = same[lastClear + 1];
+  if (first && c.pain >= 3 && (now.getTime() - new Date(first.at).getTime()) / 86400000 >= 10 && c.pain >= first.pain) out.push('Not improving after 10 days or more');
   return out;
 }
 

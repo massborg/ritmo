@@ -9,7 +9,7 @@ import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { ZONE_OF } from './app';
-import { addDays, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { useDragMove } from '../lib/useDragMove';
 import { keptPlanToday, type ReadinessScore } from '../training/readiness';
@@ -25,7 +25,7 @@ const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'v
 const dayName = (d: string) => `${DAY_SHORT[weekday(parseYmd(d))]} ${parseYmd(d).getDate()}`;
 
 /** "This week  16.3 / 100 km" with a bar. For another week (weekStart given, thisWeek false) it names that week. */
-export function WeekBar({ doneM, plannedM, thisWeek, weekStart }: { doneM: number; plannedM: number; thisWeek?: boolean; /** The Monday of the week shown, as yyyy-mm-dd */ weekStart?: string }) {
+export function WeekBar({ doneM, plannedM, thisWeek, weekStart, since }: { doneM: number; plannedM: number; thisWeek?: boolean; /** The Monday of the week shown, as yyyy-mm-dd */ weekStart?: string; /** The plan started on this day of the week shown: only runs from then on are counted */ since?: string }) {
   const { data, weekTarget: wt } = useApp();
   const U = data.profile.units;
   // Never past 100%: anything over the target is said in words
@@ -38,6 +38,7 @@ export function WeekBar({ doneM, plannedM, thisWeek, weekStart }: { doneM: numbe
     <div className="week-bar" aria-label={name}>
       <div className="row-between"><span className="label">{name}</span><span className="stat">{toUnit(doneM, U).toFixed(1)}{plannedM > 0 ? ` / ${n(plannedM)}` : ''} <small>{U}</small></span></div>
       {plannedM > 0 && <div className="week-bar-track" role="progressbar" aria-label={other ? 'Distance that week' : 'Distance this week'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}><span style={{ width: `${pct}%` }} /></div>}
+      {since && plannedM > 0 && <p className="caption" style={{ margin: 0 }}>Since your plan started on {DAY_NAMES[weekday(parseYmd(since))]}. Runs before that are not counted against it.</p>}
       {over >= 100 && <p className="caption week-over">+{n(over)} {U} over {other ? "that week's" : "this week's"} target</p>}
       {thisWeek && wt.lowered?.returning && plannedM > 0 && <p className="caption week-why">This week: <strong>{reducedLine(wt, U)}</strong></p>}
       {thisWeek && wt.lowered && !wt.lowered.returning && plannedM > 0 && <p className="caption week-why">Lowered from {n(wt.originalM)} {U} on {new Date(wt.lowered.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} because {wt.lowered.because}. <a href="#changes" onClick={(e) => { e.preventDefault(); const el = document.getElementById('changes'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.closest('section')?.querySelector('details')?.setAttribute('open', ''); }}>Why?</a></p>}

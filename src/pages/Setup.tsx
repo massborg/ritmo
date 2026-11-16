@@ -1,6 +1,6 @@
 // Athlete setup: one question group per screen, saved to the account after each step,
 // so it can be resumed on any device. Existing users only see the steps they have not answered.
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Check, Compass, HeartPulse, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -36,6 +36,9 @@ export default function Setup() {
   const [steps] = useState<SetupStep[]>(() => stepsNeeded(data.profile, { hasRuns, hasPlan: hadPlan, today: new Date() }));
   const [i, setI] = useState(0);
   const step = steps[i];
+  // Setup resumed after a reload or on another device: the race entered earlier comes back with the answers
+  const setupRace = data.profile.setupRace;
+  useEffect(() => { if (setupRace && !data.races.some((r) => r.id === setupRace.id)) app.saveRace(setupRace); }, [setupRace?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const next = (patch: Partial<Profile>) => {
     const done = new Set(data.profile.setupStepsDone ?? []);
@@ -352,10 +355,12 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const thresholdS = estVdot ? ((t: [number, number]) => Math.round((t[0] + t[1]) / 2))(trainingPaces(estVdot).threshold) : undefined;
 
   const commit = (g: GoalType, r?: Partial<Race>) => {
-    if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, ...hyroxPatch() }); return; }
+    if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, setupRace: undefined, ...hyroxPatch() }); return; }
     const label = g === 'race' && r ? `${r.name || 'My race'}${r.goalS ? ` in ${duration(r.goalS)}` : ''}` : GOALS.find((x) => x.value === g)!.label;
-    if (g === 'race' && r?.date && r.distanceM) saveRace({ id: r.id ?? uid(), name: r.name || 'My race', date: r.date, distanceM: r.distanceM, courseType: r.courseType ?? 'road', goalS: r.goalS, priority: 'A' });
-    onNext({ goalType: g, goal: label, ...(athlete !== 'runner' ? hyroxPatch() : {}) });
+    // The race is kept with the setup answers too, so it is still there when setup is resumed
+    const saved: Race | undefined = g === 'race' && r?.date && r.distanceM ? { id: r.id ?? uid(), name: r.name || 'My race', date: r.date, distanceM: r.distanceM, courseType: r.courseType ?? 'road', goalS: r.goalS, priority: 'A' } : undefined;
+    if (saved) saveRace(saved);
+    onNext({ goalType: g, goal: label, setupRace: saved, ...(athlete !== 'runner' ? hyroxPatch() : {}) });
   };
   const submit = () => {
     if (!goal) { setErr('Choose a goal.'); return; }

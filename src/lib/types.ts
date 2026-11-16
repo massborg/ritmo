@@ -191,6 +191,9 @@ export interface Profile {
   injuriesAnswered?: boolean;
   avatar?: { path: string; updatedAt: string };
   setupStep?: string; // last completed setup step, to resume on any device
+  /** The race entered in setup, kept with the answers until the plan is started. Races are only saved to the
+   *  account once setup is finished, so without this a setup resumed later (or on another device) lost the race. */
+  setupRace?: Race;
   setupStepsDone?: string[]; // optional steps already seen (e.g. "runs" skipped)
   setupCompletedAt?: string;
   /** How the runner wants to train. Anything missing falls back to a sensible default. */
