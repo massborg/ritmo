@@ -304,7 +304,12 @@ export default function Today() {
             );
           })()}
           <SyncNote />
-          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} />}
+          {!durationBased && (() => {
+            // A plan that started part-way through this week: its target covers the remaining days, so the bar counts
+            // the runs since it started (like for like), and says so
+            const since = plan && plan.startDate > ymd(ws) && plan.startDate <= week[week.length - 1] ? plan.startDate : undefined;
+            return <WeekBar doneM={week.filter((d) => !since || d >= since).reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} since={since} />;
+          })()}
         </div>
       )}
       {/* Strava shoes not matched to a Ritmo shoe yet: asked once (also on Profile › Shoes) */}

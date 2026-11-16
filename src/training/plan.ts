@@ -150,11 +150,14 @@ export function adaptPlan(opts: {
   const afterLongEasy = (profile.training?.dayAfterLong ?? 'easy') === 'easy';
   const isDayAfterLong = (s: PlannedSession) => plan.sessions.some((o) => o.type === 'long' && o.date === ymd(addDays(parseYmd(s.date), -1)));
   if (target && !frozen) {
-    const doneKm = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkStart && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
+    // A plan that starts part-way through this week has a target for the remaining days only, so runs from
+    // before it started are left out: counting them made every mid-week plan look over target at once.
+    const from = plan.startDate > wkStart ? plan.startDate : wkStart;
+    const doneKm = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= from && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const todayDone = (byDate.get(t) ?? []).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const rest = plan.sessions.filter((s) => s.date >= t && s.date <= wkEnd && s.status === 'planned' && !(s.date === t && todayDone > 0));
     const over = doneKm + todayDone + rest.reduce((x, s) => x + s.distanceM, 0) / 1000 - target;
-    const unplanned = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkStart && d < t && !plan.sessions.some((s) => s.date === d && s.type !== 'rest'); });
+    const unplanned = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= from && d < t && !plan.sessions.some((s) => s.date === d && s.type !== 'rest'); });
     const id = `rebalance:${wkStart}:${unplanned.map((a) => a.id).join(',')}`;
     if (over > 3 && unplanned.length && !has(id)) {
       const easy = rest.filter((s) => s.type === 'easy' || s.type === 'recovery').sort((a, b) => b.distanceM - a.distanceM);
@@ -294,7 +297,9 @@ export function adaptPlan(opts: {
   const weekTotals = [0, 1, 2, 3].map((w) => activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= w * 7 + 1 && d <= w * 7 + 7; }).reduce((x, a) => x + a.distanceM, 0));
   const avgWeek = Math.max(weekTotals.reduce((x, y) => x + y, 0) / 4, Math.max(...weekTotals) * 0.95);
   const comingWeek = plan.sessions.filter((s) => { const d = daysBetween(today, parseYmd(s.date)); return d >= 0 && d < 7 && s.status === 'planned'; });
-  const comingKm = comingWeek.reduce((x, s) => x + s.distanceM, 0);
+  // A session the runner edited counts at its planned size: their own change is theirs to make ("this changes this
+  // day only"), so it neither sets off the trim nor is trimmed
+  const comingKm = comingWeek.reduce((x, s) => x + (s.edited ? s.edited.original.distanceM : s.distanceM), 0);
   if (avgWeek > 5000 && comingKm > avgWeek * 1.3 && !comingWeek.some((s) => s.type === 'race')) {
     const id = `spike:${ymd(startOfWeek(today))}`;
     if (frozen && !has(`${id}:advice`)) {
@@ -302,7 +307,12 @@ export function adaptPlan(opts: {
       log(`${id}:advice`, 'rebuilt', `The next 7 days are ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km. Jumps above about 30% are linked to higher injury risk. Nothing was changed because you just rebuilt the plan; shorten an easy run from Training if you want to ease in.`);
     } else if (!frozen && !has(id)) {
       const scale = (avgWeek * 1.2) / comingKm;
-      for (const s of comingWeek) if (s.type === 'easy' || s.type === 'long') s.distanceM = Math.round((s.distanceM * scale) / 1000) * 1000;
+      for (const s of comingWeek) if ((s.type === 'easy' || s.type === 'long') && !s.edited) {
+        const was = s.distanceM;
+        s.distanceM = Math.round((s.distanceM * scale) / 1000) * 1000;
+        // The time follows the distance, so the pace shown stays inside the session's range
+        if (was > 0) s.durationS = Math.round((s.durationS * s.distanceM) / was);
+      }
       log(id, 'rebuilt', `The next 7 days were ${Math.round(comingKm / 1000)} km against your recent average of ${Math.round(avgWeek / 1000)} km in your recent big weeks. Jumps above about 30% are linked to higher injury risk, so easy and long runs are trimmed to keep the increase near 20%.`);
     }
   }
