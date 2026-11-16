@@ -1,5 +1,6 @@
 // Body: injury and recovery support (review #2 §10). General guidance and load management only: Ritmo never
 // diagnoses or prescribes treatment. Red flags are rules, checked before anything else (and before any AI).
+import { fitSteps, repsKm } from './session-view';
 import type { Plan, PlannedSession } from '../lib/types';
 import { addDays, parseYmd, ymd } from '../lib/format';
 
@@ -164,7 +165,11 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
   const log = (id: string, summary: string) => { if (!changes.some((c) => c.id === id)) changes.push({ id, at: new Date().toISOString(), reason: 'pain', summary }); };
   const upcoming = sessions.filter((s) => s.date >= t && s.status !== 'done' && s.type !== 'race');
   const rest = (s: PlannedSession, title: string, purpose: string) => Object.assign(s, { type: 'rest', title, focus: 'Recovery', purpose, howItHelps: purpose, distanceM: 0, durationS: 0, steps: [{ label: title, detail: purpose }], paceTarget: undefined, hrZones: undefined, second: undefined });
-  const easy = (s: PlannedSession, why: string, kmScale = 1) => Object.assign(s, { type: 'easy', title: 'Easy run', focus: 'Aerobic base', purpose: why, distanceM: Math.round(s.distanceM * kmScale), durationS: Math.round(s.durationS * kmScale), steps: [{ label: 'Easy run', detail: 'Relaxed and conversational. Stop if pain goes above 3/10.', km: Math.round(s.distanceM * kmScale / 100) / 10 }], paceTarget: s.type === 'easy' ? s.paceTarget : undefined, second: undefined });
+  // Seconds per metre at this runner's easy pace, from an easy run in the plan: a hard session turned easy takes its
+  // time from this, not from the faster session it replaces
+  const easyRef = plan.sessions.find((x) => x.type === 'easy' && x.distanceM > 2000 && x.durationS > 0 && !x.steps.some((y) => y.kind === 'strides'));
+  const easyPerM = easyRef ? easyRef.durationS / easyRef.distanceM : 0;
+  const easy = (s: PlannedSession, why: string, kmScale = 1) => Object.assign(s, { type: 'easy', title: 'Easy run', focus: 'Aerobic base', purpose: why, distanceM: Math.round(s.distanceM * kmScale), durationS: Math.round(easyPerM ? s.distanceM * kmScale * easyPerM : s.durationS * kmScale), hrZones: [2], howItHelps: 'Easy running keeps your fitness ticking over while your body catches up.', steps: [{ label: 'Easy run', detail: 'Relaxed and conversational. Stop if pain goes above 3/10.', km: Math.round(s.distanceM * kmScale / 100) / 10 }], paceTarget: s.type === 'easy' ? s.paceTarget : undefined, second: undefined });
 
   if (paused) {
     // Red flag: no running until checked; no exercise tips either
@@ -238,7 +243,15 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
   if (ease && !step) {
     for (const x of upcoming.filter((y) => isRun(y) && y.date >= ease.from && y.date <= ease.until)) {
       if (x.date <= ease.noHardUntil && HARD.includes(x.type)) easy(x, `An easy run instead of a hard session for the first days back from your ${ease.label}.`, EASE_BACK_SCALE);
-      else Object.assign(x, { distanceM: Math.round(x.distanceM * EASE_BACK_SCALE / 100) * 100, durationS: Math.round(x.durationS * EASE_BACK_SCALE) });
+      else {
+        // Shorter, with steps that still add up: the warm-up, cool-down and easy parts shrink; reps stay whole, so a
+        // session is never cut below its reps plus a short warm-up and cool-down
+        const reps = repsKm(x) * 1000;
+        const m = Math.max(Math.round(x.distanceM * EASE_BACK_SCALE / 100) * 100, reps > 0 ? Math.min(x.distanceM, Math.round((reps + 2000) / 100) * 100) : 0);
+        const fitted = fitSteps({ ...x, distanceM: m });
+        const stepS = fitted.steps.every((y) => y.durationS != null) ? fitted.steps.reduce((t, y) => t + (y.durationS ?? 0), 0) : 0;
+        Object.assign(x, { distanceM: m, steps: fitted.steps, durationS: stepS > 0 ? stepS : Math.round(x.durationS * (x.distanceM > 0 ? m / x.distanceM : EASE_BACK_SCALE)) });
+      }
     }
   }
   return finish({ ...plan, sessions, changes });

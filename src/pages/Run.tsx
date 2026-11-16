@@ -51,7 +51,9 @@ export default function RunPage() {
   const todays = plan?.sessions.find((s) => s.date === t0 && s.type !== 'rest' && s.status !== 'done' && s.status !== 'swapped');
   // The session card: today's session first, then the rest of this week's planned runs to preview (swipe)
   const weekEnd = ymd(new Date(parseYmd(t0).getTime() + (6 - weekday(parseYmd(t0))) * 86400000));
-  const cards: PlannedSession[] = (plan?.sessions ?? []).filter((s) => s.date >= t0 && s.date <= weekEnd && s.type !== 'rest' && s.status === 'planned').sort((a, b) => a.date.localeCompare(b.date));
+  // Today's session stays first while it is only partly done (a short run earlier today): otherwise the card showed
+  // tomorrow's session, and starting it moved that session to today
+  const cards: PlannedSession[] = (plan?.sessions ?? []).filter((s) => s.date >= t0 && s.date <= weekEnd && s.type !== 'rest' && (s.status === 'planned' || s.date === t0 && s.status === 'partial')).sort((a, b) => a.date.localeCompare(b.date));
   const [shownIdx, setShownIdx] = useState(0);
   const [goal, setGoal] = useState<GoalKind>('none');
   const [goalValue, setGoalValue] = useState('');

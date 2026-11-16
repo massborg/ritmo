@@ -40,6 +40,9 @@ export function planGoal(profile: Profile, race: Race | undefined, today: Date):
   const near = !!date && !!race && Math.abs(daysBetween(parseYmd(date), parseYmd(race.date))) <= BOTH_WINDOW_DAYS;
   // Both, and the running race is nearer (or HYROX has no date): a running plan
   if (type === 'both' && race && (!date || race.date < date)) return { keepHyrox: near || !date };
+  // Both, with a running goal that is not a race ("Get faster") and no HYROX race: HYROX was never chosen as the
+  // goal, so this is a running plan too, with the station strength kept
+  if (type === 'both' && !race && !date && !!profile.goalType && profile.goalType !== 'race') return { keepHyrox: true };
   const hardest = (h.hardest ?? []).filter((k) => stationByKey.has(k)).slice(0, 3);
   return { hyrox: {
     race: date ? { id: 'hyrox', name: 'HYROX', date, distanceM: 8000, courseType: 'road', goalS: h.goalS, priority: 'A' } : undefined,

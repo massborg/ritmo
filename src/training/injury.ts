@@ -34,6 +34,8 @@ export interface Injury {
   days: InjuryDay[];
   /** The return-to-run step (1–6), and the day it was reached */
   step: number; stepSince: string;
+  /** The step before today's check-in changed it, so a check-in done again the same day is judged afresh */
+  prev?: { date: string; step: number; stepSince: string };
   /** Set when this injury came back ("It's back") */
   reopenedAt?: string;
 }
@@ -45,6 +47,8 @@ export interface PastInjury {
   lastStep: number;
   onset: 'sudden' | 'gradual'; running: RunBehaviour;
   how: 'ease' | 'straight';
+  /** It came back and was reopened: this record stays as the earlier episode, and cannot be reopened again */
+  reopened?: boolean;
 }
 /** Coming back after "It feels healed · Ease back in" */
 export interface EaseBack { from: string; until: string; noHardUntil: string; label: string }
@@ -87,7 +91,10 @@ const bad = (d: InjuryDay) => d.run === 'high' || d.vs === 'worse' || d.pain > 2
 export interface CheckResult { injury: Injury; change: 'up' | 'stay' | 'back' | 'none'; clearDays: number; offerHealed: boolean; message: string }
 
 /** Add a day's check-in and apply the progression rules. Days with no run neither count nor reset. */
-export function checkIn(inj: Injury, day: InjuryDay): CheckResult {
+export function checkIn(inj0: Injury, day: InjuryDay): CheckResult {
+  // "Check in again" on a day that already moved the step: start from where the step was before that check-in, so
+  // corrected answers can undo the unlock (or count as the first bad day)
+  const inj: Injury = inj0.prev && inj0.prev.date === day.date ? { ...inj0, step: inj0.prev.step, stepSince: inj0.prev.stepSince } : inj0;
   const days = [...inj.days.filter((d) => d.date !== day.date), day].sort((a, b) => a.date.localeCompare(b.date));
   // Check-ins since this step was reached, leaving out days without a run
   const since = days.filter((d) => d.date > inj.stepSince && d.run !== 'none' && d.run !== undefined);
@@ -117,7 +124,8 @@ export function checkIn(inj: Injury, day: InjuryDay): CheckResult {
   const calm = last5.length >= 5 && last5.every((d) => d.pain <= 1);
   const tested = !testFor(inj.area) || days.some((d) => d.test === 'pass' && d.date >= last5[0]?.date);
   const offerHealed = calm && tested && !days.slice(-5).some((d) => d.test === 'fail');
-  return { injury: { ...inj, days, step, stepSince }, change, clearDays: change === 'up' ? 2 : clearDays, offerHealed, message };
+  const prev = step !== inj.step ? { date: day.date, step: inj.step, stepSince: inj.stepSince } : undefined;
+  return { injury: { ...inj, days, step, stepSince, prev }, change, clearDays: change === 'up' ? 2 : clearDays, offerHealed, message };
 }
 
 /** Whether Ritmo suggests "Feels healed?" now */
@@ -148,9 +156,10 @@ export function heal(inj: Injury, how: 'ease' | 'straight', today: Date): { past
 }
 
 /** "It's back" is offered for 30 days after an injury was marked healed */
-export const canReopen = (p: PastInjury, today: Date) => (today.getTime() - parseYmd(p.endedAt).getTime()) / 86400000 <= REOPEN_DAYS;
+export const canReopen = (p: PastInjury, today: Date) => !p.reopened && (today.getTime() - parseYmd(p.endedAt).getTime()) / 86400000 <= REOPEN_DAYS;
 /** The same injury again, at the last step reached (not step 1) */
 export function reopen(p: PastInjury, pain: number, today: Date): Injury {
   const t = ymd(today);
-  return { id: p.id, area: p.area, side: p.side, startedAt: t, onset: p.onset, running: p.running, days: [{ date: t, pain }], step: Math.max(1, Math.min(LAST_STEP, p.lastStep)), stepSince: t, reopenedAt: t };
+  // A new id: the earlier episode keeps its own record (dates and pain trend) in the history
+  return { id: `${p.id.split('~')[0]}~${t}`, area: p.area, side: p.side, startedAt: t, onset: p.onset, running: p.running, days: [{ date: t, pain }], step: Math.max(1, Math.min(LAST_STEP, p.lastStep)), stepSince: t, reopenedAt: t };
 }

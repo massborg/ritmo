@@ -2,6 +2,7 @@
 // - the race entered in setup is still there when setup is resumed after a reload (it used to be lost, and the plan
 //   was built with no race)
 // - a steady 2/10 check on a care plan that is over 10 days old does not pause training as a red flag
+// - medium findings: a goal changed away from a race drops that race; "Both" with a non-race goal gets a running plan
 // Usage: node e2e/qa-high.cjs (app on :4173). Made-up runner only.
 const { chromium, devices } = require('playwright');
 const { createMock } = require('./mock-supabase.cjs');
@@ -104,6 +105,59 @@ async function signUp(b, mock, email) {
     check(!/Training paused: get checked first/.test(await page.locator('main').innerText()), 'and Training is not paused as a warning sign');
   }
   check(B.errors.length === 0, `no page errors (care)${B.errors.length ? `: ${B.errors[0]}` : ''}`);
+
+  await page.context().close();
+
+  // ---- 3. Medium findings: a goal changed away from a race drops the race; "Both" with a non-race goal runs
+  const C = await signUp(b, mock, 'qa-goal@test.ritmo');
+  page = C.page;
+  await page.locator('#c-health').check(); await cont(page);
+  await page.locator('#s-name').fill('Kim');
+  await page.getByLabel('Day', { exact: true }).selectOption('3'); await page.getByLabel('Month', { exact: true }).selectOption('6'); await page.getByLabel('Year', { exact: true }).selectOption('1988');
+  await page.locator('fieldset', { hasText: 'How do you train?' }).getByRole('button', { name: 'Both' }).click();
+  await cont(page);
+  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'No', exact: true }).nth(i).click();
+  await cont(page);
+  await page.getByRole('radio', { name: /I run regularly/ }).click();
+  await page.locator('#s-weekly').fill('40');
+  await page.getByRole('button', { name: '5K', exact: true }).click();
+  await page.locator('#s-racetime').pressSequentially('2030');
+  await cont(page);
+  // First a running race...
+  await page.getByRole('radio', { name: 'Train for a race' }).click();
+  await page.getByRole('button', { name: '10K', exact: true }).click();
+  await page.locator('#g-name').fill('Harbour 10K');
+  await page.getByRole('button', { name: 'Race date' }).click();
+  const race2 = new Date(); race2.setDate(race2.getDate() + 70);
+  const now2 = new Date();
+  for (let i = 0; i < (race2.getFullYear() - now2.getFullYear()) * 12 + race2.getMonth() - now2.getMonth(); i++) await page.getByRole('button', { name: 'Next month' }).click();
+  await page.locator(`[aria-label$=" ${race2.getDate()} ${race2.toLocaleDateString('en-GB', { month: 'long' })}"]`).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click(); await page.waitForTimeout(300);
+  await cont(page);
+  const keep2 = page.getByRole('button', { name: 'Keep my goal' });
+  if (await keep2.count()) await keep2.click();
+  await page.getByText('Your training week').waitFor(); await page.waitForTimeout(2600);
+  const profC = () => mock.state.tables.profiles.find((r) => r.user_id === C.uid).data.profile;
+  check(profC().setupRace?.name === 'Harbour 10K', 'a race is entered first');
+  // ...then back, and another goal
+  await page.getByRole('button', { name: 'Back to the previous question' }).click();
+  await page.getByRole('radio', { name: 'Get faster' }).click();
+  await cont(page);
+  await page.getByText('Your training week').waitFor(); await page.waitForTimeout(2600);
+  check(!profC().setupRace && profC().goalType === 'faster', 'going back and choosing "Get faster" drops the race this setup saved');
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(500);
+    if (await page.getByRole('button', { name: 'Start my plan' }).count()) break;
+    for (const name of [/No injuries/, /^Continue$/, /^Skip for now$/]) { const n = page.getByRole('button', { name }); if (await n.count()) { await n.first().click(); break; } }
+  }
+  const prev = (await page.locator('main, .setup').first().innerText()).replace(/\s+/g, ' ');
+  check(!/Harbour 10K/.test(prev) && !/HYROX plan/.test(prev) && /You also train for HYROX/.test(prev), '"Both" with "Get faster": a running plan with no race, that keeps HYROX strength (not a HYROX plan)');
+  await page.getByRole('button', { name: 'Start my plan' }).click();
+  await page.waitForURL((u) => !/setup/.test(u.pathname), { timeout: 15000 }); await page.waitForTimeout(3500);
+  const planC = mock.state.tables.plans.filter((r) => r.user_id === C.uid).at(-1)?.data;
+  check(mock.state.tables.races.filter((r) => r.user_id === C.uid).length === 0 && planC && planC.goal !== 'hyrox' && !planC.sessions.some((x) => x.type === 'race'), 'no race is saved, and the plan has no race day and is not a HYROX plan');
+  check(planC.sessions.some((x) => x.strengthPlan?.extra?.includes('sled-push')), 'its station strength uses the real station exercises (equipment was never changed)');
+  check(C.errors.length === 0, `no page errors (goal change)${C.errors.length ? `: ${C.errors[0]}` : ''}`);
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await b.close();

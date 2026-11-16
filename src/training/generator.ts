@@ -6,7 +6,7 @@ import { ROUTINE_TITLE, type Intensity, type Routine } from './strength';
 import type { Phase, Plan, PlannedSession, PlanWeek, Profile, Race, SessionStep, SessionType, TrainingSettings } from '../lib/types';
 import { addDays, DAY_NAMES, daysBetween, distanceLabel, duration, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 import type { TrainingPaces } from './fitness';
-import { hyroxRunPace, planGoal, stationBlocks, stationExercises, type HyroxGoal } from '../hyrox/plan-goal';
+import { EQUIPMENT, hyroxRunPace, planGoal, stationBlocks, stationExercises, type HyroxGoal } from '../hyrox/plan-goal';
 
 const P = (s: number) => pace(s, 'km', false);
 const PR = (r: [number, number]) => `${P(r[0])}–${P(r[1])}/km`;
@@ -422,7 +422,7 @@ export function generatePlan(input: GenInput): GenResult {
   const r = resolveSettings(profile, race, input.recentWeeklyKm, !!hx);
   // A running plan that keeps HYROX going: at least one station strength session a week
   if (goal.keepHyrox && r.strengthPerWeek < 1 && !r.week) r.strengthPerWeek = 1;
-  const hxExtra = hx || goal.keepHyrox ? stationExercises(hx?.hardest ?? (profile.hyrox?.hardest?.length ? profile.hyrox.hardest : ['sled_push', 'sandbag_lunges', 'wall_balls']), hx?.equipment ?? profile.hyrox?.equipment ?? []) : undefined;
+  const hxExtra = hx || goal.keepHyrox ? stationExercises(hx?.hardest ?? (profile.hyrox?.hardest?.length ? profile.hyrox.hardest : ['sled_push', 'sandbag_lunges', 'wall_balls']), hx?.equipment ?? profile.hyrox?.equipment ?? EQUIPMENT.map((e) => e.value)) : undefined;
   const warnings: string[] = [];
 
   // 1) Does the volume fit the days? Never fix it silently.

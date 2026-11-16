@@ -33,7 +33,7 @@ import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type
 import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, correctDetails, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
 import { canRestore, mergeRebuild } from '../training/rebuild';
-import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
+import { adaptPlan, buildStarterPlan, dropMissed, restoreAdjusted, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
 import { raceReadiness, type RaceReadiness } from '../training/insights';
 import { fitnessStage, type StageInfo } from '../training/stage';
@@ -786,7 +786,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const injury = reopen(past, pain, now);
       const entry: BodyCheckin = { id: uid(), at: now.toISOString(), area: past.area, side: past.side, pain, when: ['after'], onset: past.onset, trend: 'worse', signs: [], redFlags: [] };
       const summary = `${injuryLabel(past).charAt(0).toUpperCase()}${injuryLabel(past).slice(1)} is back (${pain}/10): return to run resumes at step ${injury.step} of 6, the last step you reached.`;
-      return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], injury, easeBack: undefined, injuryHistory: (cur.injuryHistory ?? []).filter((x) => x.id !== id) } }, plan: d.plan ? { ...d.plan, changes: [...d.plan.changes, { id: uid(), at: now.toISOString(), reason: 'pain' as const, summary }] } : d.plan };
+      return { ...d, profile: { ...d.profile, body: { ...cur, checkins: [...cur.checkins, entry], injury, easeBack: undefined, injuryHistory: (cur.injuryHistory ?? []).map((x) => (x.id === id ? { ...x, reopened: true } : x)) } }, plan: d.plan ? { ...d.plan, changes: [...d.plan.changes, { id: uid(), at: now.toISOString(), reason: 'pain' as const, summary }] } : d.plan };
     });
   };
   /** What Body answers may use: logged pain, recent load and plan changes (never shared on the Hub) */
@@ -1069,7 +1069,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { ...d, plan, coach: d.coach.map((x) => (x.id === messageId ? { ...x, proposal: { ...p, applied: true } } : x)) };
   });
   const setAdjust = (kind: PlanAdjust['kind'] | null, days = 3) => {
-    if (!kind) { updateProfile({ adjust: undefined }); return; }
+    // Back to normal: the flag goes, and the sessions it changed are as planned again
+    if (!kind) { setData((d) => ({ ...d, profile: { ...d.profile, adjust: undefined }, plan: d.plan ? restoreAdjusted(d.plan, derived.today, 'adjust') : d.plan })); return; }
     const from = ymd(derived.today);
     updateProfile({ adjust: { kind, from, until: ymd(addDays(derived.today, days - 1)), at: new Date().toISOString() } });
   };
@@ -1147,12 +1148,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!d.plan) return d;
     const base = derived.plan ?? d.plan;
     const from = base.sessions.find((x) => x.id === sessionId)?.date;
-    const moved = toDate ? movePlanSession(base, sessionId, toDate) : base;
-    return { ...d, plan: dropMissed(moved, sessionId, toDate ? from : undefined) };
+    let moved = toDate ? movePlanSession(base, sessionId, toDate) : base;
+    // The session it changes places with lands on the missed day, which is in the past and can no longer be run:
+    // it is let go (skipped), so it is not shown as another missed session to deal with
+    const t0 = ymd(derived.today);
+    const gone = toDate && from && from < t0 ? moved.sessions.find((x) => x.id !== sessionId && x.date === from && x.type !== 'rest') : undefined;
+    if (gone) moved = { ...moved, sessions: moved.sessions.map((x) => (x.id === gone.id ? { ...x, status: 'skipped' as const } : x)), changes: moved.changes.filter((c) => c.id !== `missed:${sessionId}`) };
+    const out = dropMissed(moved, sessionId, toDate ? from : undefined);
+    if (gone) out.changes[out.changes.length - 1].summary += ` ${gone.title} gives way: it is not added anywhere else, so this week has one run fewer.`;
+    return { ...d, plan: out };
   });
 
   const reportIllness = (days: number) => updateProfile({ illnessUntil: ymd(addDays(derived.today, days - 1)) });
-  const clearIllness = () => updateProfile({ illnessUntil: undefined });
+  const clearIllness = () => setData((d) => ({ ...d, profile: { ...d.profile, illnessUntil: undefined }, plan: d.plan ? restoreAdjusted(d.plan, derived.today, 'illness') : d.plan }));
 
   const derivedState = derived;
   const sendCoach = async (text: string, useAi?: boolean, topic?: 'body') => {
