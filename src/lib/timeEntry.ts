@@ -9,7 +9,8 @@ export const maxDigits = (kind: EntryKind) => (kind === 'pace' ? 4 : 6);
 
 export interface Entry { h: number; m: number; s: number; /** Total seconds, when the parts make a real time */ seconds?: number; /** Why it isn't one */ error?: 'seconds' | 'minutes' }
 
-const clean = (digits: string, kind: EntryKind) => digits.replace(/\D/g, '').replace(/^0+/, '').slice(-maxDigits(kind));
+// Leading zeros go again after the cut, so too many digits never leave hidden zeros behind ("1000000" is empty, not "000000")
+const clean = (digits: string, kind: EntryKind) => digits.replace(/\D/g, '').replace(/^0+/, '').slice(-maxDigits(kind)).replace(/^0+/, '');
 
 /** Digits, filled in from the right, as hours, minutes and seconds */
 export function fromDigits(digits: string, kind: EntryKind = 'duration'): Entry {
@@ -35,7 +36,10 @@ export function toDigits(seconds: number | undefined, kind: EntryKind = 'duratio
  * from the right, each padded ("5:3" → 5:03); without, the digits are taken as they are.
  */
 export function textToDigits(text: string, kind: EntryKind = 'duration'): string {
-  const parts = text.trim().split(/[^\d]+/).filter((x) => x !== '');
+  // A fraction of a second after a time with colons ("04:31.5", as watches and results pages show tenths) is dropped;
+  // without a colon, dots are separators ("1.13.37")
+  const whole = text.trim().replace(/^(.*:\d{1,2})[.,]\d{1,3}$/, '$1');
+  const parts = whole.split(/[^\d]+/).filter((x) => x !== '');
   if (!parts.length) return '';
   if (parts.length === 1) return clean(parts[0], kind);
   const last = parts.slice(-3);

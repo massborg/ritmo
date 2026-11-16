@@ -111,11 +111,12 @@ export function HealedSheet({ onClose }: { onClose: () => void }) {
   const [how, setHow] = useState<'ease' | 'straight'>('ease');
   const [done, setDone] = useState(false);
   const anyNo = ans.some((a) => a === false);
-  const name = inj ? injuryLabel(inj) : 'injury';
+  // Kept from when the sheet opened: once it is marked healed the injury is no longer the current one
+  const [name] = useState(() => (inj ? injuryLabel(inj) : 'injury'));
   if (done) return (
     <Sheet open onClose={onClose} title="Back to your plan" footer={<button className="btn btn-primary btn-block" onClick={onClose}>Done</button>}>
       <StatusLine kind="success">{cap(name)} marked healed. Your plan is rebuilt from today{how === 'ease' ? `, easing back in over ${EASE_DAYS} days` : ''}.</StatusLine>
-      <p className="caption">It is saved in your injury history (Profile, Health). If it comes back within 30 days, tap "It's back" there or on Training and you restart at the step you reached, not step 1.</p>
+      <p className="caption">It is saved in your injury history (Profile, Body). If it comes back within 30 days, tap "It's back" there or on Training and you restart at the step you reached, not step 1.</p>
     </Sheet>
   );
   return (
@@ -181,7 +182,7 @@ export function InjuryHistory() {
               <span className="stack-sm" style={{ gap: 0 }}><span className="label">{cap(injuryLabel(p))}</span><span className="caption">{dayMonth(p.startedAt)} to {dayMonth(p.endedAt)} · reached step {p.lastStep} of 6 · {p.how === 'ease' ? 'eased back in' : 'straight back to the plan'}</span></span>
               {canReopen(p, today) && !data.profile.body?.injury && <button type="button" className="btn btn-small" onClick={() => setBack(p)}>It's back</button>}
             </div>
-            {p.pains.length > 1 && <PainTrend days={p.pains.slice(-7).map((x, i) => ({ date: ymd(new Date(parseYmd(p.startedAt).getTime() + (Math.max(0, p.pains.length - 7) + i) * 86400000)), pain: x }))} title={`${injuryLabel(p)} pain`} />}
+            {p.pains.length > 1 && <PainTrend days={p.pains.slice(-7).map((x, i) => ({ date: p.dates?.[Math.max(0, p.pains.length - 7) + i] ?? ymd(new Date(parseYmd(p.startedAt).getTime() + (Math.max(0, p.pains.length - 7) + i) * 86400000)), pain: x }))} title={`${injuryLabel(p)} pain`} />}
           </li>
         ))}
       </ul>

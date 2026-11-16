@@ -43,6 +43,8 @@ export interface PastInjury {
   id: string; area: BodyArea; side?: 'left' | 'right'; startedAt: string; endedAt: string;
   /** Morning pain, day by day */
   pains: number[];
+  /** The day of each pain value (check-ins can skip days). Older records do not have it. */
+  dates?: string[];
   /** The last return-to-run step reached: where "It's back" resumes */
   lastStep: number;
   onset: 'sudden' | 'gradual'; running: RunBehaviour;
@@ -147,7 +149,7 @@ export function trendWord(inj: Pick<Injury, 'days'>): 'Getting better' | 'About 
 /** "It feels healed": the injury moves to history, and (for "ease back in") the next 10 days are lighter */
 export function heal(inj: Injury, how: 'ease' | 'straight', today: Date): { past: PastInjury; easeBack?: EaseBack; change: string } {
   const t = ymd(today);
-  const past: PastInjury = { id: inj.id, area: inj.area, side: inj.side, startedAt: inj.startedAt, endedAt: t, pains: inj.days.map((d) => d.pain), lastStep: inj.step, onset: inj.onset, running: inj.running, how };
+  const past: PastInjury = { id: inj.id, area: inj.area, side: inj.side, startedAt: inj.startedAt, endedAt: t, pains: inj.days.map((d) => d.pain), dates: inj.days.map((d) => d.date), lastStep: inj.step, onset: inj.onset, running: inj.running, how };
   const on = today.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const name = cap(where(inj));
   if (how === 'straight') return { past, change: `${name} marked healed on ${on}. Your plan is rebuilt from today.` };

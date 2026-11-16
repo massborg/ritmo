@@ -157,7 +157,8 @@ export function readinessScore(o: {
   if (niggle) {
     const eff = niggle.severity >= 3 ? -25 : niggle.severity === 2 ? -15 : -6;
     factors.push({ key: 'body', name: 'Body', value: `Niggle: ${niggle.area.toLowerCase()}`, tone: eff <= -15 ? 'bad' : 'warn', effect: eff, explain: `You logged ${niggle.area.toLowerCase()} pain in the last 7 days.` });
-  } else factors.push({ key: 'body', name: 'Body', value: ill ? 'Unwell' : 'No niggles', tone: ill ? 'bad' : 'good', effect: 0, explain: ill ? 'You told Ritmo you are unwell.' : 'No pain logged in the last 7 days.' });
+  } else if (redFlag) factors.push({ key: 'body', name: 'Body', value: 'Warning sign', tone: 'bad', effect: 0, explain: 'You logged chest pain, dizziness or feeling faint in the last 7 days (see Symptoms).' });
+  else factors.push({ key: 'body', name: 'Body', value: ill ? 'Unwell' : 'No niggles', tone: ill ? 'bad' : 'good', effect: 0, explain: ill ? 'You told Ritmo you are unwell.' : 'No pain logged in the last 7 days.' });
 
   // 7) Race timing: during the taper, freshness weighs more
   const daysToRace = o.race ? Math.round((parseYmd(o.race.date).getTime() - parseYmd(t).getTime()) / 86400000) : undefined;

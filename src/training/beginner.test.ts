@@ -21,6 +21,19 @@ describe('starter plan', () => {
   const plan = buildStarterPlan({ today: monday, profile, canRun10: false, walksRegularly: true });
   const sessions = plan.sessions.filter((s) => s.type !== 'rest');
 
+  it('"Make it shorter" on a run/walk session shortens the steps too, not only the headline time', () => {
+    const s = sessions[0];
+    const n = Number(/^(\d+) x/.exec(s.steps[1].label)![1]);
+    const after = swapSession(plan, s.id, 'shorter', trainingPaces(40)).sessions.find((x) => x.id === s.id)!;
+    const n2 = Number(/^(\d+) x/.exec(after.steps[1].label)![1]);
+    expect(n2).toBeLessThan(n);
+    expect(after.title).toBe(`Run/walk: ${n2} x ${/x (.+)$/.exec(s.title)![1]} (shorter)`);
+    expect(after.durationS).toBeLessThan(s.durationS);
+    // The time is what the steps say: 10 minutes of walking either side, the runs, and the walks between them
+    const secs = (t: string) => Number(/(\d+) min/.exec(t)?.[1] ?? 0) * 60 + Number(/(\d+) s\b/.exec(t)?.[1] ?? 0);
+    const m = /^(\d+) x \((.+) running \+ (.+) walking\)$/.exec(after.steps[1].label)!;
+    expect(after.durationS).toBe(600 + n2 * secs(m[2]) + (n2 - 1) * secs(m[3]));
+  });
   it('"Easy run instead" never turns a run/walk or time trial into a continuous run with a pace', () => {
     for (const s of [sessions[0], sessions.find((x) => x.type === 'timetrial')!]) {
       const after = swapSession(plan, s.id, 'easy', trainingPaces(40));

@@ -54,3 +54,17 @@ describe('typing a time on a numbers-only keypad (update 4, task 1)', () => {
     expect(unlikelyFor(2 * 3600 + 1, 5000)).toBe('slow');
   });
 });
+
+describe('QA sweep: fractions and too many digits', () => {
+  it('a fraction of a second after a time with colons is dropped; dots alone stay separators', () => {
+    expect(parseEntry('04:31.5')).toBe(271);
+    expect(parseEntry('20:05.3')).toBe(1205);
+    expect(parseEntry('1:04:31,25')).toBe(3871);
+    expect(parseEntry('1.13.37')).toBe(4417);
+    expect(parseEntry('20.05')).toBe(1205);
+  });
+  it('too many digits never leave hidden zeros behind', () => {
+    expect(textToDigits('1000000')).toBe('');
+    expect(textToDigits('1002005')).toBe('2005');
+  });
+});

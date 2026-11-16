@@ -547,7 +547,23 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
   const s = sessions.find((x) => x.id === sessionId);
   if (!s || s.type === 'rest' || s.type === 'race') return plan;
   const before = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
-  if (kind === 'shorter') {
+  if (kind === 'shorter' && s.type === 'runwalk') {
+    // Run/walk: fewer repeats (or a shorter run), written into the steps, so the session shown and guided is the
+    // shorter one and not only the headline time
+    const secs = (t: string) => Number(/(\d+) min/.exec(t)?.[1] ?? 0) * 60 + Number(/(\d+) s\b/.exec(t)?.[1] ?? 0);
+    const i = s.steps.findIndex((x) => / running/.test(x.label));
+    const m = i >= 0 ? /^(\d+) x \((.+) running \+ (.+) walking\)$/.exec(s.steps[i].label) : null;
+    const steps = s.steps.map((x) => ({ ...x }));
+    if (m) {
+      const n = Math.max(2, Math.round(Number(m[1]) * 0.7)), run = secs(m[2]), walk = secs(m[3]);
+      steps[i].label = `${n} x (${m[2]} running + ${m[3]} walking)`;
+      Object.assign(s, { steps, durationS: 600 + n * run + (n - 1) * walk, title: `Run/walk: ${n} x ${m[2]} (shorter)` });
+    } else if (i >= 0 && secs(s.steps[i].label) > 0) {
+      const run = Math.max(300, Math.round((secs(s.steps[i].label) * 0.7) / 60) * 60);
+      steps[i].label = `${fmtS(run)} easy running`;
+      Object.assign(s, { steps, durationS: 600 + run, title: `Run ${fmtS(run)} (shorter)` });
+    } else Object.assign(s, { durationS: Math.round(s.durationS * 0.7), title: `${s.title.replace(/ \(shorter\)$/, '')} (shorter)` });
+  } else if (kind === 'shorter') {
     const f = 0.7;
     // The scaled parts say their new distance, in the label and the detail ("1.4 km easy", "last 2.8 km steady")
     s.steps = s.steps.map((x) => {

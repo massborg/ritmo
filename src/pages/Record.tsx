@@ -28,7 +28,7 @@ export default function Record() {
   const runS = todays.find(runOpen);
   const s = runS ?? todays.find(strengthOpen);
   const strength = s && !runS && s.strengthPlan ? resolveStrength(s.strengthPlan, data.profile.strength) : undefined;
-  const line = !s ? '' : strength ? `${strength.items.length} exercises · about ${strength.minutes} min` : [structureLine(s), sessionAmount(s, data.profile.units)].filter(Boolean).join(' · ');
+  const line = !s ? '' : strength ? `${strength.items.length} exercises · about ${strength.minutes} min` : (s.steps.length > 1 ? [structureLine(s), sessionAmount(s, data.profile.units)] : [sessionAmount(s, data.profile.units) || structureLine(s), s.focus]).filter(Boolean).join(' · ');
   const Card = ({ to, onClick, icon, tone, title, sub, isNew }: { to?: string; onClick?: () => void; icon: React.ReactNode; tone: string; title: string; sub: string; isNew?: boolean }) => {
     const inner = <>
       <span className={`record-icon ${tone}`} aria-hidden="true">{icon}</span>

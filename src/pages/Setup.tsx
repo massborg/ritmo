@@ -12,7 +12,7 @@ import { UploadPanel } from './DataSources';
 import { HyroxGoalFields } from '../components/HyroxGoal';
 import type { HyroxPrefs } from '../hyrox/hyrox';
 import { targetsFromGoal, type AthleteType } from '../hyrox/plan-goal';
-import { addDays, DAY_NAMES, DAY_SHORT, dist, duration, durationWords, longDate, MONTHS_LONG, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
+import { addDays, localise, DAY_NAMES, DAY_SHORT, dist, duration, durationWords, longDate, MONTHS_LONG, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import type { BackgroundLevel, GoalType, Injury, Plan, Profile, Race, RunningBackground, TrainingSchedule } from '../lib/types';
 import {
   ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, kmInUnit, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
@@ -313,7 +313,7 @@ function BackgroundStep({ onNext }: StepProps) {
           <Stepper id="s-long" label={`Longest run in the last 6 weeks (${unit})`} value={longest} onChange={setLongest} min={0} max={60} unit={unit} placeholder="8" />
           <Chips label="A recent race or time trial" value={noRace ? -1 : raceM} onChange={(v) => { if (v === -1) { setNoRace(true); setRaceM(0); } else { setNoRace(false); setRaceM(v); } }}
             options={[...RACE_DISTANCES.filter((r) => r.m <= 42195).map((r) => ({ value: r.m, label: r.label })), { value: -1, label: 'I do not have one' }]} />
-          {!!raceM && <DurationField id="s-racetime" label="Your time" value={raceS} onChange={setRaceS} distanceM={raceM} />}
+          {!!raceM && <DurationField id="s-racetime" label="Your time" value={raceS} onChange={setRaceS} distanceM={raceM} units={data.profile.units} />}
           <p className="caption">A time from the last six months gives the most accurate paces. Without one, paces start as an estimate and improve as you log runs.</p>
         </section>
       )}
@@ -363,7 +363,8 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
     // The race is kept with the setup answers too, so it is still there when setup is resumed
     const saved: Race | undefined = g === 'race' && r?.date && r.distanceM ? { id: r.id ?? uid(), name: r.name || 'My race', date: r.date, distanceM: r.distanceM, courseType: r.courseType ?? 'road', goalS: r.goalS, priority: 'A' } : undefined;
     if (saved) saveRace(saved);
-    onNext({ goalType: g, goal: label, setupRace: saved, ...(athlete !== 'runner' ? hyroxPatch() : {}) });
+    // HYROX details typed and then left behind (another race or goal chosen) are not saved: they would decide the plan
+    onNext({ goalType: g, goal: label, setupRace: saved });
   };
   const submit = () => {
     if (!goal) { setErr('Choose a goal.'); return; }
@@ -396,7 +397,7 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
         <section className="card stack">
           <div className="field"><label htmlFor="g-name">Race name</label><input id="g-name" className="input" value={race.name ?? ''} onChange={(e) => { setRace({ ...race, name: e.target.value }); setWarn(undefined); }} placeholder="For example, Malta Marathon" /></div>
           <DateField id="g-date" label="Race date" value={race.date ?? ''} min={ymd(addDays(today, 1))} onChange={(v) => { setRace({ ...race, date: v }); setWarn(undefined); }} />
-          <DurationField id="g-time" label="Goal time (optional)" value={race.goalS} onChange={(v) => { setRace({ ...race, goalS: v }); setWarn(undefined); }} distanceM={race.distanceM} />
+          <DurationField id="g-time" label="Goal time (optional)" value={race.goalS} onChange={(v) => { setRace({ ...race, goalS: v }); setWarn(undefined); }} distanceM={race.distanceM} units={data.profile.units} />
         </section>
       )}
       {warn && !warn.ok && (
@@ -556,7 +557,7 @@ function PreviewStep({ today, onAccept, onEditDays }: { today: Date; onAccept: (
     <div className="stack-lg">
       <StepHead title="Your first weeks" />
       <section className="card stack">
-        <p>{result.basis}</p>
+        <p>{localise(result.basis ?? '', u)}</p>
         {overTime && <p className="caption" role="note">You said you usually have about {haveMin} minutes. Sessions in your first two weeks take up to {overTime} minutes (the long run is separate): the plan is sized by what your running needs, not by that time. You can shorten any session from its page ("Make it shorter"), or lower your weekly distance in Goals.</p>}
         <span className={`tag${result.confidence === "measured" ? " tag-accent" : ""}`} style={{ alignSelf: 'flex-start' }}>
           {result.confidence === 'measured' ? 'Paces measured from your runs' : result.confidence === 'estimated' ? 'Paces are an estimate for now' : 'Set by effort, no paces yet'}

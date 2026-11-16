@@ -69,6 +69,12 @@ function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid,
       <input ref={ref} id={id} className="time-entry-input" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={shown}
         aria-label={`${label}: ${digits ? sayEntry(e) : 'empty'}`} aria-invalid={bad || undefined} aria-describedby={described}
         onChange={(ev) => change(ev.target.value)} onClick={caretToEnd}
+        onKeyDown={(ev) => {
+          // Digits join and leave on the right, like a timer. With the caret moved into the middle, a digit or Backspace
+          // used to do nothing: the caret goes back to the end first. A selection (to replace the lot) is left alone.
+          const el = ev.currentTarget;
+          if ((ev.key === 'Backspace' || /^\d$/.test(ev.key)) && el.selectionStart === el.selectionEnd && el.selectionStart !== el.value.length) caretToEnd();
+        }}
         onPaste={(ev) => { ev.preventDefault(); set(textToDigits(ev.clipboardData.getData('text'), kind)); }} />
     </span>
     {ownErr && <span id={`${id}-err`} className="caption time-entry-err" role="alert">{ERR[ownErr]}</span>}
