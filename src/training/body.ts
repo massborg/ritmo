@@ -162,7 +162,9 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
     return p;
   };
   const changes = [...plan.changes];
-  const log = (id: string, summary: string) => { if (!changes.some((c) => c.id === id)) changes.push({ id, at: new Date().toISOString(), reason: 'pain', summary }); };
+  // `detail`: a supporting note logged with a main entry. It is stamped a second earlier, so the main entry (what
+  // running does now) is always the latest one shown; otherwise the order depended on the millisecond.
+  const log = (id: string, summary: string, detail = false) => { if (!changes.some((c) => c.id === id)) changes.push({ id, at: new Date(Date.now() - (detail ? 1000 : 0)).toISOString(), reason: 'pain', summary }); };
   const upcoming = sessions.filter((s) => s.date >= t && s.status !== 'done' && s.type !== 'race');
   const rest = (s: PlannedSession, title: string, purpose: string) => Object.assign(s, { type: 'rest', title, focus: 'Recovery', purpose, howItHelps: purpose, distanceM: 0, durationS: 0, steps: [{ label: title, detail: purpose }], paceTarget: undefined, hrZones: undefined, second: undefined });
   // Seconds per metre at this runner's easy pace, from an easy run in the plan: a hard session turned easy takes its
@@ -214,7 +216,7 @@ export function applyBody(plan: Plan, b: BodyState | undefined, today: Date): Pl
       const runs = two.filter(isRun).sort((a, c) => a.date.localeCompare(c.date));
       for (let i = 1; i < runs.length; i++) if (runs[i - 1].type !== 'rest' && ymd(addDays(parseYmd(runs[i - 1].date), 1)) === runs[i].date) rest(runs[i], 'Rest or cross-training', 'No back-to-back running days while your shin settles. Choose soft surfaces when you do run.');
     }
-    if (['Achilles', 'Calf', 'Hamstring', 'Knee', 'Shin'].includes(area)) log(`body-area:${active.id}`, `${where}: sessions that load it most are changed for the next two weeks (${area === 'Shin' ? 'no back-to-back running days' : area === 'Knee' ? 'shorter, flatter long run' : area === 'Hamstring' ? 'no sprint-speed reps' : 'no hills, spikes or fast strides'}).`);
+    if (['Achilles', 'Calf', 'Hamstring', 'Knee', 'Shin'].includes(area)) log(`body-area:${active.id}`, `${where}: sessions that load it most are changed for the next two weeks (${area === 'Shin' ? 'no back-to-back running days' : area === 'Knee' ? 'shorter, flatter long run' : area === 'Hamstring' ? 'no sprint-speed reps' : 'no hills, spikes or fast strides'}).`, true);
   }
 
   // Injury mode overrides the plan (update 4): while a return-to-run step or a care plan is active, long and hard

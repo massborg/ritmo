@@ -701,7 +701,7 @@ export function generatePlan(input: GenInput): GenResult {
     if (taperStart && addDays(ws, 6) >= taperStart && ws < taperStart && phase !== 'taper') {
       // a week that changes into the taper part-way through
       const pre = ymd(addDays(taperStart, -1));
-      if (last && last.phase === phase) last.end = pre; else phases.push({ phase, start: pStart, end: pre });
+      if (last && last.phase === phase) last.end = pre; else if (pre >= pStart) phases.push({ phase, start: pStart, end: pre });
       phases.push({ phase: 'taper', start: ymd(taperStart), end: pEnd });
     } else if (last && last.phase === phase) last.end = pEnd;
     else phases.push({ phase, start: pStart, end: pEnd });
@@ -709,7 +709,7 @@ export function generatePlan(input: GenInput): GenResult {
 
   const plan: Plan = {
     id: uid(), raceId: hx ? undefined : race?.id, ...(hx ? { goal: 'hyrox' as const } : {}), createdAt: new Date().toISOString(), startDate: ymd(start), endDate: ymd(end), phases, sessions, weeks,
-    changes: [{ id: 'built', at: new Date().toISOString(), reason: 'rebuilt', summary: describePlan(r, roles, race, input, totalWeeks, caps) + (hx ? ` This is a HYROX plan: about ${Math.round(HX_VOLUME * 100)}% of the running of a road plan, with 1 km repeats and compromised runs at your HYROX run pace of ${P(mid(hx.pace))}/km (${hx.goalS ? `your goal of ${duration(hx.goalS)} with ${Math.round(hx.runShare * 100)}% of it running` : 'a little slower than threshold, until you set a goal time'}, never faster than your threshold pace), a half simulation every third build week${race ? ', one full simulation 3 to 4 weeks out' : ''}, and strength with extra work for ${hx.hardest.map((k) => k.replace(/_/g, ' ')).join(', ')}.${hx.keepRunning ? ' You also have a running race within 8 weeks, so one threshold run a week is kept.' : ''}` : goal.keepHyrox ? ' You also train for HYROX, so one strength session a week includes your hardest stations.' : '') }],
+    changes: [{ id: 'built', at: new Date().toISOString(), reason: 'rebuilt', summary: describePlan(r, roles, race, input, totalWeeks, caps) + (hx ? ` This is a HYROX plan: about ${Math.round(HX_VOLUME * 100)}% of the running of a road plan, ${sessions.some((x) => x.hyrox?.kind === 'compromised') ? 'with 1 km repeats and compromised runs' : 'with running'} at your HYROX run pace of ${P(mid(hx.pace))}/km (${hx.goalS ? `your goal of ${duration(hx.goalS)} with ${Math.round(hx.runShare * 100)}% of it running` : 'a little slower than threshold, until you set a goal time'}, never faster than your threshold pace)${sessions.some((x) => x.hyrox?.kind === 'sim_half') ? ', a half simulation every third build week' : ''}${sessions.some((x) => x.hyrox?.kind === 'sim_full') ? ', one full simulation 3 to 4 weeks out' : ''}, and strength with extra work for ${hx.hardest.map((k) => k.replace(/_/g, ' ')).join(', ')}.${hx.keepRunning ? ' You also have a running race within 8 weeks, so one threshold run a week is kept.' : ''}` : goal.keepHyrox ? ' You also train for HYROX, so one strength session a week includes your hardest stations.' : '') }],
   };
   // HYROX taper: the last easy run 2 to 4 days out becomes a light station run-through
   if (hx && raceDate) {
@@ -746,7 +746,7 @@ function describePlan(r: Resolved, roles: Role[], race: Race | undefined, input:
   const q = [...dayOf('q1'), ...dayOf('q2')];
   const easy = dayOf('easy');
   const vol = r.peakKm > r.weeklyKm ? `starting at ${r.weeklyKm} km a week and building to about ${r.peakKm} km` : `holding about ${r.weeklyKm} km a week`;
-  return `Built a ${weeks}-week plan${race ? ` for ${race.name}${race.id === 'hyrox' ? '' : ` (${raceWord(race.distanceM)})`} on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} The taper starts ${TAPER_DAYS[r.dc]} days before race day.`.replace(/\s+\./g, '.').trim();
+  return `Built a ${weeks}-week plan${race ? ` for ${race.name}${race.id === 'hyrox' ? '' : ` (${raceWord(race.distanceM)})`} on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} ${race ? (weeks * 7 > TAPER_DAYS[r.dc] + 6 ? `The taper starts ${TAPER_DAYS[r.dc]} days before race day.` : 'The race is close, so this is a taper: short, easy running to arrive fresh.') : ''}`.replace(/\s+\./g, '.').trim();
 }
 
 // ---------------------------------------------------------------------------

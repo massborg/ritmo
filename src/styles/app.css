@@ -1387,3 +1387,6 @@ div.hx-row { cursor: default; }
 .pace-card-st { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hairline); }
 .hx-pred-stations .stat { font: 500 16px/22px var(--font-mono, monospace); }
 .hrd-warm { padding: 0; margin: 0; }
+
+/* QA sweep: a chip that cannot be chosen (the limit is reached) looks it */
+.chip:disabled { opacity: 0.45; cursor: not-allowed; }

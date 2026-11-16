@@ -325,7 +325,7 @@ function computeDerived(data: AppData): Derived {
   const readinessToday = readinessScore({ now: today, series, activities: acts, feedback: data.feedback, profile: data.profile, typeOf, zones, paces, todaySession, race: aRace, simple: !stage.predictions, hrSuspect: !!hrIssue });
   // While an injury is looked after, readiness never says "Ready for hard" (update 4): capped at "Easy day"
   const injuredNow = data.mode === 'real' ? injuryMode(data.profile.body, today) : undefined;
-  if (injuredNow && readinessToday.band === 'hard') Object.assign(readinessToday, { band: 'easy', word: 'Easy day', capped: 'injury', line: 'Easy day, capped by injury.', summary: `Your numbers are good, but your ${injuredNow} is still being looked after, so today stays easy. ${readinessToday.summary}`, swap: undefined });
+  if (injuredNow && readinessToday.band === 'hard') Object.assign(readinessToday, { band: 'easy', word: 'Easy day', capped: 'injury', line: 'Easy day, capped by injury.', summary: `Your numbers are good, but your ${injuredNow} is still being looked after, so today stays easy. ${readinessToday.summary.replace(/\s*Nothing is holding you back\.?/, '')}`.trim(), swap: undefined });
   const readiness = asReadiness(readinessToday);
   const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
   const tKey = ymd(today), wkKey = ymd(startOfWeek(today));

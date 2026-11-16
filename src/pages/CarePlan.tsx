@@ -63,7 +63,7 @@ export default function CarePlan() {
             {(['left', 'right'] as const).map((x) => <button key={x} type="button" className="chip" aria-pressed={side === x} onClick={() => setSide(x)}>{x === 'left' ? 'Left' : 'Right'}</button>)}
           </div>
         )}
-        <button className="btn btn-primary" disabled={!area} onClick={() => updateBody({ care: { area: area!, side, stage: 0, startedAt: t, stageSince: t, checks: [], done: [] } })}>Start the care plan</button>
+        <button className="btn btn-primary" disabled={!area} onClick={() => updateBody({ care: { area: area!, side: area === 'lower-back' ? undefined : side, stage: 0, startedAt: t, stageSince: t, checks: [], done: [] } })}>Start the care plan</button>
       </section>
       {safety}
     </div>

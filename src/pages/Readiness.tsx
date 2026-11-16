@@ -52,6 +52,7 @@ export default function ReadinessPage() {
               </div>
             </div>
             <ReadinessBar score={r.score} labels />
+            {r.capped && <p className="caption">Your score is in the "ready for hard" range, but the injury cap keeps today easy all the same.</p>}
             {r.swap && session && !kept && (
               <div className="stack-sm">
                 <p className="caption">Today's plan is {session.title.toLowerCase()}. {r.line}</p>
