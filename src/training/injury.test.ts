@@ -129,3 +129,34 @@ describe('injury: "Update details" corrects the place of the same injury', () =>
     expect(fixed.days).toEqual(i.days);
   });
 });
+
+describe('QA sweep: check in again, and "It\'s back" keeps the earlier record', () => {
+  const base: Injury = { id: 'k', area: 'Knee', side: 'left', startedAt: '2026-11-10', onset: 'gradual', running: 'same', days: [{ date: '2026-11-10', pain: 2 }, { date: '2026-11-11', pain: 1, vs: 'better', run: 'ok' }], step: 1, stepSince: '2026-11-10' };
+  it('a check-in done again the same day can undo the step it unlocked', () => {
+    const up = checkIn(base, { date: '2026-11-12', pain: 1, vs: 'better', run: 'ok' });
+    expect(up.change).toBe('up'); expect(up.injury.step).toBe(2);
+    // The same day, corrected: worse, pain 4, the run hurt
+    const redo = checkIn(up.injury, { date: '2026-11-12', pain: 4, vs: 'worse', run: 'high' });
+    expect(redo.injury.step).toBe(1);
+    expect(redo.injury.stepSince).toBe('2026-11-10');
+    expect(redo.change).toBe('stay');
+    expect(redo.message).toMatch(/Stay on step 1/);
+    expect(redo.injury.days.filter((d) => d.date === '2026-11-12')).toHaveLength(1);
+    // And corrected back again: unlocked once more, not twice
+    const again = checkIn(redo.injury, { date: '2026-11-12', pain: 1, vs: 'better', run: 'ok' });
+    expect(again.injury.step).toBe(2);
+    // The next day is a normal day at step 2
+    const next = checkIn(again.injury, { date: '2026-11-13', pain: 1, vs: 'same', run: 'ok' });
+    expect(next.injury.step).toBe(2);
+  });
+  it('"It\'s back" starts a new record and the earlier one cannot be reopened twice', () => {
+    const h = heal(base, 'straight', new Date('2026-11-15T09:00:00'));
+    const again = reopen(h.past, 2, new Date('2026-11-20T09:00:00'));
+    expect(again.id).not.toBe(h.past.id);
+    expect(canReopen({ ...h.past, reopened: true }, new Date('2026-11-21T09:00:00'))).toBe(false);
+    // Healing the second episode gives a second record: the first keeps its dates and pains
+    const h2 = heal({ ...again, days: [...again.days, { date: '2026-11-21', pain: 0 }] }, 'straight', new Date('2026-11-22T09:00:00'));
+    expect(h2.past.id).not.toBe(h.past.id);
+    expect(h.past.pains).toEqual([2, 1]);
+  });
+});

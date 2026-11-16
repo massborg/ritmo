@@ -380,6 +380,9 @@ export interface PlannedSession {
   /** A second, easy run the same day (doubles) */
   second?: { distanceM: number; durationS: number; title: string; detail: string };
   /** The runner changed this session (update 3, §8): when, and what the plan had, for "Reset to plan" */
+  /** Changed for a while because the runner said they were tired, ill or travelling: what it was before, so
+   *  "I feel back to normal" can put it back */
+  adjustedFrom?: { why: 'adjust' | 'illness'; original: Pick<PlannedSession, 'type' | 'title' | 'distanceM' | 'durationS' | 'steps' | 'paceTarget' | 'purpose' | 'howItHelps' | 'focus' | 'hrZones' | 'strength' | 'strengthPlan'> };
   edited?: { at: string; original: Pick<PlannedSession, 'type' | 'title' | 'distanceM' | 'durationS' | 'steps' | 'paceTarget' | 'purpose' | 'focus' | 'hrZones'> };
   /** Strength and mobility added to this day (a one-line summary) */
   strength?: string;

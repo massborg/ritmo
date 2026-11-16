@@ -151,11 +151,24 @@ export function HealedSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** "It's back": asks for this morning's pain, then restarts return to run at the last step reached */
+export function ItsBackSheet({ past, onClose }: { past: PastInjury; onClose: () => void }) {
+  const { reopenInjury } = useApp();
+  const [pain, setPain] = useState(2);
+  return (
+    <Sheet open onClose={onClose} title={`${cap(injuryLabel(past))} is back`}
+      footer={<button className="btn btn-primary btn-block" onClick={() => { reopenInjury(past.id, pain); onClose(); }}>Restart at step {past.lastStep}</button>}>
+      <p>Sorry it is back. Return to run restarts at step {past.lastStep} of 6, the last step you reached, not step 1.</p>
+      <Chips<number> label="Pain this morning" value={pain} onChange={setPain} options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: n === 5 ? '5+' : String(n) }))} />
+      <p className="caption">If it is sharp, swollen, numb, or hurts at night, use "Something hurts" for a full report instead. {DISCLAIMER}</p>
+    </Sheet>
+  );
+}
+
 /** Injuries marked healed (Profile, Health), newest first, with "It's back" for 30 days */
 export function InjuryHistory() {
-  const { data, today, reopenInjury } = useApp();
+  const { data, today } = useApp();
   const [back, setBack] = useState<PastInjury>();
-  const [pain, setPain] = useState(2);
   const list = [...(data.profile.body?.injuryHistory ?? [])].sort((a, b) => b.endedAt.localeCompare(a.endedAt));
   if (!list.length) return null;
   return (
@@ -166,20 +179,13 @@ export function InjuryHistory() {
           <li key={p.id} className="list-item stack-sm" style={{ alignItems: 'stretch' }}>
             <div className="row-between">
               <span className="stack-sm" style={{ gap: 0 }}><span className="label">{cap(injuryLabel(p))}</span><span className="caption">{dayMonth(p.startedAt)} to {dayMonth(p.endedAt)} · reached step {p.lastStep} of 6 · {p.how === 'ease' ? 'eased back in' : 'straight back to the plan'}</span></span>
-              {canReopen(p, today) && !data.profile.body?.injury && <button type="button" className="btn btn-small" onClick={() => { setBack(p); setPain(2); }}>It's back</button>}
+              {canReopen(p, today) && !data.profile.body?.injury && <button type="button" className="btn btn-small" onClick={() => setBack(p)}>It's back</button>}
             </div>
             {p.pains.length > 1 && <PainTrend days={p.pains.slice(-7).map((x, i) => ({ date: ymd(new Date(parseYmd(p.startedAt).getTime() + (Math.max(0, p.pains.length - 7) + i) * 86400000)), pain: x }))} title={`${injuryLabel(p)} pain`} />}
           </li>
         ))}
       </ul>
-      {back && (
-        <Sheet open onClose={() => setBack(undefined)} title={`${cap(injuryLabel(back))} is back`}
-          footer={<button className="btn btn-primary btn-block" onClick={() => { reopenInjury(back.id, pain); setBack(undefined); }}>Restart at step {back.lastStep}</button>}>
-          <p>Sorry it is back. Return to run restarts at step {back.lastStep} of 6, the last step you reached, not step 1.</p>
-          <Chips<number> label="Pain this morning" value={pain} onChange={setPain} options={[0, 1, 2, 3, 4, 5].map((n) => ({ value: n, label: n === 5 ? '5+' : String(n) }))} />
-          <p className="caption">If it is sharp, swollen, numb, or hurts at night, use "Something hurts" for a full report instead. {DISCLAIMER}</p>
-        </Sheet>
-      )}
+      {back && <ItsBackSheet past={back} onClose={() => setBack(undefined)} />}
     </div>
   );
 }

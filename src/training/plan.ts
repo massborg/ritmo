@@ -243,6 +243,11 @@ export function adaptPlan(opts: {
     }
   }
 
+  // What a session was before a temporary change, so "I feel back to normal" can put it back (see restoreAdjusted)
+  const keepOriginal = (s: PlannedSession, why: 'adjust' | 'illness') => {
+    if (s.adjustedFrom) return;
+    s.adjustedFrom = { why, original: { type: s.type, title: s.title, distanceM: s.distanceM, durationS: s.durationS, steps: s.steps, paceTarget: s.paceTarget, purpose: s.purpose, howItHelps: s.howItHelps, focus: s.focus, hrZones: s.hrZones, strength: s.strength, strengthPlan: s.strengthPlan } };
+  };
   // 3c) Temporary changes the runner asked for: easier, no pace targets, or travel
   const adj = profile.adjust;
   if (adj && adj.until >= t) {
@@ -250,6 +255,7 @@ export function adaptPlan(opts: {
     const inRange = upcoming.filter((s) => s.date >= adj.from && s.date <= adj.until && s.type !== 'race' && s.type !== 'rest');
     if (!has(id)) {
       for (const s of inRange) {
+        keepOriginal(s, 'adjust');
         if (adj.kind === 'easier' && HARDER.includes(s.type)) toEasy(s, 'Easier for a few days, as you asked.');
         if (adj.kind === 'easier' && s.type === 'long') Object.assign(s, { ...easyRun(s.date, Math.max(6, Math.round(s.distanceM / 1000 * 0.7)), s.phase, { paces }), id: s.id, title: 'Long run, easier', type: 'long' });
         if (adj.kind === 'travel') {
@@ -275,6 +281,7 @@ export function adaptPlan(opts: {
     const id = `illness:${profile.illnessUntil}`;
     if (!has(id)) {
       for (const s of upcoming) {
+        if (s.type !== 'race' && (s.date <= profile.illnessUntil || daysBetween(parseYmd(profile.illnessUntil), parseYmd(s.date)) <= 4)) keepOriginal(s, 'illness');
         if (s.date <= profile.illnessUntil && s.type !== 'race') Object.assign(s, { ...restDay(s.date, s.phase), id: s.id });
         else if (daysBetween(parseYmd(profile.illnessUntil), parseYmd(s.date)) <= 4 && s.type !== 'rest' && s.type !== 'race') toEasy(s, 'Easing back after illness.');
       }
@@ -586,4 +593,26 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
   }
   const after = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
   return { ...plan, sessions, changes: [...plan.changes, { id: uid(), at: new Date().toISOString(), reason: 'moved', summary: `${dayLabel(s.date)}: ${before} → ${after}, at your request.` }] };
+}
+
+/**
+ * "I feel back to normal": sessions that were changed because the runner was tired, ill or travelling go back to
+ * what they were, from today on. Past days and sessions already done stay as they are. The change is logged, and
+ * the earlier change's id is retired so the same request can be made again later.
+ */
+export function restoreAdjusted(plan: Plan, today: Date, why: 'adjust' | 'illness'): Plan {
+  const t = ymd(today);
+  let n = 0, first: string | undefined;
+  const sessions = plan.sessions.map((s) => {
+    if (!s.adjustedFrom || s.adjustedFrom.why !== why) return s;
+    const { adjustedFrom, ...rest } = s;
+    if (s.date < t || s.status !== 'planned') return rest;
+    n++; if (!first || s.date < first) first = s.date;
+    return { ...rest, ...adjustedFrom.original };
+  });
+  const prefix = why === 'adjust' ? 'adjust:' : 'illness:';
+  const changes = plan.changes.map((c) => (c.id.startsWith(prefix) && !c.id.endsWith(':undone') ? { ...c, id: `${c.id}:undone` } : c));
+  if (!n) return { ...plan, sessions, changes };
+  const day = parseYmd(first!).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return { ...plan, sessions, changes: [...changes, { id: uid(), at: new Date().toISOString(), reason: 'rebuilt', summary: `You said you feel back to normal, so ${n === 1 ? `the session on ${day} is` : `${n} sessions from ${day} are`} as planned again.` }] };
 }

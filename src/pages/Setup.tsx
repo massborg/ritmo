@@ -334,7 +334,7 @@ const GOALS: { value: GoalType; label: string; for: 'beginner' | 'runner' | 'all
 ];
 
 function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
-  const { data, saveRace, today } = useApp();
+  const { data, saveRace, deleteRace, today } = useApp();
   const bg = data.profile.background;
   const beginner = !bg || bg.level === 'new' || bg.level === 'returning';
   const existingA = data.races.filter((r) => r.date >= ymd(today)).sort((a, b) => a.priority.localeCompare(b.priority))[0];
@@ -355,6 +355,9 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const thresholdS = estVdot ? ((t: [number, number]) => Math.round((t[0] + t[1]) / 2))(trainingPaces(estVdot).threshold) : undefined;
 
   const commit = (g: GoalType, r?: Partial<Race>) => {
+    // Going back and choosing another goal: the race this setup saved goes too (a race that was there before setup stays)
+    const mine = data.profile.setupRace;
+    if (mine && (g !== 'race' || isHyrox || (r?.id ?? mine.id) !== mine.id)) deleteRace(mine.id);
     if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, setupRace: undefined, ...hyroxPatch() }); return; }
     const label = g === 'race' && r ? `${r.name || 'My race'}${r.goalS ? ` in ${duration(r.goalS)}` : ''}` : GOALS.find((x) => x.value === g)!.label;
     // The race is kept with the setup answers too, so it is still there when setup is resumed
@@ -543,11 +546,18 @@ function PreviewStep({ today, onAccept, onEditDays }: { today: Date; onAccept: (
   }
   const plan = result.plan;
   const first = plan.sessions.filter((s) => s.type !== 'rest').slice(0, 6);
+  // The time the runner said they have for a usual session is not used to size sessions yet: say so honestly when
+  // the first fortnight's sessions run longer, with where to change them
+  const haveMin = data.profile.schedule?.sessionMinutes;
+  const twoWeeks = ymd(addDays(today, 13));
+  const longestMin = Math.round(Math.max(0, ...plan.sessions.filter((s) => s.type !== 'rest' && s.type !== 'long' && s.date <= twoWeeks).map((s) => s.durationS)) / 60);
+  const overTime = haveMin && longestMin > haveMin + 5 ? longestMin : undefined;
   return (
     <div className="stack-lg">
       <StepHead title="Your first weeks" />
       <section className="card stack">
         <p>{result.basis}</p>
+        {overTime && <p className="caption" role="note">You said you usually have about {haveMin} minutes. Sessions in your first two weeks take up to {overTime} minutes (the long run is separate): the plan is sized by what your running needs, not by that time. You can shorten any session from its page ("Make it shorter"), or lower your weekly distance in Goals.</p>}
         <span className={`tag${result.confidence === "measured" ? " tag-accent" : ""}`} style={{ alignSelf: 'flex-start' }}>
           {result.confidence === 'measured' ? 'Paces measured from your runs' : result.confidence === 'estimated' ? 'Paces are an estimate for now' : 'Set by effort, no paces yet'}
         </span>

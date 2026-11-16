@@ -29,7 +29,7 @@ import { SamsungTip } from '../components/SamsungTip';
 import { activeNiggle, areaLabel, DISCLAIMER, painRule } from '../training/body';
 import { CARE_DISCLAIMER, careAreaFor } from '../training/care';
 import { canReopen, dayNumber, feelsHealed, injuryLabel } from '../training/injury';
-import { HealedSheet, InjuryCheckinSheet } from '../components/InjurySheets';
+import { HealedSheet, InjuryCheckinSheet, ItsBackSheet } from '../components/InjurySheets';
 import { partlyDone, plannedNum } from '../training/session-view';
 import { EditSession } from '../components/EditSession';
 import { StrengthCard } from '../components/StrengthSession';
@@ -145,7 +145,8 @@ const hyroxRecorded = (s: { hyrox?: { kind: string } }) => !!s.hyrox && ['sim_ha
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
-  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen, linkRunToSession, reopenInjury } = useApp();
+  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen, linkRunToSession } = useApp();
+  const [itsBack, setItsBack] = useState(false);
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
   const t = ymd(today);
@@ -326,7 +327,8 @@ export default function Today() {
       {hasFlag('body') && !injuryNow && backAgain && (
         <section className="card stack-sm" aria-label="Recently healed">
           <p className="caption">{cap(injuryLabel(backAgain))} marked healed on {parseYmd(backAgain.endedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{data.profile.body?.easeBack && data.profile.body.easeBack.until >= t ? `. Easing back in until ${parseYmd(data.profile.body.easeBack.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}.</p>
-          <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => reopenInjury(backAgain.id, 2)}>It's back</button>
+          <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setItsBack(true)}>It's back</button>
+          {itsBack && <ItsBackSheet past={backAgain} onClose={() => setItsBack(false)} />}
         </section>
       )}
       {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setFixing(true); setHurts(true); }} />}
