@@ -140,7 +140,7 @@ const monday = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDa
   check(/Pain 4\/10: stay at "Build"/.test(await page.locator('main').innerText()), '3–5: stay at this stage');
   check(/Running: Cross-train instead of running/.test(await page.locator('main').innerText()), 'and running is replaced with cross-training (3–5)');
   // Training: the change, with undo
-  await page.goto(`${APP}/`); await page.waitForTimeout(1500);
+  await page.goto(`${APP}/`); await page.locator('.plan-changes').waitFor({ timeout: 8000 }).catch(() => {}); await page.waitForTimeout(1500);
   check(/Care plan · stage 2 of 3/.test(await page.locator('main').innerText()), 'Training shows the care plan');
   check(/Right achilles pain 4\/10: cross-train instead of running/.test(await page.locator('.plan-changes').innerText().catch(() => '')), 'before undo: Plan changes says cross-train instead of running');
   await page.getByRole('button', { name: 'Undo the change to my runs' }).click(); await page.waitForTimeout(1500);
