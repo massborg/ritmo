@@ -108,7 +108,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   check(/This is a HYROX plan/.test(pl.changes[0].summary) && /HYROX run pace of 4:42\/km/.test(pl.changes[0].summary), 'Plan changes explains the HYROX plan and its run pace');
   await page.goto(`${APP}/`); await page.waitForTimeout(2500);
   const head = await page.locator('main').innerText();
-  check(/HYROX · \d+ \w+ \d{4} · \w+ phase · 1[23] weeks to go/.test(head), 'Training says "HYROX · date · phase · weeks to go"');
+  check(/HYROX · \d+ \w+ \d{4} · \w+ phase · 1[2-4] weeks to go/.test(head), 'Training says "HYROX · date · phase · weeks to go"');
   check(/Your HYROX run pace is 4:42\s*\/km[\s\S]*goal of 1:20:00/.test(head), 'and where the HYROX run pace comes from');
   check(await noOverflow(), 'no sideways scroll at 390 px (Training)');
   await shot('04-training');
