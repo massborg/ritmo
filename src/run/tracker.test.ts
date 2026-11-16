@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
+import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGoalStep, setPaused, startTrack, stepLeft, stepsFor, toStreams, type Fix } from './tracker';
 import type { PlannedSession } from '../lib/types';
+import { pace as fmtPace, paceRange } from '../lib/format';
 
 /** A simulated run north from Valletta: one fix a second at 5:00/km, with GPS noise, bad fixes and a stop. */
 function simulate(km: number, paceS = 300) {
@@ -139,5 +140,20 @@ describe('run clock and laps', () => {
     for (let i = 21; i <= 40; i++) s = addFix(s, fix(i, (i - 20) * 3), true); // runs 60 m
     for (let i = 41; i <= 50; i++) s = addFix(s, fix(i, 60), true); // then stops
     expect(s.autoPaused).toBe(true);
+  });
+});
+
+describe('a free run with a pace goal', () => {
+  it('per km: the typed pace is the target, 5 s either side', () => {
+    const st = paceGoalStep(300, 'km', (p) => fmtPace(p, 'km'));
+    expect(st.label).toBe('Hold 5:00/km');
+    expect(st.pace).toEqual([295, 305]);
+  });
+  it('per mile: 8:00/mi is shown as 8:00/mi and kept as seconds per km', () => {
+    const st = paceGoalStep(480, 'mi', (p) => fmtPace(p, 'mi'));
+    expect(st.label).toBe('Hold 8:00/mi');
+    expect(Math.round(st.pace![0])).toBe(295);
+    expect(Math.round(st.pace![1])).toBe(301);
+    expect(paceRange(st.pace![0], st.pace![1], 'mi')).toBe('7:55–8:05/mi');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, Profile } from '../lib/types';
-import { ageOn, ALL_STEPS, backgroundFromRuns, checkGoal, HEALTH_QUESTIONS, isOldEnough, planFromSetup, stepsNeeded, vdotFromWeeklyKm } from './setup';
+import { ageOn, ALL_STEPS, backgroundFromRuns, checkGoal, HEALTH_QUESTIONS, isOldEnough, kmInUnit, planFromSetup, stepsNeeded, vdotFromWeeklyKm } from './setup';
 import { avatarFileProblem } from '../data/avatar';
 import { addDays, parseYmd, ymd } from '../lib/format';
 
@@ -89,6 +89,22 @@ describe('first plan from setup', () => {
     expect(r.confidence).toBe('none');
     expect(r.plan!.sessions.some((s) => s.type === 'runwalk')).toBe(true);
     expect(r.plan!.basis).toMatch(/new to running/);
+    // Monday and Sunday are next to each other: the plan does not claim three days or rest days between
+    const adj = planFromSetup({ profile: { ...complete, daysAvailable: [0, 6], background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
+    expect(adj.basis).toMatch(/two days a week on the days you chose, which are next to each other/);
+    expect(adj.basis).not.toMatch(/rest days between/);
+    const ok = planFromSetup({ profile: { ...complete, daysAvailable: [1, 3, 5], background: { level: 'new', canRun10: false, walksRegularly: true } }, races: [], activities: [], today });
+    expect(ok.basis).toMatch(/three days a week with full rest days between/);
+  });
+  it('a beginner with a HYROX goal is told the plan builds running first, with the race date kept in view', () => {
+    const newRunner = { level: 'new' as const, canRun10: false, walksRegularly: true };
+    const r = planFromSetup({ profile: { ...complete, athleteType: 'both', goalType: 'race', goal: 'HYROX in 1:20:00', hyrox: { goalS: 4800, raceDate: '2027-04-03' }, background: newRunner }, races: [], activities: [], today });
+    expect(r.basis).toMatch(/has no HYROX sessions yet: HYROX training starts after it\. Your HYROX race on 3 Apr 2027 is kept\./);
+    const noDate = planFromSetup({ profile: { ...complete, athleteType: 'hyrox', goalType: 'race', goal: 'HYROX', background: newRunner }, races: [], activities: [], today });
+    expect(noDate.basis).toMatch(/HYROX training starts after it\.$/);
+    // A beginner without a HYROX goal reads nothing about HYROX
+    const plain = planFromSetup({ profile: { ...complete, background: newRunner }, races: [], activities: [], today });
+    expect(plain.basis).not.toMatch(/HYROX/);
   });
   it('a runner with only weekly distance gets estimated paces, labelled as such', () => {
     const r = planFromSetup({ profile: complete, races: [], activities: [], today });
@@ -127,5 +143,17 @@ describe('profile picture files', () => {
   it('rejects other types and large files with a clear message', () => {
     expect(avatarFileProblem(file('me.gif', 'image/gif', 1e5))).toMatch(/not supported/);
     expect(avatarFileProblem(file('me.jpg', 'image/jpeg', 11 * 1024 * 1024))).toMatch(/10 MB/);
+  });
+});
+
+describe('running background in miles', () => {
+  it('stored km come back as the miles the runner typed, so saving again changes nothing', () => {
+    for (const mi of [3, 9, 10, 25, 40, 62]) {
+      const km = Math.round(mi * 1.609);
+      expect(kmInUnit(km, 'mi')).toBe(mi);
+      expect(Math.round(kmInUnit(km, 'mi')! * 1.609)).toBe(km);
+    }
+    expect(kmInUnit(40, 'km')).toBe(40);
+    expect(kmInUnit(undefined, 'mi')).toBeUndefined();
   });
 });

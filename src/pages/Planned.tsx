@@ -8,7 +8,7 @@ import { StrengthCard } from '../components/StrengthSession';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
-import { DAY_SHORT, durationWords, localise, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
+import { DAY_SHORT, dist, durationWords, localise, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { keepPlanToday } from '../training/readiness';
 
@@ -50,9 +50,9 @@ export default function Planned() {
       {(params.get('swap') === 'easy' || params.get('swap') === 'rest') && s.status === 'planned' && readinessToday.swap?.sessionId === s.id && (
         <section className="card stack-sm rd-suggest" aria-labelledby="rd-suggest">
           <h2 id="rd-suggest" className="title">Readiness {readinessToday.score}: {readinessToday.word}</h2>
-          <p>{readinessToday.line} {readinessToday.swap.kind === 'easy' ? `Swap ${s.title.toLowerCase()} for an easy ${readinessToday.swap.km} km run?` : `Swap ${s.title.toLowerCase()} for rest?`}</p>
+          <p>{readinessToday.line} {readinessToday.swap.kind === 'easy' ? `Swap ${s.title.toLowerCase()} for an easy ${dist((readinessToday.swap.km ?? 0) * 1000, U, U === 'km' ? 0 : 1)} run?` : `Swap ${s.title.toLowerCase()} for rest?`}</p>
           <div className="row wrap">
-            <button className="btn btn-graphite" onClick={() => { swap(s.id, readinessToday.swap!.kind); nav('/'); }}>{readinessToday.swap.kind === 'easy' ? `Swap to easy ${readinessToday.swap.km} km` : 'Swap to rest'}</button>
+            <button className="btn btn-graphite" onClick={() => { swap(s.id, readinessToday.swap!.kind); nav('/'); }}>{readinessToday.swap.kind === 'easy' ? `Swap to easy ${dist((readinessToday.swap.km ?? 0) * 1000, U, U === 'km' ? 0 : 1)}` : 'Swap to rest'}</button>
             <button className="btn" onClick={() => { keepPlanToday(today); setParams({}, { replace: true }); }}>Keep plan</button>
           </div>
           <p className="caption">The change shows under Plan changes on Training, with the reason.</p>
@@ -117,7 +117,7 @@ export default function Planned() {
           <span className="label">Change this session</span>
           <div className="row wrap">
             <button className="btn btn-small" onClick={() => swap(s.id, 'shorter')}>Make it shorter</button>
-            {s.type !== 'easy' && s.type !== 'recovery' && <button className="btn btn-small" onClick={() => swap(s.id, 'easy')}>Easy run instead</button>}
+            {!['easy', 'recovery', 'runwalk', 'timetrial'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'easy')}>Easy run instead</button>}
             {['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type) && <button className="btn btn-small" onClick={() => swap(s.id, 'similar')}>Something similar</button>}
             <button className="btn btn-small" onClick={() => swap(s.id, 'treadmill')}>Treadmill version</button>
           </div>

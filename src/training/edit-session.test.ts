@@ -1,7 +1,7 @@
 // Change what Ritmo gives you: running sessions (update 3, §8)
 import { describe, expect, it } from 'vitest';
 import type { Plan, PlannedSession } from '../lib/types';
-import { applyEdit, impactCheck, paceNote, resetEdit } from './edit-session';
+import { amountInvalid, applyEdit, EDIT_RANGE, impactCheck, minEditKm, paceNote, resetEdit } from './edit-session';
 import { easyRun } from './generator';
 import { trainingPaces } from './fitness';
 
@@ -27,6 +27,29 @@ describe('editing a running session', () => {
     const rec = applyEdit(thu, { kind: 'recovery' }, P).session;
     expect(rec.type).toBe('recovery');
     expect(rec.title).toBe('Recovery run');
+  });
+  it('a target pace goes into the step text and the time, and survives a later distance edit', () => {
+    const named = { ...thu, title: 'Easy run (after the long run)' };
+    const paced = applyEdit(named, { pace: [230, 240] }, P).session;
+    expect(paced.paceTarget).toEqual({ minSPerKm: 230, maxSPerKm: 240 });
+    expect(paced.steps[0].detail).toMatch(/^at 3:50–4:00\/km/);
+    expect(paced.steps[0].pace).toEqual([230, 240]);
+    expect(paced.durationS).toBe(Math.round(8 * 235));
+    expect(paced.durationS).toBeLessThan(thu.durationS);
+    // Only the distance changes: the runner's pace and the session's name stay
+    const longer = applyEdit(paced, { distanceM: 12000 }, P);
+    expect(longer.session.paceTarget).toEqual({ minSPerKm: 230, maxSPerKm: 240 });
+    expect(longer.session.steps[0].detail).toMatch(/3:50–4:00\/km/);
+    expect(longer.session.durationS).toBe(Math.round(12 * 235));
+    expect(longer.session.title).toBe('Easy run (after the long run)');
+    // An edit with no custom pace still gets the usual pace for its type
+    const rec = applyEdit(applyEdit(thu, { distanceM: 10000 }, P).session, { kind: 'recovery' }, P).session;
+    expect(rec.paceTarget).toEqual({ minSPerKm: P.recovery[0], maxSPerKm: P.recovery[1] });
+    // A hard session: the reps' text carries the new pace
+    const hard = { ...fri, steps: fri.steps.map((x) => (x.kind === 'work' ? { ...x, detail: 'at 3:40–3:45/km, comfortably hard' } : x)) };
+    const h = applyEdit(hard, { pace: [240, 250] }, P).session;
+    expect(h.steps[1].detail).toBe('at 4:00–4:10/km, comfortably hard');
+    expect(h.durationS).toBe(hard.durationS);
   });
   it('a hard session keeps its reps when the distance changes', () => {
     const s = applyEdit(fri, { distanceM: 12000 }, P).session;
@@ -54,5 +77,34 @@ describe('editing a running session', () => {
     expect(impactCheck(plan, applyEdit(thu, { distanceM: 9000 }, P).session, { biggestWeekKm: 100 }).text).toMatch(/Threshold: 3 x 10 min is tomorrow/);
     // A shorter run is never a warning
     expect(impactCheck(plan, applyEdit(thu, { distanceM: 6000 }, P).session, { biggestWeekKm: 100 }).ok).toBe(true);
+  });
+});
+
+describe('typed amounts in the Edit sheet', () => {
+  it('0 km, 250 km and an empty field cannot be saved; the limits themselves can', () => {
+    expect([0, 0.5, 60.5, 250, undefined].map((x) => amountInvalid(x, 9.8, EDIT_RANGE.dist))).toEqual([true, true, true, true, true]);
+    expect([1, 9.8, 12, 60].map((x) => amountInvalid(x, 9.8, EDIT_RANGE.dist))).toEqual([false, false, false, false]);
+    expect([5, 245].map((x) => amountInvalid(x, 30, EDIT_RANGE.mins))).toEqual([true, true]);
+  });
+  it('the amount the session already had is always allowed', () => {
+    expect(amountInvalid(0.8, 0.8, EDIT_RANGE.dist)).toBe(false);
+    expect(amountInvalid(undefined, undefined, EDIT_RANGE.dist)).toBe(false);
+  });
+});
+
+describe('the shortest a hard session can be edited to', () => {
+  const base = { id: 't', date: '2026-11-17', phase: 'build', status: 'planned', title: 'x', focus: '', purpose: '', howItHelps: '', durationS: 3000 } as unknown as PlannedSession;
+  it('threshold 2 x 15 min: the reps (about 9 km) plus 1 km of warm-up and cool-down', () => {
+    const s = { ...base, type: 'threshold', distanceM: 13100, steps: [{ kind: 'warmup', label: 'Warm up', detail: '2 km easy', km: 2 }, { kind: 'work', label: '2 x 15 min threshold', detail: 'at 3:25–3:30/km', km: 9.1 }, { kind: 'cooldown', label: 'Cool down', detail: '2 km easy', km: 2 }] } as PlannedSession;
+    expect(minEditKm(s)).toBe(11);
+    // At the limit the rep step is left as planned and the steps still add up
+    const { session } = applyEdit(s, { distanceM: 11000 }, trainingPaces(50));
+    expect(session.steps[1].km).toBe(9.1);
+    expect(Math.abs(session.steps.reduce((a, x) => a + (x.km ?? 0), 0) - 11)).toBeLessThan(0.15);
+  });
+  it('easy runs and progressive long runs have no such limit', () => {
+    expect(minEditKm(easyRun('2026-11-17', 8, 'build', { paces: trainingPaces(50) }))).toBe(0);
+    const long = { ...base, type: 'long', distanceM: 22000, steps: [{ kind: 'easy', label: '18 km easy', detail: '', km: 18 }, { kind: 'steady', label: 'last 4 km steady', detail: '', km: 4 }] } as PlannedSession;
+    expect(minEditKm(long)).toBe(0);
   });
 });

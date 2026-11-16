@@ -62,6 +62,14 @@ export function startingStep(o: { pain: number; running: RunBehaviour }): number
   return 1;
 }
 
+/**
+ * "Update details (wrong place or type?)": the facts of the current injury are corrected in place. It is the same
+ * injury, so its days, step and start date stay, and nothing is filed as healed.
+ */
+export function correctDetails(inj: Injury, fix: { area: BodyArea; side?: 'left' | 'right'; onset: 'sudden' | 'gradual'; running: RunBehaviour; seenPhysio?: boolean }): Injury {
+  return { ...inj, area: fix.area, side: fix.side, onset: fix.onset, running: fix.running, seenPhysio: fix.seenPhysio ?? inj.seenPhysio };
+}
+
 /** Which day of the injury a date is (the report is day 1) */
 export const dayNumber = (inj: Pick<Injury, 'startedAt'>, date: string) => Math.round((parseYmd(date).getTime() - parseYmd(inj.startedAt).getTime()) / 86400000) + 1;
 

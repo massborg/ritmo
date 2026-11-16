@@ -341,6 +341,27 @@ describe('not feeling 100%', () => {
 describe('changing one session', () => {
   const plan = ok(gen({}, 80));
   const thr = plan.sessions.find((s) => s.type === 'threshold')!;
+  it('shorter: the step text says the new distances, so the steps add up to the session', () => {
+    const s = swapSession(plan, thr.id, 'shorter', P63).sessions.find((x) => x.id === thr.id)!;
+    const wu = s.steps.find((x) => x.kind === 'warmup')!, cd = s.steps.find((x) => x.kind === 'cooldown')!;
+    expect(wu.detail.startsWith(`${wu.km} km easy`)).toBe(true);
+    expect(cd.detail).toBe(`${cd.km} km easy`);
+    expect(wu.km).toBeLessThan(thr.steps.find((x) => x.kind === 'warmup')!.km!);
+    const long = plan.sessions.find((x) => x.steps.some((y) => /^last \d/.test(y.label)));
+    if (long) {
+      const l = swapSession(plan, long.id, 'shorter', P63).sessions.find((x) => x.id === long.id)!;
+      const fast = l.steps.find((y) => y.kind === 'steady')!;
+      expect(fast.label.startsWith(`last ${fast.km} km`)).toBe(true);
+      expect(l.steps[0].label.startsWith(`${l.steps[0].km} km`)).toBe(true);
+    }
+  });
+  it('treadmill twice adds one note; something similar after it keeps the cool-down and the note last', () => {
+    const once = swapSession(plan, thr.id, 'treadmill', P63);
+    const twice = swapSession(once, thr.id, 'treadmill', P63);
+    expect(twice.sessions.find((x) => x.id === thr.id)!.steps.filter((x) => x.label === 'Treadmill')).toHaveLength(1);
+    const sim = swapSession(twice, thr.id, 'similar', P63).sessions.find((x) => x.id === thr.id)!;
+    expect(sim.steps.map((x) => x.kind ?? x.label)).toEqual(['warmup', 'work', 'cooldown', 'Treadmill']);
+  });
   it('shorter, easy, similar and treadmill all keep distance and time consistent and log the change', () => {
     for (const k of ['shorter', 'easy', 'similar', 'treadmill'] as const) {
       const p = swapSession(plan, thr.id, k, P63);

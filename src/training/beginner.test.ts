@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Activity, PlannedSession, Profile, SessionFeedback } from '../lib/types';
-import { adaptPlan, buildStarterPlan, pickStarterDays } from './plan';
+import { adaptPlan, buildStarterPlan, daysSpaced, pickStarterDays, swapSession } from './plan';
 import { fitnessStage } from './stage';
 import { estimateFitness, hrSetup, predictTime, trainingPaces } from './fitness';
 import { readiness, loadSeries } from './load';
@@ -20,6 +20,14 @@ const run = (id: string, date: string, km: number, min: number, extra: Partial<A
 describe('starter plan', () => {
   const plan = buildStarterPlan({ today: monday, profile, canRun10: false, walksRegularly: true });
   const sessions = plan.sessions.filter((s) => s.type !== 'rest');
+
+  it('"Easy run instead" never turns a run/walk or time trial into a continuous run with a pace', () => {
+    for (const s of [sessions[0], sessions.find((x) => x.type === 'timetrial')!]) {
+      const after = swapSession(plan, s.id, 'easy', trainingPaces(40));
+      expect(after.sessions.find((x) => x.id === s.id)).toEqual(s);
+      expect(after.changes).toEqual(plan.changes);
+    }
+  });
 
   it('is 8 to 10 weeks, three days a week, with rest days between', () => {
     const weeks = Math.ceil((daysBetween(parseYmd(plan.startDate), parseYmd(plan.endDate)) + 1) / 7);
@@ -57,6 +65,11 @@ describe('starter plan', () => {
     expect(pickStarterDays([0, 1, 2, 3, 4, 5, 6])).toEqual([0, 2, 4]);
     expect(pickStarterDays([1, 2, 3])).toEqual([1, 3]);
     expect(pickStarterDays([5, 6])).toEqual([5, 6]);
+    // Whether the days used leave a rest day between each, Sunday to Monday included
+    expect(daysSpaced([0, 2, 4])).toBe(true);
+    expect(daysSpaced([5, 6])).toBe(false);
+    expect(daysSpaced(pickStarterDays([0, 6]))).toBe(false);
+    expect(daysSpaced([1, 3, 6])).toBe(true);
   });
 });
 
@@ -225,6 +238,13 @@ describe('analysis and coach for beginners', () => {
       expect(r.text).not.toMatch(/VDOT|predict(s|ed) \d|\d:\d\d:\d\d|you were \d+ s\/km/);
     }
     expect(localReply('How did my last run go?', ctx()).text).toMatch(/not logged a run yet/);
+  });
+  it('before the first session it says when the plan starts, not "There is no plan yet"', () => {
+    const sunday = addDays(parseYmd(s0.date), -2);
+    const r = localReply('What should I do today?', ctx({ today: sunday, todaySession: undefined, planStart: s0.date, planSessionsTotal: 0, weekAhead: [s0] }));
+    expect(r.text).not.toMatch(/no plan yet/);
+    expect(r.text).toMatch(/Your plan starts on .* with run\/walk.*nothing is planned today/);
+    expect(localReply('What should I do today?', ctx({ todaySession: undefined, planStart: undefined })).text).toMatch(/There is no plan yet/);
   });
   it('sends urgent symptoms to a doctor', () => {
     expect(localReply('I felt dizzy and had chest pain', ctx()).text).toMatch(/medical advice/);

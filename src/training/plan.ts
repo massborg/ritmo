@@ -18,6 +18,7 @@ export function swapLine(s: PlannedSession, run: Activity | undefined, sessions:
 }
 import type { TrainingPaces } from './fitness';
 import { easyRun, generatePlan, type GenInput, type PlanProblem, restDay } from './generator';
+import { relabelKm } from './session-view';
 
 
 export class PlanNotPossible extends Error {
@@ -116,7 +117,10 @@ export function adaptPlan(opts: {
       const ran = typeOf(pick.main);
       // Work reps entered or confirmed by the runner are the intervals themselves: the session was done as planned,
       // even if the average pace over the whole run (warm-up and jogs included) looks easy
-      const outcome = repsDone(pick) ? { status: 'done' as const } : sessionOutcome(s.type, ran);
+      // The same goes for a run the runner logged by hand against this session ("Log this session", "I've done this
+      // run"), with or without rep times. A watch run linked to the session is still judged by what it was.
+      const byHand = !!linked && linked.source === 'manual';
+      const outcome = repsDone(pick) || byHand ? { status: 'done' as const } : sessionOutcome(s.type, ran);
       const all = parts.flatMap((g) => g.parts);
       s.status = partly ? 'partial' : outcome.status;
       s.partial = partly ? { doneM: all.reduce((x, a) => x + a.distanceM, 0), doneS: all.reduce((x, a) => x + a.movingS, 0), ran } : undefined;
@@ -315,10 +319,13 @@ export function moveTargets(s: PlannedSession, today: Date): string[] {
 
 /** True when moving a hard session to toDate puts it next to another hard day (the runner may still choose to). */
 export function moveClash(plan: Plan, s: PlannedSession, toDate: string): boolean {
-  if (!KEY.includes(s.type)) return false;
-  const near = [ymd(addDays(parseYmd(toDate), -1)), ymd(addDays(parseYmd(toDate), 1))]
-    .map((x) => plan.sessions.find((y) => y.date === x && y.id !== s.id && y.date !== s.date));
-  return near.some((y) => y && KEY.includes(y.type));
+  // A hard day beside `date`, not counting the two days that trade places
+  const hardBeside = (date: string) => [-1, 1].map((d) => ymd(addDays(parseYmd(date), d)))
+    .some((x) => x !== s.date && x !== toDate && plan.sessions.some((y) => y.date === x && KEY.includes(y.type)));
+  if (KEY.includes(s.type) && hardBeside(toDate)) return true;
+  // The session it trades places with: a hard one that lands next to a hard day is the same clash
+  const b = plan.sessions.find((y) => y.date === toDate && y.id !== s.id);
+  return !!b && KEY.includes(b.type) && hardBeside(s.date);
 }
 
 export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan {
@@ -328,11 +335,14 @@ export function moveSession(plan: Plan, sessionId: string, toDate: string): Plan
   const b = sessions.find((s) => s.date === toDate);
   const from = a.date;
   a.date = toDate;
-  a.movedFrom = from;
+  // Back on the day it came from (an Undo): it is no longer "moved"
+  if (a.movedFrom === toDate) delete a.movedFrom; else a.movedFrom = from;
   a.status = 'planned'; // a session moved to another day is planned again (even if it was missed)
-  if (b) { b.date = from; b.movedFrom = toDate; }
+  if (b) { b.date = from; if (b.movedFrom === from) delete b.movedFrom; else b.movedFrom = toDate; }
   sessions.sort((x, y) => x.date.localeCompare(y.date));
-  const warn = b && KEY.includes(b.type) && KEY.includes(a.type) && Math.abs(daysBetween(parseYmd(from), parseYmd(toDate))) === 1;
+  // Either session, where it now is, hard and next to another hard day
+  const clash = (x?: PlannedSession) => !!x && KEY.includes(x.type) && sessions.some((y) => y.id !== x.id && KEY.includes(y.type) && Math.abs(daysBetween(parseYmd(x.date), parseYmd(y.date))) === 1);
+  const warn = clash(a) || clash(b);
   return {
     ...plan,
     sessions,
@@ -396,6 +406,12 @@ function timeTrialSession(date: string, phase: Phase): PlannedSession {
     ],
     distanceM: 5000, durationS: 40 * 60,
   };
+}
+
+/** True when every training day has a rest day before the next one, Sunday to Monday included */
+export function daysSpaced(days: number[]): boolean {
+  const d = [...new Set(days)].sort((x, y) => x - y);
+  return d.every((x, i) => (i + 1 < d.length ? d[i + 1] - x : d[0] + 7 - x) >= 2);
 }
 
 /** Pick up to three training days with at least one rest day between them. */
@@ -516,29 +532,43 @@ export function swapSession(plan: Plan, sessionId: string, kind: SwapKind, paces
   const before = `${s.title} (${(s.distanceM / 1000).toFixed(1)} km)`;
   if (kind === 'shorter') {
     const f = 0.7;
-    s.steps = s.steps.map((x) => (x.kind === 'warmup' || x.kind === 'cooldown' || x.kind === 'easy' || x.kind === 'steady' ? { ...x, km: x.km ? Math.round(x.km * f * 10) / 10 : x.km, durationS: x.durationS ? Math.round(x.durationS * f) : x.durationS, label: x.kind === 'easy' && x.km ? `${Math.round(x.km * f * 10) / 10} km easy` : x.label } : x));
+    // The scaled parts say their new distance, in the label and the detail ("1.4 km easy", "last 2.8 km steady")
+    s.steps = s.steps.map((x) => {
+      if (!(x.kind === 'warmup' || x.kind === 'cooldown' || x.kind === 'easy' || x.kind === 'steady')) return x;
+      const km = x.km ? Math.round(x.km * f * 10) / 10 : x.km;
+      return { ...x, km, durationS: x.durationS ? Math.round(x.durationS * f) : x.durationS, label: km ? relabelKm(x.label, km) : x.label, detail: km ? relabelKm(x.detail, km) : x.detail };
+    });
     s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || Math.round(s.distanceM * f);
     s.durationS = Math.round(s.steps.reduce((a, x) => a + (x.durationS ?? 0), 0)) || Math.round(s.durationS * f);
     s.title = `${s.title.replace(/ \(shorter\)$/, '')} (shorter)`;
   } else if (kind === 'rest') {
     Object.assign(s, { ...restDay(s.date, s.phase, 'Swapped to rest because your readiness was low. Recovery today makes the next sessions count.'), id: s.id, title: 'Rest day (swapped)' });
   } else if (kind === 'easy') {
+    // A run/walk or time-trial session has no distance to shorten into a continuous run, and a starter plan has no
+    // paces yet: "Make it shorter" is the easier option there
+    if (s.type === 'runwalk' || s.type === 'timetrial') return plan;
     Object.assign(s, { ...easyRun(s.date, Math.max(4, Math.round(s.distanceM / 1000 * 0.8)), s.phase, { paces }), id: s.id, title: 'Easy run (swapped)' });
   } else if (kind === 'treadmill') {
     s.title = `${s.title.replace(/ \(treadmill\)$/, '')} (treadmill)`;
-    s.steps = [...s.steps, { label: 'Treadmill', detail: 'Set a 1% incline to match outdoor effort. Use the same paces; for reps, change the speed at the start of each rep and give the belt a few seconds to catch up.' }];
+    // Tapped again: the note is already there
+    if (!s.steps.some((x) => x.label === 'Treadmill')) s.steps = [...s.steps, { label: 'Treadmill', detail: 'Set a 1% incline to match outdoor effort. Use the same paces; for reps, change the speed at the start of each rep and give the belt a few seconds to catch up.' }];
   } else {
+    // The warm-up and cool-down by what they are, not by position: a treadmill note may be the last step. It stays last.
+    const notes = s.steps.filter((x) => !x.kind && x.label === 'Treadmill');
+    const body = s.steps.filter((x) => !notes.includes(x));
+    const wu = body.find((x) => x.kind === 'warmup') ?? body[0];
+    const cd = body.find((x) => x.kind === 'cooldown') ?? body[body.length - 1];
     const alt: Record<string, string> = { threshold: 'vo2max', vo2max: 'threshold', tempo: 'threshold', hills: 'threshold', long: 'long', easy: 'easy', recovery: 'easy' };
     if (s.type === 'threshold' || s.type === 'tempo' || s.type === 'hills') {
       s.title = 'Fartlek: 8 x 2 min'; s.focus = 'Threshold'; s.type = 'threshold';
-      s.steps = [s.steps[0], { kind: 'work', label: '8 x 2 min comfortably hard', detail: `at about ${pace(paces.threshold[0], 'km', false)}–${pace(paces.threshold[1], 'km', false)}/km, 1 min easy jog between, on any route`, km: Math.round((16 * 60 / ((paces.threshold[0] + paces.threshold[1]) / 2) + 7 * 60 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 16 * 60 + 7 * 60, zones: [4] }, s.steps[s.steps.length - 1]];
+      s.steps = [wu, { kind: 'work', label: '8 x 2 min comfortably hard', detail: `at about ${pace(paces.threshold[0], 'km', false)}–${pace(paces.threshold[1], 'km', false)}/km, 1 min easy jog between, on any route`, km: Math.round((16 * 60 / ((paces.threshold[0] + paces.threshold[1]) / 2) + 7 * 60 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 16 * 60 + 7 * 60, zones: [4] }, cd, ...notes];
       s.purpose = 'A flexible version of today\'s threshold work that needs no track or measured route.';
     } else if (s.type === 'vo2max') {
       s.title = 'Hill reps: 8 x 90 s'; s.focus = 'Intervals';
-      s.steps = [s.steps[0], { kind: 'work', label: '8 x 90 s uphill', detail: 'hard but controlled on a steady hill, jog back down', km: Math.round((8 * 90 / ((paces.interval[0] + paces.interval[1]) / 2) * 0.85 + 8 * 90 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 8 * 180, zones: [5] }, s.steps[s.steps.length - 1]];
+      s.steps = [wu, { kind: 'work', label: '8 x 90 s uphill', detail: 'hard but controlled on a steady hill, jog back down', km: Math.round((8 * 90 / ((paces.interval[0] + paces.interval[1]) / 2) * 0.85 + 8 * 90 / ((paces.recovery[0] + paces.recovery[1]) / 2)) * 10) / 10, durationS: 8 * 180, zones: [5] }, cd, ...notes];
       s.purpose = 'Hill reps give a similar VO2 max stimulus with less impact, and work anywhere with a slope.';
     } else {
-      s.title = `${s.title} (any route)`;
+      s.title = `${s.title.replace(/ \(any route\)$/, '')} (any route)`;
     }
     void alt;
     s.distanceM = Math.round(s.steps.reduce((a, x) => a + (x.km ?? 0), 0) * 1000) || s.distanceM;

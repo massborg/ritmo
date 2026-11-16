@@ -44,11 +44,14 @@ const days = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00`).get
 
 /**
  * A pain check: the worse of this morning and during yesterday's exercises decides. Moving forward also needs the
- * stage's minimum days. Returns the new state and what it means, in words.
+ * stage's minimum days. Returns the new state and what it means, in words. Sharp pain, limping, or any other red flag
+ * raised by the same check (`hold`) never moves the plan forward, however low the number is.
  */
-export function applyCheck(c: CareState, check: CareCheck, plans: Pick<CarePlans, 'stages'>): { state: CareState; step: CareStep; message: string } {
+export function applyCheck(c: CareState, check: CareCheck, plans: Pick<CarePlans, 'stages'>, hold = false): { state: CareState; step: CareStep; message: string } {
   const pain = Math.max(check.morning, check.during ?? 0);
-  const step = careStep(pain);
+  const warned = hold || !!check.sharp || !!check.limping;
+  const byPain = careStep(pain);
+  const step: CareStep = byPain === 'forward' && warned ? 'stay' : byPain;
   const checks = [...c.checks.filter((x) => x.date !== check.date), check].sort((a, b) => a.date.localeCompare(b.date));
   const last = plans.stages.length - 1;
   const inStage = days(c.stageSince, check.date);
@@ -57,6 +60,8 @@ export function applyCheck(c: CareState, check: CareCheck, plans: Pick<CarePlans
   if (step === 'back') {
     stage = Math.max(0, c.stage - 1); stageSince = check.date;
     message = `Pain ${pain}/10: step back${c.stage > 0 ? ` to "${plans.stages[stage].name}"` : ''} and rest that area today. Running is replaced with rest; see a physio if it stays this high.`;
+  } else if (step === 'stay' && byPain === 'forward') {
+    message = `Pain ${pain}/10${check.limping ? ', but it makes you limp' : check.sharp ? ', but the pain is sharp' : ''}: stay at "${plans.stages[c.stage].name}" until you have been checked.`;
   } else if (step === 'stay') {
     message = `Pain ${pain}/10: stay at "${plans.stages[c.stage].name}" for now. Keep the exercises gentle.`;
   } else if (c.stage < last && inStage >= min) {

@@ -44,6 +44,7 @@ export default function Hyrox() {
   const [runs, setRuns] = useState<(number | undefined)[]>(Array(8).fill(undefined));
   const [stn, setStn] = useState<(number | undefined)[]>(Array(8).fill(undefined));
   const [roxS, setRoxS] = useState<number>();
+  const [badSplits, setBadSplits] = useState<string[]>([]);
   // A session left unfinished on this device (the app closed or the page reloaded)
   const key = liveKey(session?.user.id);
   const [unfinished, setUnfinished] = useState<Live>();
@@ -76,7 +77,10 @@ export default function Hyrox() {
   const moveSeg = (i: number, d: -1 | 1) => setCustom((l) => { const j = i + d; if (j < 0 || j >= l.length) return l; const n = [...l]; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const patchSeg = (i: number, p: Partial<SegmentPlan>) => setCustom((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const addRun = () => setCustom((l) => [...l, { kind: 'run', key: 'run', n: l.filter((x) => x.kind === 'run').length + 1, distanceM: RUN_M }]);
-  const raceOk = runs.filter(Boolean).length + stn.filter(Boolean).length >= 1;
+  // Splits typed with seconds or minutes over 59 are not times. They must be fixed before saving, or they would
+  // drop out of the total and the records without a word.
+  const splitErr = (id: string) => (e: 'seconds' | 'minutes' | undefined) => setBadSplits((b) => (!!e === b.includes(id) ? b : e ? [...b, id] : b.filter((x) => x !== id)));
+  const raceOk = runs.filter(Boolean).length + stn.filter(Boolean).length >= 1 && !badSplits.length;
   const saveRace = () => {
     const h = enteredRace({ id: uid(), date: raceDate, division, runs, stations: stn, roxzoneS: roxS, goalMs: goalS ? goalS * 1000 : undefined });
     saveHyrox(h);
@@ -170,12 +174,13 @@ export default function Hyrox() {
           <div className="race-splits">
             {STATIONS.map((s, i) => (
               <div key={s.key} className="race-split-row">
-                <label className="race-split"><span className="caption">Run {s.n}</span><DurationInput small id={`hx-run-${s.n}`} label={`Run ${s.n} time`} value={runs[i]} onChange={(v) => setRuns((a) => a.map((x, j) => (j === i ? v : x)))} /></label>
-                <label className="race-split"><span className="caption">{s.name}</span><DurationInput small id={`hx-st-${s.n}`} label={`${s.name} time`} value={stn[i]} onChange={(v) => setStn((a) => a.map((x, j) => (j === i ? v : x)))} /></label>
+                <label className="race-split"><span className="caption">Run {s.n}</span><DurationInput small id={`hx-run-${s.n}`} label={`Run ${s.n} time`} value={runs[i]} onError={splitErr(`run-${i}`)} onChange={(v) => setRuns((a) => a.map((x, j) => (j === i ? v : x)))} /></label>
+                <label className="race-split"><span className="caption">{s.name}</span><DurationInput small id={`hx-st-${s.n}`} label={`${s.name} time`} value={stn[i]} onError={splitErr(`st-${i}`)} onChange={(v) => setStn((a) => a.map((x, j) => (j === i ? v : x)))} /></label>
               </div>
             ))}
-            <label className="race-split"><span className="caption">Roxzone, total</span><DurationInput small id="hx-rox" label="Roxzone total time" value={roxS} onChange={setRoxS} /></label>
+            <label className="race-split"><span className="caption">Roxzone, total</span><DurationInput small id="hx-rox" label="Roxzone total time" value={roxS} onError={splitErr('rox')} onChange={setRoxS} /></label>
           </div>
+          {badSplits.length > 0 && <p className="caption" role="alert" style={{ color: 'var(--danger)' }}>Fix the times marked in red: seconds and minutes must be under 60.</p>}
           <button type="button" className="btn btn-block" disabled={!raceOk} onClick={saveRace}>Save race result</button>
         </section>
       )}

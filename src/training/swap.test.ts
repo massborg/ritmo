@@ -128,4 +128,15 @@ describe('a session logged with its reps is done, not swapped', async () => {
     const out = adaptPlan({ plan, activities: [ranEasy], feedback: [], profile: { name: 'R', units: 'km' } as never, today: new Date('2026-11-10T09:00:00Z'), typeOf: () => 'easy' as never, paces });
     expect(out.sessions[0].status).toBe('done');
   });
+  it('logged by hand against the session with no rep times: done as the runner said, not "ran an easy run instead"', () => {
+    const plan = { id: 'p', createdAt: '2026-11-01T00:00:00Z', startDate: '2026-11-02', endDate: '2026-12-06', phases: [], changes: [], sessions: [{ ...intervals, date: '2026-11-09' }] } as never;
+    const byHand = { ...run, id: 'm2', source: 'manual', streams: undefined, plannedSessionId: 's9', reps: undefined } as Activity;
+    const out = adaptPlan({ plan, activities: [byHand], feedback: [], profile: { name: 'R', units: 'km' } as never, today: new Date('2026-11-11T09:00:00Z'), typeOf: () => 'easy' as never, paces });
+    expect(out.sessions[0].status).toBe('done');
+    expect(out.sessions[0].swappedTo).toBeUndefined();
+    // A watch run linked to the session is still judged by what it was
+    const plan2 = { id: 'p', createdAt: '2026-11-01T00:00:00Z', startDate: '2026-11-02', endDate: '2026-12-06', phases: [], changes: [], sessions: [{ ...intervals, date: '2026-11-09' }] } as never;
+    const watch = { ...byHand, id: 'w1', source: 'upload' } as Activity;
+    expect(adaptPlan({ plan: plan2, activities: [watch], feedback: [], profile: { name: 'R', units: 'km' } as never, today: new Date('2026-11-11T09:00:00Z'), typeOf: () => 'easy' as never, paces }).sessions[0].status).toBe('swapped');
+  });
 });

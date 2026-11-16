@@ -2,7 +2,7 @@
 // never use Strava runs.
 import { describe, expect, it } from 'vitest';
 import type { Activity } from '../lib/types';
-import { fasterThanOwn, parseTime, resolvePbs, ritmoBests, shareableRuns, weekStreak } from './profile-pbs';
+import { fasterThanOwn, parseTime, resolvePbs, ritmoBests, shareableRuns, validPbTime, weekStreak } from './profile-pbs';
 
 const run = (id: string, day: string, km: number, secs: number, extra: Partial<Activity> = {}): Activity => ({ id, source: 'upload', sourceIds: { upload: id }, startTime: `${day}T07:00:00Z`, name: 'Run', sport: 'run', distanceM: km * 1000, durationS: secs, movingS: secs, detailScore: 3, importedAt: '', ...extra });
 const acts = [
@@ -57,5 +57,15 @@ describe('streak and run count (update 2, §13)', () => {
     expect(weekStreak(acts, new Date('2026-11-11T12:00:00'))).toBe(2);
     expect(weekStreak(acts, new Date('2026-11-17T12:00:00'))).toBe(2);
     expect(weekStreak(acts, new Date('2026-11-25T12:00:00'))).toBe(0);
+  });
+});
+
+describe('a typed PB time is checked when saving, not while typing', () => {
+  it('1:53 (15:38 with the last digit removed) is kept as typed but is not a time to show', () => {
+    expect(validPbTime(113)).toBeUndefined();
+    expect(validPbTime(undefined)).toBeUndefined();
+    expect(validPbTime(120)).toBe(120);
+    expect(validPbTime(938)).toBe(938);
+    expect(validPbTime(24 * 3600)).toBeUndefined();
   });
 });

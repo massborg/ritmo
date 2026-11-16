@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { predictTime, trainingPaces, vdotFromPerformance, bestEffort, hrZones, estimateFitness, hrSetup } from './fitness';
-import { buildPlan, adaptPlan, moveSession } from './plan';
+import { buildPlan, adaptPlan, moveClash, moveSession } from './plan';
 import { classify, analyse, splits } from './analysis';
 import { loadSeries, readiness } from './load';
 import { merge, isSameRun } from '../data/integration';
@@ -138,6 +138,22 @@ describe('analysis and adaptation', () => {
     const p = moveSession(s.plan, tomorrow.id, '2026-11-07');
     expect(p.sessions.find((x) => x.id === tomorrow.id)!.date).toBe('2026-11-07');
     expect(p.changes[p.changes.length - 1].reason).toBe('moved');
+  });
+  it('moving an easy run onto a hard day warns when the hard session lands next to another hard day; undo clears "moved from"', () => {
+    const mk = (date: string, type: string) => ({ id: date, date, type, title: type, status: 'planned', distanceM: 8000, durationS: 2400, steps: [] });
+    // Thu intervals, Fri easy, Sat long run
+    const plan = { changes: [], sessions: [mk('2026-11-18', 'easy'), mk('2026-11-19', 'vo2max'), mk('2026-11-20', 'easy'), mk('2026-11-21', 'long'), mk('2026-11-22', 'rest')] } as never as Parameters<typeof moveSession>[0];
+    const fri = plan.sessions[2];
+    expect(moveClash(plan, fri, '2026-11-21')).toBe(true);
+    // An easy run onto a rest day, or onto another easy day, is no clash
+    expect(moveClash(plan, fri, '2026-11-22')).toBe(false);
+    expect(moveClash(plan, fri, '2026-11-18')).toBe(false);
+    const moved = moveSession(plan, fri.id, '2026-11-21');
+    expect(moved.changes[0].summary).toContain('back-to-back');
+    expect(moved.sessions.find((x) => x.id === '2026-11-21')!.movedFrom).toBe('2026-11-21');
+    const undone = moveSession(moved, fri.id, '2026-11-20');
+    expect(undone.sessions.every((x) => !x.movedFrom)).toBe(true);
+    expect(moveSession(plan, fri.id, '2026-11-22').changes[0].summary).not.toContain('back-to-back');
   });
   it('builds a plan for a first 10K with low volume', () => {
     const plan = buildPlan({ today, profile: { ...SAMPLE_PROFILE, daysAvailable: [1, 3, 5] , longRunDay: 5 }, race: { id: 'r', name: 'First 10K', date: '2027-02-07', distanceM: 10000, courseType: 'road', priority: 'A' }, paces: trainingPaces(35), recentWeeklyKm: 12, longestRecentKm: 6 });

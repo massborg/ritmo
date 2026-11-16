@@ -33,6 +33,12 @@ describe('one session, one truth (update 3, §1.1)', () => {
     expect(f.steps[0].km! + f.steps[2].km!).toBeCloseTo(2, 1);
     expect(f.steps[0].detail).toMatch(/^1 km easy/);
   });
+  it('a progressive long run: "last 4 km steady" follows its scaled distance, so the steps add up', () => {
+    const long = { ...easy('2026-11-15', 22), type: 'long', distanceM: 26000, steps: [{ kind: 'easy', label: '18 km easy', detail: '18 km at 5:20–5:50/km', km: 18 }, { kind: 'steady', label: 'last 4 km steady', detail: 'at 4:40/km', km: 4 }] } as PlannedSession;
+    const f = fitSteps(long);
+    expect(f.steps.map((x) => x.label)).toEqual(['21.3 km easy', 'last 4.7 km steady']);
+    expect(f.steps.reduce((a, x) => a + (x.km ?? 0), 0)).toBeCloseTo(26, 1);
+  });
   it('a session that adds up is returned as is', () => {
     const s = easy('2026-11-13', 6);
     expect(fitSteps(s)).toBe(s);

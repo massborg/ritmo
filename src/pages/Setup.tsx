@@ -15,11 +15,11 @@ import { targetsFromGoal, type AthleteType } from '../hyrox/plan-goal';
 import { addDays, DAY_NAMES, DAY_SHORT, dist, duration, durationWords, longDate, MONTHS_LONG, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
 import type { BackgroundLevel, GoalType, Injury, Plan, Profile, Race, RunningBackground, TrainingSchedule } from '../lib/types';
 import {
-  ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
+  ageOn, backgroundFromRuns, checkGoal, CONSENT_VERSION, HEALTH_QUESTIONS, kmInUnit, MIN_AGE, planFromSetup, type SetupStep, stepsNeeded, vdotFromWeeklyKm,
 } from '../training/setup';
-import { vdotFromPerformance } from '../training/fitness';
+import { trainingPaces, vdotFromPerformance } from '../training/fitness';
 import type { PlanProblem } from '../training/generator';
-import { pickStarterDays } from '../training/plan';
+import { daysSpaced, pickStarterDays } from '../training/plan';
 
 const TITLES: Record<SetupStep, string> = {
   consent: 'Your data', basics: 'About you', health: 'Health check', background: 'Your running', goal: 'Your goal',
@@ -247,14 +247,15 @@ function BackgroundStep({ onNext }: StepProps) {
   const [months, setMonths] = useState<number | 0>(b0?.monthsSinceLastRan ?? 0);
   const [exDays, setExDays] = useState<number | undefined>(b0?.exerciseDaysPerWeek);
   const [exTypes, setExTypes] = useState<string[]>(b0?.exerciseTypes ?? []);
-  const [weeklyKm, setWeeklyKm] = useState<number | undefined>(b0?.weeklyKm ?? fromRuns?.weeklyKm);
-  const [longest, setLongest] = useState<number | undefined>(b0?.longestRecentKm ?? fromRuns?.longestRecentKm);
+  const unit = data.profile.units === 'mi' ? 'mi' : 'km';
+  // Stored in km; shown and typed in the runner's unit (converted back when saved)
+  const [weeklyKm, setWeeklyKm] = useState<number | undefined>(kmInUnit(b0?.weeklyKm ?? fromRuns?.weeklyKm, unit));
+  const [longest, setLongest] = useState<number | undefined>(kmInUnit(b0?.longestRecentKm ?? fromRuns?.longestRecentKm, unit));
   const r0 = b0?.recentRace && b0.recentRace !== 'unknown' ? b0.recentRace : undefined;
   const [raceM, setRaceM] = useState<number | 0>(r0?.distanceM ?? 0);
   const [raceS, setRaceS] = useState<number | undefined>(r0?.timeS);
   const [noRace, setNoRace] = useState(b0?.recentRace === 'unknown');
   const [err, setErr] = useState<string>();
-  const unit = data.profile.units === 'mi' ? 'mi' : 'km';
   const runner = level === 'sometimes' || level === 'regular' || level === 'racer';
 
   const save = () => {
@@ -273,7 +274,7 @@ function BackgroundStep({ onNext }: StepProps) {
       if (raceM && raceS) bg.recentRace = { distanceM: raceM, timeS: raceS };
       else if (noRace) bg.recentRace = 'unknown';
       else if (level === 'racer') { setErr('Add a recent race time, or choose "I do not have one".'); return; }
-      bg.filledFromRuns = !!fromRuns && weeklyKm === fromRuns.weeklyKm;
+      bg.filledFromRuns = !!fromRuns && weeklyKm === kmInUnit(fromRuns.weeklyKm, unit);
     }
     onNext({ background: bg });
   };
@@ -339,12 +340,16 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   const [goal, setGoal] = useState<GoalType | ''>(data.profile.goalType ?? (existingA || athlete === 'hyrox' ? 'race' : ''));
   const [isHyrox, setIsHyrox] = useState(athlete === 'hyrox' || (athlete === 'both' && !existingA));
   const [hx, setHx] = useState<HyroxPrefs>(data.profile.hyrox ?? {});
-  const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS) : data.profile.hyrox?.targets } });
+  // A HYROX time typed wrongly (1:75:00) holds Continue, so it is not dropped without a word
+  const [hxInvalid, setHxInvalid] = useState(false);
+  const hyroxPatch = (): Partial<Profile> => ({ hyrox: { ...data.profile.hyrox, ...hx, targets: hx.goalS ? targetsFromGoal(hx.goalS, undefined, thresholdS) : data.profile.hyrox?.targets } });
   const [race, setRace] = useState<Partial<Race>>(existingA ?? { name: '', distanceM: 10000, courseType: 'road', priority: 'A' });
   const [warn, setWarn] = useState<ReturnType<typeof checkGoal>>();
   const [err, setErr] = useState<string>();
   const opts = GOALS.filter((g) => g.for === 'all' || (beginner ? g.for === 'beginner' : g.for === 'runner'));
   const estVdot = vdot ?? (bg?.recentRace && bg.recentRace !== 'unknown' ? vdotFromPerformance(bg.recentRace.distanceM, bg.recentRace.timeS) : bg?.weeklyKm ? vdotFromWeeklyKm(bg.weeklyKm) : undefined);
+  // Threshold pace, the same value the plan uses: the HYROX run pace shown here is never faster than it
+  const thresholdS = estVdot ? ((t: [number, number]) => Math.round((t[0] + t[1]) / 2))(trainingPaces(estVdot).threshold) : undefined;
 
   const commit = (g: GoalType, r?: Partial<Race>) => {
     if (g === 'race' && isHyrox) { onNext({ goalType: 'race', goal: `HYROX${hx.goalS ? ` in ${duration(hx.goalS)}` : ''}`, athleteType: athlete === 'runner' ? 'hyrox' : athlete, ...hyroxPatch() }); return; }
@@ -354,7 +359,10 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
   };
   const submit = () => {
     if (!goal) { setErr('Choose a goal.'); return; }
-    if (goal === 'race' && isHyrox) { commit('race'); return; }
+    if (goal === 'race' && isHyrox) {
+      if (hxInvalid) { setErr('One of the times is not valid. Fix it, or clear it, to continue.'); return; }
+      commit('race'); return;
+    }
     if (goal === 'race' && !race.date) { setErr('Choose the race date.'); return; }
     const c = checkGoal({ goalType: goal, race, level: bg?.level ?? 'new', canRun10: bg?.canRun10, weeklyKm: bg?.weeklyKm, vdot: estVdot, today });
     if (!c.ok && !warn) { setWarn(c); return; }
@@ -373,7 +381,7 @@ function GoalStep({ onNext, vdot }: StepProps & { vdot?: number }) {
       )}
       {goal === 'race' && isHyrox && (
         <section className="card" aria-label="Your HYROX race">
-          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} />
+          <HyroxGoalFields value={hx} onChange={(p) => setHx((x) => ({ ...x, ...p }))} minDate={ymd(addDays(today, 1))} thresholdS={thresholdS} onInvalid={(bad) => { setHxInvalid(bad); if (!bad) setErr(undefined); }} />
         </section>
       )}
       {goal === 'race' && !isHyrox && (
@@ -424,7 +432,7 @@ function ScheduleStep({ onNext }: StepProps) {
           <legend className="label" style={{ marginBottom: 6 }}>Days you could run</legend>
           <div className="row wrap">{DAY_SHORT.map((d, k) => <button type="button" key={d} className="chip" aria-pressed={days.includes(k)} aria-label={DAY_NAMES[k]} onClick={() => setDays((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k].sort()))}>{d}</button>)}</div>
           {days.length >= 2
-            ? <p className="caption">{beginner ? `Your plan will use ${used.map((x) => DAY_NAMES[x]).join(', ').replace(/, ([^,]*)$/, ' and $1')}, with a rest day between each.` : `${days.length} days a week.`}</p>
+            ? <p className="caption">{beginner ? `Your plan will use ${used.map((x) => DAY_NAMES[x]).join(', ').replace(/, ([^,]*)$/, ' and $1')}${daysSpaced(used) ? ', with a rest day between each.' : '. These days are next to each other: add a day with a gap and your plan can put a rest day between runs.'}` : `${days.length} days a week.`}</p>
             : <p className="caption">Choose at least two days.</p>}
         </fieldset>
         {!beginner && days.length >= 2 && <Chips label="Long run day" value={ld} onChange={setLongDay} options={days.map((k) => ({ value: k, label: DAY_SHORT[k] }))} />}

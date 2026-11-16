@@ -397,6 +397,9 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
 .time-unit { font-size: 11px; line-height: 1.2; color: var(--ink-muted); }
 .time-entry.empty .time-num { color: var(--ink-muted); opacity: 0.55; }
 .time-entry.bad .time-box { border-color: var(--danger); }
+/* The boxes with their error line under them. The line takes the width of the boxes, so a row does not jump wider. */
+.time-entry-wrap { display: inline-flex; flex-direction: column; align-items: flex-start; align-self: flex-start; gap: 2px; min-width: 0; }
+.time-entry-err { color: var(--danger); width: 0; min-width: 100%; }
 .time-entry-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; font-size: 16px; cursor: text; }
 .time-entry:focus-within .time-box { border-color: var(--ink); }
 .time-entry:focus-within { outline: 2px solid var(--focus); outline-offset: 3px; }

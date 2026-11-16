@@ -3,7 +3,7 @@
 // never contradicts the run; an AI write-up, when enabled, may only reword it.
 import type { Activity, Plan, PlannedSession, Race, SessionType } from '../lib/types';
 import { isStrideLap } from './intervals';
-import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, type Units, ymd } from '../lib/format';
+import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, toUnit, type Units, ymd } from '../lib/format';
 import type { Analysis } from './analysis';
 import { TYPE_LABEL, STEADY_TYPES, EASY_FAMILY } from './analysis';
 import { predictTime, type TrainingPaces, vdotFromPerformance } from './fitness';
@@ -162,20 +162,21 @@ export function buildReport(o: {
 }
 
 /** "Your week in review": volume against plan, sessions done, one insight, the focus for next week. */
-export function weekReview(o: { weekStart: string; plan?: Plan; activities: Activity[]; units: Units }): { title: string; lines: string[] } | undefined {
-  const { weekStart, plan, activities } = o;
+export function weekReview(o: { weekStart: string; plan?: Plan; activities: Activity[]; units: Units; /** Today (yyyy-mm-dd): a session planned for today or later is not missed yet */ today?: string }): { title: string; lines: string[] } | undefined {
+  const { weekStart, plan, activities, units } = o;
   const end = ymd(addDays(parseYmd(weekStart), 6));
   const runs = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= weekStart && d <= end; });
   const sessions = (plan?.sessions ?? []).filter((s) => s.date >= weekStart && s.date <= end && s.type !== 'rest');
   if (!runs.length && !sessions.length) return undefined;
-  const km = runs.reduce((x, a) => x + a.distanceM, 0) / 1000;
-  const plannedKm = sessions.reduce((x, s) => x + s.distanceM, 0) / 1000;
+  // Distances in the runner's own unit, like the week bar above the card
+  const km = toUnit(runs.reduce((x, a) => x + a.distanceM, 0), units);
+  const plannedKm = toUnit(sessions.reduce((x, s) => x + s.distanceM, 0), units);
   const done = sessions.filter((s) => s.status === 'done').length;
-  const keyMissed = sessions.filter((s) => s.status !== 'done' && ['threshold', 'vo2max', 'long', 'tempo', 'hills'].includes(s.type));
+  const keyMissed = sessions.filter((s) => s.status !== 'done' && (!o.today || s.date < o.today || s.status === 'missed') && ['threshold', 'vo2max', 'long', 'tempo', 'hills'].includes(s.type));
   const next = (plan?.sessions ?? []).filter((s) => s.date > end && s.date <= ymd(addDays(parseYmd(end), 7)) && s.type !== 'rest');
   const nextKey = next.find((s) => ['threshold', 'vo2max', 'long', 'race'].includes(s.type));
   const lines = [
-    `${km.toFixed(1)} km${plannedKm ? ` of ${plannedKm.toFixed(0)} km planned` : ''} in ${runs.length} run${runs.length === 1 ? '' : 's'}.`,
+    `${km.toFixed(1)} ${units}${plannedKm ? ` of ${plannedKm.toFixed(0)} ${units} planned` : ''} in ${runs.length} run${runs.length === 1 ? '' : 's'}.`,
     sessions.length ? `${done} of ${sessions.length} planned sessions done.` : '',
     keyMissed.length ? `Missed: ${keyMissed.map((s) => s.title.toLowerCase()).join(', ')}. One missed session costs very little; do not try to make it up.` : sessions.length && done === sessions.length ? 'Every planned session done. That consistency is what builds fitness.' : '',
     nextKey ? `Next week's key session: ${nextKey.title.toLowerCase()} on ${parseYmd(nextKey.date).toLocaleDateString('en-GB', { weekday: 'long' })}.` : '',

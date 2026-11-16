@@ -73,8 +73,9 @@ export const stationExercises = (hardest: StationKey[], equipment: string[]): st
 /** Typical share of the station time each station takes, to turn a goal into a target per station */
 const STATION_SHARE: Record<StationKey, number> = { skierg: 0.125, sled_push: 0.09, sled_pull: 0.135, burpee_broad_jump: 0.14, row: 0.13, farmers_carry: 0.065, sandbag_lunges: 0.135, wall_balls: 0.18 };
 /** Targets from a goal time: the 1 km run, and each station (seconds). About 8% of the time is transitions. */
-export function targetsFromGoal(goalS: number, runShare = RUN_SHARE): Partial<Record<StationKey | 'run', number>> {
-  const out: Partial<Record<StationKey | 'run', number>> = { run: Math.round((goalS * runShare) / 8) };
+export function targetsFromGoal(goalS: number, runShare = RUN_SHARE, thresholdS = 0): Partial<Record<StationKey | 'run', number>> {
+  // The run target is never faster than threshold pace, when that is known: the same limit the plan uses
+  const out: Partial<Record<StationKey | 'run', number>> = { run: hyroxRunPace(goalS, runShare, thresholdS) };
   const stations = goalS * (1 - runShare - 0.08);
   for (const s of STATIONS) out[s.key] = Math.round((stations * STATION_SHARE[s.key]) / 5) * 5;
   return out;

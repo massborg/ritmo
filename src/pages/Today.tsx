@@ -164,6 +164,8 @@ export default function Today() {
   const [editing, setEditing] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
   const [hurts, setHurts] = useState(false);
+  // The report sheet opened from "Update details": it corrects the current injury instead of starting a new one
+  const [fixing, setFixing] = useState(false);
   const [daily, setDaily] = useState(false);
   const [healed, setHealed] = useState(false);
   const injuryNow = data.profile.body?.injury;
@@ -216,12 +218,18 @@ export default function Today() {
   const week = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
   const ranOn = (d: string) => data.activities.some((a) => a.startTime.slice(0, 10) === d);
   const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest'), missed: !!session && session.type !== 'rest' && d < t && !ranOn(d) }; });
-  const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U }) : undefined;
+  const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U, today: t }) : undefined;
   const runsHere = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = athlete.weekM;
+  // The "This week" tile is always the current week, whichever week is selected above: done and planned together
+  const nowWs = startOfWeek(today);
+  const nowWeek = Array.from({ length: 7 }, (_, i) => ymd(addDays(nowWs, i)));
+  const nowSessions = (plan?.sessions ?? []).filter((x) => nowWeek.includes(x.date) && x.type !== 'rest');
+  const nowPlannedM = nowSessions.reduce((x, p) => x + p.distanceM, 0);
+  const nowDurationBased = nowSessions.length > 0 && nowPlannedM === 0 || nowSessions.some((x) => x.type === 'runwalk' && !x.changedFor);
   const plannedM = weekSessions.reduce((x, p) => x + p.distanceM, 0);
   const durationBased = weekSessions.length > 0 && plannedM === 0 || weekSessions.some((x) => x.type === 'runwalk' && !x.changedFor); // a return-to-run step is not a starter plan
   const lastAn = last ? analysisFor(last) : undefined;
@@ -257,7 +265,7 @@ export default function Today() {
   const lastRunNote = last && lastAn && daysBetween(new Date(last.startTime), today) <= 7
     ? `From your run on ${longDate(new Date(last.startTime))}: ${lastAn.patternNotes[0] ? `${lastAn.patternNotes[0]} ${lastAn.improve[0]}` : lastAn.wentWell[0]}`
     : undefined;
-  const insight = recentChange?.summary ?? lastRunNote;
+  const insight = (recentChange ? localise(recentChange.summary, U) : undefined) ?? lastRunNote;
 
   const sessionAmount = (x: PlannedSession) => x.distanceM > 0
     ? <div><span className="stat-xl">{plannedNum(x.distanceM, U)}</span><span className="label"> {U}</span></div>
@@ -296,7 +304,7 @@ export default function Today() {
             );
           })()}
           <SyncNote />
-          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} />}
+          {!durationBased && <WeekBar doneM={week.reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} />}
         </div>
       )}
       {/* Strava shoes not matched to a Ritmo shoe yet: asked once (also on Profile › Shoes) */}
@@ -316,10 +324,10 @@ export default function Today() {
           <button className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => reopenInjury(backAgain.id, 2)}>It's back</button>
         </section>
       )}
-      {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setHurts(true); }} />}
+      {daily && injuryNow && <InjuryCheckinSheet injury={injuryNow} onClose={() => setDaily(false)} onHealed={() => { setDaily(false); setHealed(true); }} onUpdateDetails={() => { setDaily(false); setFixing(true); setHurts(true); }} />}
       {healed && <HealedSheet onClose={() => setHealed(false)} />}
       {hasFlag('body') && isToday && <CareCard />}
-      {hurts && <BodyCheckinSheet onClose={() => setHurts(false)} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
+      {hurts && <BodyCheckinSheet onClose={() => { setHurts(false); setFixing(false); }} editing={fixing && !!injuryNow} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
         <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
@@ -481,9 +489,9 @@ export default function Today() {
 
       <SectionTitle action={<Link to="/you" className="btn btn-ghost btn-small">You</Link>}>At a glance</SectionTitle>
       <div className="tiles">
-        {durationBased
-          ? <Tile to="/#month" label="This week" value={weekSessions.filter((x) => x.status === 'done').length} unit={`of ${weekSessions.length}`} sub="sessions done" />
-          : <Tile to="/you" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={plannedM > 0 ? `of ${toUnit(plannedM, U).toFixed(0)} ${U} planned` : 'run so far'} />}
+        {nowDurationBased
+          ? <Tile to="/#month" label="This week" value={nowSessions.filter((x) => x.status === 'done').length} unit={`of ${nowSessions.length}`} sub="sessions done" />
+          : <Tile to="/you" label="This week" value={toUnit(doneM, U).toFixed(1)} unit={U} sub={nowPlannedM > 0 ? `of ${toUnit(nowPlannedM, U).toFixed(0)} ${U} planned` : 'run so far'} />}
         {aRaceReadiness && <Tile to={aRace ? `/race/${aRace.id}` : undefined} label="Predicted finish" value={duration(aRaceReadiness.predictedS)} sub={aRace?.goalS ? `Goal ${duration(aRace.goalS)}` : undefined} />}
         {fitness && stage.predictions && <Tile to="/you" label="Fitness (VDOT)" value={fitness.vdot.toFixed(1)} sub={aRaceReadiness ? `Race preparation ${aRaceReadiness.score}` : undefined} />}
         {!stage.predictions && <Tile to="/you" label="Runs logged" value={athlete.runCount} sub={athlete.runCount ? `${dist(athlete.totalM, U)} in total` : 'Your first one is next'} />}

@@ -3,7 +3,7 @@
 // show the same number, band word and sentence. It only ever suggests: nothing in the plan changes unless the runner
 // taps a swap.
 import type { Activity, PlannedSession, Profile, Race, SessionFeedback, SessionType } from '../lib/types';
-import { parseYmd, ymd } from '../lib/format';
+import { dist, parseYmd, ymd } from '../lib/format';
 import { EASY_FAMILY, QUALITY_TYPES, SESSION_SHORT } from './analysis';
 import { acwr, type LoadDay, type Readiness } from './load';
 import { type TrainingPaces, zoneOf } from './fitness';
@@ -91,7 +91,7 @@ export function readinessScore(o: {
     loadEffect = Math.max(-25, ratioEff + formEff);
     const value = loadEffect <= -15 ? 'High' : loadEffect < 0 ? 'Building' : loadEffect > 0 ? 'Fresh' : 'Steady';
     const parts = [`Form ${tsb >= 0 ? '+' : ''}${Math.round(tsb)}`];
-    if (ratio.chronicWeekly > 0) parts.push(`${(ratio.acute / 1000).toFixed(0)} km in 7 days against ${(ratio.chronicWeekly / 1000).toFixed(0)} km a week (ratio ${ratio.ratio.toFixed(2)})`);
+    if (ratio.chronicWeekly > 0) parts.push(`${dist(ratio.acute, profile.units, 0)} in 7 days against ${dist(ratio.chronicWeekly, profile.units, 0)} a week (ratio ${ratio.ratio.toFixed(2)})`);
     factors.push({ key: 'load', name: 'Training load', value, tone: loadEffect <= -15 ? 'bad' : loadEffect < 0 ? 'warn' : 'good', effect: loadEffect, explain: `${parts.join(', ')}.` });
   }
 
@@ -188,13 +188,14 @@ export function readinessScore(o: {
     ? (quality ? `Good day for ${short}.` : running ? 'Ready for today\'s run.' : 'Rest day: you\'re absorbing training well.')
     : band === 'easy'
       ? (quality ? `${cap(short)} may feel hard today.` : 'Keep today relaxed and easy.')
-      : (running ? 'Rest or a gentle walk today.' : 'Rest is the right call today.');
+      // A race cannot be swapped to rest: no rest advice it cannot act on, the runner decides
+      : (s?.type === 'race' ? 'Race day: listen to your body.' : running ? 'Rest or a gentle walk today.' : 'Rest is the right call today.');
   const worst = factors.filter((f) => f.effect < 0).sort((a, b) => a.effect - b.effect)[0];
   const lead = band === 'hard' ? 'You are fresh and recovering well.' : band === 'easy' ? 'Some fatigue is showing, so keep the effort down.' : 'Your body needs recovery today.';
   const summary = `${lead} ${worst ? worst.explain : 'Nothing is holding you back.'}`;
 
   let swap: ReadinessScore['swap'];
-  if (s && band === 'recover' && running) swap = { kind: 'rest', sessionId: s.id, label: 'Swap to rest' };
+  if (s && band === 'recover' && running && s.type !== 'race') swap = { kind: 'rest', sessionId: s.id, label: 'Swap to rest' };
   else if (s && band === 'easy' && quality) {
     const km = Math.max(4, Math.round((s.distanceM / 1000) * 0.8));
     swap = { kind: 'easy', sessionId: s.id, label: 'Swap to easy', km };

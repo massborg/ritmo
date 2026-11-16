@@ -31,7 +31,7 @@ import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyr
 import { doubleProgression, freeName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
-import { checkIn as injuryCheck, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
+import { checkIn as injuryCheck, correctDetails, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
 import { canRestore, mergeRebuild } from '../training/rebuild';
 import { adaptPlan, buildStarterPlan, dropMissed, moveSession as movePlanSession, swapSession, type SwapKind } from '../training/plan';
 import { generatePlan, type PlanProblem } from '../training/generator';
@@ -145,7 +145,7 @@ interface Ctx extends Derived {
   moveSession: (sessionId: string, toDate: string) => void;
   linkRunToSession: (activityId: string, sessionId: string) => void;
   /** Body: save a check-in (red flags are worked out here, by rules); returns the red flags found */
-  addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean }) => string[];
+  addBodyCheckin: (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean; editing?: boolean }) => string[];
   /** The short daily check-in for the injury being looked after (update 4): applies the progression rules */
   /** Mark a part of a run on Splits as warm-up, stride, interval, recovery or cool-down (undefined: back to automatic).
    *  Kept with the run; a correction about strides also tunes what counts as a stride for this runner. */
@@ -698,7 +698,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return id;
   };
 
-  const addBodyCheckin = (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean }): string[] => {
+  const addBodyCheckin = (c: Omit<BodyCheckin, 'id' | 'at' | 'redFlags'>, report?: { running: RunBehaviour; seenPhysio?: boolean; editing?: boolean }): string[] => {
     const prev = data.profile.body ?? { checkins: [] };
     const flags = redFlags(c, prev.checkins);
     const entry: BodyCheckin = { ...c, id: uid(), at: new Date().toISOString(), redFlags: flags };
@@ -713,7 +713,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The first report of an injury (update 4): it becomes the injury Ritmo looks after, at the step the answers
       // allow. A red flag pauses running instead; a report of 0/10 starts nothing.
       let injury = cur.injury, injuryHistory = cur.injuryHistory;
-      if (report && !flags.length && c.pain >= 1 && !same) {
+      if (report?.editing && cur.injury) {
+        // "Update details (wrong place or type?)": the place or type of the current injury is corrected. It stays
+        // the same injury: no healed entry in the history, and the days, step and start date are kept.
+        injury = correctDetails(cur.injury, { area: c.area, side: c.side, onset: c.onset, running: report.running, seenPhysio: report.seenPhysio });
+      } else if (report && !flags.length && c.pain >= 1 && !same) {
         if (cur.injury) injuryHistory = [...(injuryHistory ?? []), heal(cur.injury, 'straight', new Date()).past];
         const st = startingStep({ pain: c.pain, running: report.running });
         injury = { id: entry.id, area: c.area, side: c.side, startedAt: t, onset: c.onset, running: report.running, seenPhysio: report.seenPhysio, days: [{ date: t, pain: c.pain }], step: st, stepSince: t };

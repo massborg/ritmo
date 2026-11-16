@@ -29,6 +29,16 @@ describe('explain this week', () => {
   it('explains a lighter week', () => {
     expect(explainWeek(plan, '2026-11-16', [], 'km')).toContain('It is a lighter week at about 40 km');
   });
+  it('a plan that starts part-way through its first week describes what is scheduled, not the full-week figure', () => {
+    const part: Plan = { ...plan, startDate: '2026-11-12', weeks: [{ start: '2026-11-09', targetKm: 92, phase: 'build' }], sessions: [s('2026-11-12', 'easy', 15), s('2026-11-14', 'long', 22), s('2026-11-15', 'easy', 4)] };
+    const t = explainWeek(part, '2026-11-09', [], 'km')!;
+    expect(t).toContain('About 41 km in 3 runs.');
+    expect(t).not.toContain('92');
+    // Only a rest day left in the week: no "about N km in 0 runs"
+    const rest = explainWeek({ ...part, startDate: '2026-11-15', sessions: [s('2026-11-15', 'rest', 0)] }, '2026-11-09', [], 'km')!;
+    expect(rest).not.toMatch(/in 0 runs|About/);
+    expect(rest).toContain('The rest day is part of the plan');
+  });
   it('says nothing for a week without sessions', () => {
     expect(explainWeek(plan, '2027-03-01', [], 'km')).toBeUndefined();
   });

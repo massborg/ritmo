@@ -33,6 +33,13 @@ describe('readiness score', () => {
     expect(r.lessAccurate).toBe(true);
     expect(r.factors.find((f) => f.key === 'checkin')?.value).toBe('Not logged');
   });
+  it('the load line uses the runner\'s unit', () => {
+    const km = readinessScore({ now, series: day(-5), activities: month, feedback: [], profile, typeOf }).factors.find((f) => f.key === 'load')!.explain;
+    const mi = readinessScore({ now, series: day(-5), activities: month, feedback: [], profile: { ...profile, units: 'mi' }, typeOf }).factors.find((f) => f.key === 'load')!.explain;
+    expect(km).toMatch(/\d+ km in 7 days against \d+ km a week/);
+    expect(mi).toMatch(/\d+ mi in 7 days against \d+ mi a week/);
+    expect(mi).not.toMatch(/km/);
+  });
   it('never shows a score built on broken inputs', () => {
     const r = readinessScore({ now, series: day(-362, 136), activities: month, feedback: [], profile, typeOf, todaySession: intervals });
     expect(r.score).toBeUndefined();
@@ -57,6 +64,14 @@ describe('readiness score', () => {
     expect(r.swap).toMatchObject({ kind: 'rest', label: 'Swap to rest' });
     expect(r.factors.find((f) => f.key === 'limit')?.explain).toMatch(/unwell/);
     expect(sum(r)).toBe(25);
+  });
+  it('on race day a Recover score offers no swap to rest (a race cannot be swapped) and has its own line', () => {
+    const p = { ...profile, illnessUntil: '2026-11-11', checkins: [{ date: '2026-11-09', sleep: 5, legs: 5, energy: 5 }] };
+    const race = { ...intervals, type: 'race', title: 'Race · Safi 5K AM', distanceM: 5000 } as PlannedSession;
+    const r = readinessScore({ now, series: day(5), activities: month, feedback: [], profile: p, typeOf, todaySession: race });
+    expect(r.word).toBe('Recover');
+    expect(r.swap).toBeUndefined();
+    expect(r.line).toBe('Race day: listen to your body.');
   });
   it('a hard session under 24 hours ago lowers the score strongly; 24–48 hours slightly', () => {
     const fresh = readinessScore({ now, series: day(0), activities: [...month, run('t', 0.5, 12, 50, { name: 'Threshold' })], feedback: [], profile, typeOf });

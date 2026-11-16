@@ -10,7 +10,8 @@ import { StatusLine } from './ui';
 import { BODY_AREAS, type BodyArea, DISCLAIMER, PREHAB, prehabFor, type PainWhen, RTR_STEPS, type Sign, SIGN_LABEL, WHEN_LABEL } from '../training/body';
 import { RUN_BEHAVIOUR, type RunBehaviour } from '../training/injury';
 
-export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; start?: { area: BodyArea; side?: 'left' | 'right' } }) {
+/** `editing`: opened from "Update details (wrong place or type?)", so the answers correct the current injury instead of starting a new one */
+export function BodyCheckinSheet({ onClose, start, editing }: { onClose: () => void; start?: { area: BodyArea; side?: 'left' | 'right' }; editing?: boolean }) {
   const { addBodyCheckin, data, updateBody, plan } = useApp();
   const [area, setArea] = useState<BodyArea | ''>(start?.area ?? '');
   const [side, setSide] = useState<'left' | 'right' | ''>(start?.side ?? '');
@@ -73,7 +74,7 @@ export function BodyCheckinSheet({ onClose, start }: { onClose: () => void; star
         if (first) updateBody({ disclaimerSeenAt: new Date().toISOString() });
         // How it behaves when running: as answered, or read from "When does it hurt?"
         const run: RunBehaviour = running || (when.includes('worse-running') ? 'worse' : when.includes('start-eases') ? 'eases' : 'same');
-        setResult(addBodyCheckin({ area: area as BodyArea, side: side || undefined, pain, when, onset: onset as 'gradual' | 'sudden', trend: trend || undefined, signs }, { running: run, seenPhysio: physio ? physio === 'yes' : undefined }));
+        setResult(addBodyCheckin({ area: area as BodyArea, side: side || undefined, pain, when, onset: onset as 'gradual' | 'sudden', trend: trend || undefined, signs }, { running: run, seenPhysio: physio ? physio === 'yes' : undefined, editing: editing || undefined }));
       }}>See what to do</button>}>
       {first && <StatusLine kind="info">{DISCLAIMER}</StatusLine>}
       <Chips<BodyArea | ''> label="Where?" value={area} onChange={setArea} options={BODY_AREAS.map((a) => ({ value: a, label: a }))} />

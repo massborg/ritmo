@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyBody, injuryMode } from './body';
-import { canReopen, checkIn, dayNumber, feelsHealed, heal, reopen, startingStep, testDue, testFor, type Injury } from './injury';
+import { canReopen, checkIn, correctDetails, dayNumber, feelsHealed, heal, reopen, startingStep, testDue, testFor, type Injury } from './injury';
 import type { Plan, PlannedSession } from '../lib/types';
 
 const today = new Date('2026-11-09T09:00:00');
@@ -118,5 +118,14 @@ describe('"It feels healed" and "It\'s back"', () => {
     expect(again.step).toBe(3); expect(again.days).toHaveLength(1); expect(again.area).toBe('Ankle');
     const tooLate = new Date(today); tooLate.setDate(tooLate.getDate() + 31);
     expect(canReopen(h.past, tooLate)).toBe(false);
+  });
+});
+
+describe('injury: "Update details" corrects the place of the same injury', () => {
+  it('a corrected area keeps the days, step and start date', () => {
+    const i = ankle({ startedAt: day(-1), days: [{ date: day(-1), pain: 2 }, { date: day(0), pain: 2 }], seenPhysio: true });
+    const fixed = correctDetails(i, { area: 'Knee', side: 'right', onset: 'gradual', running: 'eases' });
+    expect(fixed).toMatchObject({ id: 'i1', area: 'Knee', side: 'right', onset: 'gradual', running: 'eases', seenPhysio: true, startedAt: day(-1), step: 2, stepSince: i.stepSince });
+    expect(fixed.days).toEqual(i.days);
   });
 });

@@ -7,6 +7,7 @@ import { Activity, BedDouble, CloudSun, Flag, Gauge, HeartPulse, Info, Smile, St
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { CheckInCard, ReadinessBar } from '../components/training';
+import { dist } from '../lib/format';
 import { keepPlanToday, keptPlanToday } from '../training/readiness';
 import type { FactorKey } from '../training/readiness';
 
@@ -17,7 +18,7 @@ const BAND_COLOUR = { recover: 'var(--danger)', easy: 'var(--warning)', hard: 'v
 function Ring({ score, colour }: { score: number; colour: string }) {
   const r = 46, c = 2 * Math.PI * r;
   return (
-    <svg width="112" height="112" viewBox="0 0 112 112" role="img" aria-label={`Readiness ${score} out of 100`}>
+    <svg width="112" height="112" viewBox="0 0 112 112" role="img" style={{ flex: 'none' }} aria-label={`Readiness ${score} out of 100`}>
       <circle cx="56" cy="56" r={r} fill="none" stroke="var(--surface-sunken)" strokeWidth="10" />
       <circle cx="56" cy="56" r={r} fill="none" stroke={colour} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 56 56)" />
       <text x="56" y="64" textAnchor="middle" style={{ font: '500 30px var(--font-mono)', fill: 'var(--ink)' }}>{score}</text>
@@ -26,7 +27,7 @@ function Ring({ score, colour }: { score: number; colour: string }) {
 }
 
 export default function ReadinessPage() {
-  const { readinessToday: r, today, swap, plan } = useApp();
+  const { readinessToday: r, today, swap, plan, data } = useApp();
   const nav = useNavigate();
   const [checkin, setCheckin] = useState(false);
   const [kept, setKept] = useState(() => keptPlanToday(today));
@@ -55,7 +56,7 @@ export default function ReadinessPage() {
               <div className="stack-sm">
                 <p className="caption">Today's plan is {session.title.toLowerCase()}. {r.line}</p>
                 <div className="row wrap">
-                  <button className="btn btn-graphite" onClick={() => { swap(r.swap!.sessionId, r.swap!.kind); nav('/'); }}>{r.swap.kind === 'easy' ? `Swap to easy ${r.swap.km} km` : 'Swap to rest'}</button>
+                  <button className="btn btn-graphite" onClick={() => { swap(r.swap!.sessionId, r.swap!.kind); nav('/'); }}>{r.swap.kind === 'easy' ? `Swap to easy ${dist((r.swap.km ?? 0) * 1000, data.profile.units, data.profile.units === 'km' ? 0 : 1)}` : 'Swap to rest'}</button>
                   <button className="btn" onClick={() => { keepPlanToday(today); setKept(true); }}>Keep plan</button>
                 </div>
                 <p className="caption">A swap shows under Plan changes on Training, with the reason.</p>

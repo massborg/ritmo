@@ -24,13 +24,17 @@ export function explainWeek(plan: Plan, weekStart: string, races: Race[], units:
   const prev = plan.weeks?.find((w) => w.start === ymd(addDays(parseYmd(weekStart), -7)));
   const phase = week?.phase ?? sessions[0].phase;
   const runs = sessions.filter((s) => s.type !== 'rest' && s.distanceM > 0);
-  const km = week?.targetKm ?? runs.reduce((x, s) => x + s.distanceM / 1000, 0);
+  // A plan that starts part-way through its first week stores the full-week figure for it: describe what is
+  // really scheduled on the days the plan covers
+  const scheduledKm = runs.reduce((x, s) => x + s.distanceM / 1000, 0);
+  const partWeek = plan.startDate > weekStart;
+  const km = partWeek ? scheduledKm : week?.targetKm ?? scheduledKm;
   const D = (k: number) => dist(k * 1000, units, 0);
   const out: string[] = [`This is ${PHASE[phase]}.`];
 
   // Volume, compared with last week
-  if (week?.cutback) out.push(`It is a lighter week at about ${D(km)}: every few weeks the load drops so the training of the last weeks turns into fitness instead of fatigue.`);
-  else if (prev && prev.targetKm > 0 && phase !== 'taper' && phase !== 'race') {
+  if (!runs.length) { /* nothing to run this week: no "about N km in 0 runs" */ } else if (week?.cutback && !partWeek) out.push(`It is a lighter week at about ${D(km)}: every few weeks the load drops so the training of the last weeks turns into fitness instead of fatigue.`);
+  else if (!partWeek && prev && prev.targetKm > 0 && phase !== 'taper' && phase !== 'race') {
     const ch = Math.round(((km - prev.targetKm) / prev.targetKm) * 100);
     out.push(ch >= 3 ? `Volume goes up to about ${D(km)}, ${ch}% more than last week, a step small enough to absorb.`
       : ch <= -3 ? `Volume comes down to about ${D(km)}${prev.cutback ? '' : ', a little less than last week'}.`

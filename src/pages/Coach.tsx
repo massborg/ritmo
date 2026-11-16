@@ -46,7 +46,8 @@ export default function Coach() {
   const daysToRace = aRace ? Math.round((parseYmd(aRace.date).getTime() - parseYmd(t).getTime()) / 86400000) : undefined;
   const U = data.profile.units;
   const niggleNow = data.mode === 'real' ? activeNiggle(data.profile.body, today) : undefined;
-  const nextQ = plan?.sessions.find((x) => x.date > t && x.status === 'planned' && QUALITY_TYPES.includes(x.type));
+  // Only a quality session in the coming week: the chip names it by weekday alone
+  const nextQ = plan?.sessions.find((x) => x.date > t && x.date <= ymd(addDays(today, 7)) && x.status === 'planned' && QUALITY_TYPES.includes(x.type));
   const SUGGESTIONS = body ? ['Can I run with sore calves after intervals?', 'My knee hurts on downhills, what should I change?', 'How do I come back after 2 weeks off?']
     : suggestions(todaySession, data.activities.length > 0, { race: aRace?.name, nextQuality: nextQ ? { day: DAY_NAMES[weekday(parseYmd(nextQ.date))], short: SESSION_SHORT[nextQ.type] ?? nextQ.title.toLowerCase() } : undefined, niggle: niggleNow ? areaLabel(niggleNow) : undefined });
   const r = readinessToday;
