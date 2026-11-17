@@ -53,6 +53,15 @@ export function fitSteps(s: PlannedSession): PlannedSession {
 }
 
 /** The plan with every session's steps matching its distance. */
+/**
+ * Distance run this week that counts against the plan's week target. A plan that started part-way through the week
+ * has a target for the remaining days only, so only runs since it started count (like for like): the same figure
+ * on Training, on the Coach card and in the coach's answers.
+ */
+export function weekDoneForPlan(acts: { startTime: string; distanceM: number }[], planStart: string | undefined, weekStart: string, today: string): number {
+  const from = planStart && planStart > weekStart && planStart <= today ? planStart : weekStart;
+  return acts.reduce((m, a) => { const d = a.startTime.slice(0, 10); return d >= from && d <= today ? m + a.distanceM : m; }, 0);
+}
 export function fitPlan(p: Plan): Plan {
   const sessions = p.sessions.map(fitSteps);
   return sessions.some((s, i) => s !== p.sessions[i]) ? { ...p, sessions } : p;

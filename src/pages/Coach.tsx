@@ -103,7 +103,7 @@ export default function Coach() {
             </>
           )}
           <div className="coach-week">
-            <div><span className="stat">{toUnit(athlete.weekM, U).toFixed(1)}{plannedM > 0 ? <small> / {plannedNum(plannedM, U)}</small> : null}</span><span className="caption">{U} this week</span></div>
+            <div><span className="stat">{toUnit(plannedM > 0 ? athlete.weekPlanM : athlete.weekM, U).toFixed(1)}{plannedM > 0 ? <small> / {plannedNum(plannedM, U)}</small> : null}</span><span className="caption">{U} this week</span></div>
             <div><span className="stat">{doneSessions}<small> / {weekSessions.length}</small></span><span className="caption">sessions</span></div>
             <div><span className="stat">{daysToRace ?? '–'}</span><span className="caption">{aRace ? `days to ${aRace.name}` : 'no race yet'}</span></div>
           </div>

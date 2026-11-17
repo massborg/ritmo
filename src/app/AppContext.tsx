@@ -24,7 +24,7 @@ import { asReadiness, readinessScore, type ReadinessScore } from '../training/re
 import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
-import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
+import { fitPlan, plannedNum, weekDoneForPlan, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { exById, nextAfter, type StrengthPlan } from '../training/strength';
 import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
@@ -106,6 +106,8 @@ export interface AthleteState {
   totalM: number;
   /** Monday to today */
   weekM: number;
+  /** This week's distance that counts against the plan's week target: since the plan started, when that was mid-week */
+  weekPlanM: number;
   weekRuns: number;
   lastRun?: Activity;
   /** Plan sessions dated today or earlier (the ones that can be done so far) */
@@ -335,6 +337,7 @@ function computeDerived(data: AppData): Derived {
     runCount: acts.length,
     totalM: acts.reduce((x, a) => x + a.distanceM, 0),
     weekM: thisWeek.reduce((x, a) => x + a.distanceM, 0),
+    weekPlanM: weekDoneForPlan(acts, plan?.startDate, wkKey, tKey),
     weekRuns: thisWeek.length,
     lastRun: acts.length ? acts.reduce((m, a) => (a.startTime > m.startTime ? a : m)) : undefined,
     planDueSoFar: due.length,
@@ -1222,7 +1225,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         today: main.today, profile: data.profile, units: data.profile.units, readiness: main.readiness, stage: derived.stage,
         todaySession: main.todaySession, nextSessions: (main.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
         race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.stage.predictions ? derived.fitness : undefined, paces: derived.paces,
-        weekDoneM: stravaHidden ? 0 : main.athlete.weekM,
+        weekDoneM: stravaHidden ? 0 : main.athlete.weekPlanM,
         weekPlannedM: main.weekTarget.m,
         weekSessionsDone: weekSessions.filter((s) => s.status === 'done').length,
         weekSessionsPlanned: weekSessions.length,
