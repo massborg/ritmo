@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOADS, STATIONS, loadFor } from './hyroxDivisions';
-import { advance, buttonLabel, clock, deltaTag, enteredRace, finish, pause, practicePlan, records, resume, segmentMs, segmentWork, simulationPlan, startLive, stopEarly, summarise, targetMs, totalMs, undo, wholeHyrox, type HyroxSession, type Live } from './hyrox';
+import { hasAmounts, rebaseGps, renumberRuns, stationPlan, swapWork, advance, buttonLabel, clock, deltaTag, enteredRace, finish, pause, practicePlan, records, resume, segmentMs, segmentWork, simulationPlan, startLive, stopEarly, summarise, targetMs, totalMs, undo, wholeHyrox, type HyroxSession, type Live } from './hyrox';
 
 const live = (o: Partial<Parameters<typeof startLive>[0]> = {}): Live => startLive({ id: 'h1', title: 'HYROX full simulation', mode: 'full', division: 'men_open', plan: simulationPlan('full', 'men_open'), roxzone: false, indoor: true, ...o }, 0);
 
@@ -177,5 +177,55 @@ describe('the summary', () => {
     let l = live({ plan: practicePlan('wall_balls', 1, 'men_open'), mode: 'practice' });
     l = advance(l, 300_000);
     expect(finish(l, { rpe: 8 })).toMatchObject({ mode: 'practice', totalMs: 300_000, rpe: 8, indoor: true });
+  });
+});
+
+describe('QA sweep 2', () => {
+  it('several undos back into a run restore the GPS distance at which that run started', () => {
+    let l = live({ indoor: false, roxzone: true });
+    l = advance(l, 240_000, 1000); // run 1 ends
+    l = advance(l, 270_000, 1040); // Roxzone ends
+    l = advance(l, 500_000, 1100); // SkiErg ends
+    const back = undo(undo(undo(l)));
+    expect(back.idx).toBe(0);
+    expect(back.segStartM).toBe(0);
+    expect(advance(back, 600_000, 1150).done[0].gpsM).toBe(1150);
+    // One undo from run 2 into the station, then into run 1 again
+    expect(undo(l).segStartM).toBe(1040);
+  });
+  it('a reload starts the GPS track again: the current run counts from there, and an undo carries a run on', () => {
+    let l = live({ indoor: false });
+    l = advance(l, 240_000, 1000);
+    l = advance(l, 500_000, 1010); // now in run 2, which started at 1010 m of the old track
+    const r = rebaseGps(l);
+    expect(r.segStartM).toBe(0);
+    expect(advance(r, 700_000, 600).done[2].gpsM).toBe(600);
+    // Back into run 1 after the reload: it had 1000 m, and 50 m more on the new track makes 1050
+    const again = undo(undo(r));
+    expect(advance(again, 800_000, 50).done[0].gpsM).toBe(1050);
+    // Nothing to change indoors or on a fresh session
+    const fresh = live();
+    expect(rebaseGps(fresh)).toBe(fresh);
+  });
+  it('a slow first run is named on its own, not as a run after a station', () => {
+    const both = summarise(session([300, 250, 300, 250, 250, 250, 250, 250], Array(8).fill(240)));
+    expect(both.slowLine).toBe('Run 1 and the run after sled push were 50 s slower than your other runs.');
+    const first = summarise(session([387, 250, 250, 250, 250, 250, 250, 250], Array(8).fill(240)));
+    expect(first.slowLine).toBe('Run 1 was 137 s slower than your other runs.');
+    expect(first.runs.some((r) => r.slow && r.after)).toBe(false);
+    const one = summarise(session([250, 250, 300, 250, 250, 250, 250, 250], Array(8).fill(240)));
+    expect(one.slowLine).toBe('The run after sled push was 50 s slower than your other runs.');
+  });
+  it('a swapped station has its own work; custom runs are numbered in order; a 0 amount is not startable', () => {
+    const swapped = stationPlan('skierg', 'men_open', { skierg: 'band-pulldown' });
+    expect(swapWork(swapped)).toBe('100 reps');
+    expect(swapWork(stationPlan('skierg', 'men_open'))).toBeUndefined();
+    const plan = simulationPlan('half_front', 'men_open');
+    const edited = [plan[1], plan[0], plan[4], plan[6], { ...plan[0], n: 4 }];
+    expect(renumberRuns(edited).filter((p) => p.kind === 'run').map((p) => p.n)).toEqual([1, 2, 3, 4]);
+    expect(hasAmounts(plan)).toBe(true);
+    expect(hasAmounts([{ ...plan[0], distanceM: 0 }])).toBe(false);
+    expect(hasAmounts([{ ...stationPlan('wall_balls', 'men_open'), reps: undefined }])).toBe(false);
+    expect(hasAmounts([{ ...swapped, distanceM: undefined }])).toBe(true);
   });
 });

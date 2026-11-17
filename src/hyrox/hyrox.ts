@@ -24,6 +24,8 @@ export interface Segment extends Omit<SegmentPlan, 'kind' | 'key'> {
   ms: number;
   /** Distance measured by GPS (runs outdoors) */
   gpsM?: number;
+  /** GPS distance of the session's track when this segment started (outdoors), so an undo can restore it */
+  startM?: number;
 }
 export interface HyroxSession {
   id: string; startedAt: string; mode: HyroxMode; division: Division; title: string;
@@ -78,6 +80,17 @@ export function segmentWork(s: SegmentPlan, division: Division): string {
   const load = loadFor(division, st.key)?.text;
   return [d, load, st.standard].filter(Boolean).join(' · ');
 }
+/** The work of a swapped station ("100 reps"): its own, not the metres of the station it stands in for */
+export const swapWork = (s: { key: string; swapped?: string }): string | undefined =>
+  (s.swapped ? stationByKey.get(s.key as StationKey)?.swaps.find((x) => x.name === s.swapped)?.work : undefined);
+/** Runs numbered 1, 2, 3… in the order they are done (a custom list after a remove, an add or a move) */
+export function renumberRuns(plan: SegmentPlan[]): SegmentPlan[] {
+  let k = 0;
+  return plan.map((p) => (p.kind === 'run' ? { ...p, n: ++k } : p));
+}
+/** Does every run and station have an amount to do? A swapped station has its own work, so it always does. */
+export const hasAmounts = (plan: SegmentPlan[]): boolean =>
+  plan.every((p) => p.kind === 'rest' || !!p.swapped || (p.distanceM ?? 0) > 0 || (p.reps ?? 0) > 0);
 
 // ---------------------------------------------------------------- The live recorder
 
@@ -117,7 +130,7 @@ export function advance(l0: Live, now: number, gpsM = 0): Live {
   const l = resume(l0, now);
   const p = l.plan[l.idx];
   const ms = Math.max(0, now - l.segStart - l.segPausedMs);
-  const base = { i: l.done.length, startMs: l.segStart - l.startedAt, endMs: now - l.startedAt, ms };
+  const base = { i: l.done.length, startMs: l.segStart - l.startedAt, endMs: now - l.startedAt, ms, ...(l.indoor ? {} : { startM: l.segStartM }) };
   const next = { segStart: now, segPausedMs: 0, segStartM: gpsM };
   if (l.phase === 'roxzone') return { ...l, ...next, phase: 'segment', done: [...l.done, { ...base, kind: 'roxzone', key: 'roxzone', n: p.n }] };
   const seg: Segment = { ...p, ...base, gpsM: p.kind === 'run' && !l.indoor && gpsM - l.segStartM > 0 ? Math.round(gpsM - l.segStartM) : undefined };
@@ -143,12 +156,23 @@ export function undo(l: Live): Live {
   const last = l.done[l.done.length - 1];
   if (!last) return l;
   const done = l.done.slice(0, -1);
-  // Pauses inside the restored segment: its span minus its timed length
-  const restore = { segStart: l.startedAt + last.startMs, segPausedMs: last.endMs - last.startMs - last.ms + l.segPausedMs, segStartM: last.gpsM != null ? l.segStartM - last.gpsM : l.segStartM, finishedAt: undefined };
+  // Pauses inside the restored segment: its span minus its timed length. The GPS distance goes back to where the
+  // restored segment started (kept on the segment: after several undos the current start is not the run's end)
+  const restore = { segStart: l.startedAt + last.startMs, segPausedMs: last.endMs - last.startMs - last.ms + l.segPausedMs, segStartM: last.startM ?? (last.gpsM != null ? l.segStartM - last.gpsM : l.segStartM), finishedAt: undefined };
   // A Roxzone segment taken back: in the Roxzone again, before the same station
   if (last.kind === 'roxzone') return { ...l, ...restore, done, phase: 'roxzone' };
   // Roxzone segments are not in the plan, so the plan index is the number of the others done
   return { ...l, ...restore, done, idx: done.filter((x) => x.kind !== 'roxzone').length, phase: 'segment' };
+}
+
+/**
+ * A session opened again after a reload: the GPS track starts again from 0, so the current segment counts from here,
+ * and the starts kept on earlier segments (distances on the old track) are dropped. An undo back into a run then
+ * carries on from the distance that run had recorded.
+ */
+export function rebaseGps(l: Live): Live {
+  if (l.finishedAt || l.indoor || (!l.segStartM && !l.done.some((x) => x.startM != null))) return l;
+  return { ...l, segStartM: 0, done: l.done.map(({ startM: _s, ...x }) => x) }; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 /** The label on the big button: "Station done → Run 5", "Run done → Sled push", "Start sled push" */
@@ -200,10 +224,14 @@ export function summarise(s: HyroxSession): HyroxSummary {
   let slowLine: string | undefined;
   if (slow.length) {
     const avg = Math.round(slow.reduce((a, r) => a + r.over, 0) / slow.length / 1000);
-    const after = [...new Set(slow.map((r) => r.after).filter(Boolean) as string[])];
+    // Runs that followed a station are named by it; a run with no station before it (run 1) is named on its own
+    const followed = slow.filter((r) => r.after);
+    const after = [...new Set(followed.map((r) => r.after as string))];
     const list = after.length > 1 ? `${after.slice(0, -1).join(', ')} and ${after[after.length - 1]}` : after[0];
     const first = slow.filter((r) => !r.after).map((r) => `run ${r.n}`);
-    slowLine = list ? `${slow.length > 1 ? 'Runs' : 'The run'} after ${list} ${slow.length > 1 ? 'were' : 'was'} ${avg} s slower than your other runs.` : `${first.join(' and ')} was ${avg} s slower than your other runs.`.replace(/^r/, 'R');
+    const parts = [...first, ...(list ? [`${followed.length > 1 ? 'runs' : 'the run'} after ${list}`] : [])];
+    const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    slowLine = `${who[0].toUpperCase()}${who.slice(1)} ${slow.length > 1 ? 'were' : 'was'} ${avg} s slower than your other runs.`;
   }
   return { runningMs: sum(runSegs), stationsMs: sum(of('station')), roxzoneMs: sum(of('roxzone')), restMs: sum(of('rest')), runs: runs.map(({ over: _o, ...r }) => r), slowLine, vsGoalMs: s.goalMs ? s.totalMs - s.goalMs : undefined }; // eslint-disable-line @typescript-eslint/no-unused-vars
 }

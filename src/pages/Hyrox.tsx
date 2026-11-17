@@ -12,7 +12,7 @@ import { DurationInput } from '../components/TimeEntry';
 import { NumInput } from '../components/StrengthBits';
 import { StatusLine } from '../components/ui';
 import { DIVISIONS, HYROX_SEASON, RUN_M, STATIONS, divisionLabel, loadFor, stationByKey, type Division, type StationKey } from '../hyrox/hyroxDivisions';
-import { MODE_LABEL, clock, enteredRace, practicePlan, records, segmentName, segmentWork, simulationPlan, startLive, stationPlan, type HyroxMode, type HyroxSession, type HyroxTemplate, type Live, type SegmentPlan } from '../hyrox/hyrox';
+import { MODE_LABEL, clock, enteredRace, hasAmounts, practicePlan, records, renumberRuns, segmentName, segmentWork, simulationPlan, startLive, stationPlan, swapWork, type HyroxMode, type HyroxSession, type HyroxTemplate, type Live, type SegmentPlan } from '../hyrox/hyrox';
 import { liveKey, loadLive, saveLive } from '../hyrox/live-store';
 import { resetVoice, unlockAudio } from '../run/cues';
 import { longDate, parseYmd, ymd } from '../lib/format';
@@ -68,17 +68,19 @@ export default function Hyrox() {
     nav('/hyrox/live');
   };
   const startSim = () => {
-    if (sim === 'custom') return begin('custom', fresh(custom), customName.trim() ? `HYROX · ${customName.trim()}` : MODE_LABEL.custom, templateId);
+    if (sim === 'custom') return begin('custom', renumberRuns(fresh(custom)), customName.trim() ? `HYROX · ${customName.trim()}` : MODE_LABEL.custom, templateId);
     return begin(sim, simulationPlan(sim, division, swaps), `${MODE_LABEL[sim]} · ${divisionLabel(division)}`);
   };
   // Stations in the custom list follow the swaps and the division as they are now (not as they were when the
   // list or a saved session was made), so a swapped station is marked and never counts toward records
   const fresh = (l: SegmentPlan[]): SegmentPlan[] => l.map((p) => (p.kind === 'station' ? { ...stationPlan(p.key as StationKey, division, swaps, p.n), distanceM: p.distanceM, reps: p.reps } : p));
+  // A run or station with no metres or reps cannot be started or saved
+  const customOk = hasAmounts(fresh(custom));
   const saveCustom = () => {
     const name = customName.trim() || 'My HYROX session';
     const id = templateId ?? uid();
     const was = templates.find((t) => t.id === id);
-    const t: HyroxTemplate = { id, name, segments: fresh(custom), createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
+    const t: HyroxTemplate = { id, name, segments: renumberRuns(fresh(custom)), createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
     setHyroxPrefs({ templates: was ? templates.map((x) => (x.id === id ? t : x)) : [...templates, t] });
     setTemplateId(id); setCustomName(name);
   };
@@ -143,21 +145,25 @@ export default function Hyrox() {
                       </span>
                     </div>
                     <div className="build-dose">
-                      {p.reps != null
-                        ? <label><span className="caption">Reps</span><NumInput label={`Reps for segment ${i + 1}`} value={p.reps} max={500} onChange={(v) => patchSeg(i, { reps: v ?? 0 })} /></label>
-                        : <label><span className="caption">Metres</span><NumInput label={`Metres for segment ${i + 1}`} value={p.distanceM} max={5000} onChange={(v) => patchSeg(i, { distanceM: v ?? 0 })} /></label>}
+                      {/* A swapped station has its own work; reps or metres follow the station, so an emptied field stays empty */}
+                      {p.swapped
+                        ? <span className="caption">{swapWork(p)} · instead of {stationByKey.get(p.key as StationKey)?.name.toLowerCase()}</span>
+                        : p.kind === 'station' && stationByKey.get(p.key as StationKey)?.reps != null
+                          ? <label><span className="caption">Reps</span><NumInput label={`Reps for segment ${i + 1}`} value={p.reps} max={500} onChange={(v) => patchSeg(i, { reps: v })} /></label>
+                          : <label><span className="caption">Metres</span><NumInput label={`Metres for segment ${i + 1}`} value={p.distanceM} max={5000} onChange={(v) => patchSeg(i, { distanceM: v })} /></label>}
                     </div>
                   </li>
                 ))}
               </ol>
               {!custom.length && <p className="muted">Add runs and stations below.</p>}
+              {custom.length > 0 && !customOk && <p className="caption" role="status">Give every run and station its metres or reps (more than 0) before you start or save.</p>}
               <div className="row wrap" style={{ gap: 6 }}>
                 <button type="button" className="chip" onClick={addRun}>+ Run</button>
                 {STATIONS.map((s) => <button key={s.key} type="button" className="chip" onClick={() => setCustom((l) => [...l, stationPlan(s.key, division, swaps)])}>+ {s.name}</button>)}
               </div>
               <div className="field"><label htmlFor="hx-name">Name, to save it</label><input id="hx-name" className="input" maxLength={40} placeholder="Sled and lunge day" value={customName} onChange={(e) => setCustomName(e.target.value)} /></div>
               <div className="row wrap" style={{ gap: 8 }}>
-                <button type="button" className="btn" disabled={!custom.length || !customName.trim()} onClick={saveCustom}>{templateId ? 'Save changes' : 'Save for next time'}</button>
+                <button type="button" className="btn" disabled={!custom.length || !customOk || !customName.trim()} onClick={saveCustom}>{templateId ? 'Save changes' : 'Save for next time'}</button>
                 {templateId && <button type="button" className="btn btn-ghost" onClick={() => { setHyroxPrefs({ templates: templates.filter((t) => t.id !== templateId) }); setTemplateId(undefined); setCustomName(''); }}>Delete saved session</button>}
               </div>
             </div>
@@ -202,7 +208,7 @@ export default function Hyrox() {
       </section>
       <p className="caption">Station loads follow your division. Swapped stations are marked, so they don't count toward records. {roxzone ? 'Roxzone timing: tap when you arrive at a station, then again when you start it.' : 'With Roxzone timing off, transitions count as part of the run.'}</p>
 
-      {tab === 'simulate' && <button type="button" className="btn btn-primary btn-block hyrox-start" disabled={sim === 'custom' && !custom.length} onClick={() => void startSim()}>Start {sim === 'custom' ? 'session' : 'simulation'}</button>}
+      {tab === 'simulate' && <button type="button" className="btn btn-primary btn-block hyrox-start" disabled={sim === 'custom' && (!custom.length || !customOk)} onClick={() => void startSim()}>Start {sim === 'custom' ? 'session' : 'simulation'}</button>}
       {tab === 'practice' && <button type="button" className="btn btn-primary btn-block hyrox-start" onClick={() => void begin('practice', practicePlan(station, repeats, division, swaps), `${stationByKey.get(station)!.name} practice`)}>Start practice</button>}
       {tab === 'race' && <button type="button" className="btn btn-primary btn-block hyrox-start" onClick={() => void begin('race', simulationPlan('race', division), `HYROX race · ${divisionLabel(division)}`)}>Record the race live</button>}
 

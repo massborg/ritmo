@@ -7,7 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Pause, Play, Smartphone, Undo2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { PocketMode } from '../components/PocketMode';
-import { advance, buttonLabel, clock, finish, pause, resume, roxzoneMs, segmentMs, segmentName, segmentWork, stopEarly, targetMs, totalMs, undo, type HyroxSession, type Live } from '../hyrox/hyrox';
+import { advance, buttonLabel, clock, finish, pause, rebaseGps, resume, roxzoneMs, segmentMs, segmentName, segmentWork, stopEarly, targetMs, totalMs, undo, type HyroxSession, type Live } from '../hyrox/hyrox';
 import { clearLive, liveKey, loadLive, saveLive } from '../hyrox/live-store';
 import { hasBackgroundGps, watchGps } from '../run/native-gps';
 import { addFix, startTrack, type TrackState } from '../run/tracker';
@@ -30,7 +30,9 @@ export default function HyroxLive() {
   const [notes, setNotes] = useState('');
   const track = useRef<TrackState | undefined>(undefined);
   const setLive = (l: Live) => { liveRef.current = l; setLiveState(l); void saveLive(key, l); };
-  useEffect(() => { void loadLive(key).then((l) => { liveRef.current = l ?? null; setLiveState(l ?? null); }); }, [key]);
+  // Opened again (a reload, or back from another screen): the GPS track starts from 0 again, so the current run
+  // counts its distance from here instead of showing 0 m until the new track passes the old one
+  useEffect(() => { void loadLive(key).then((l0) => { const l = l0 ? rebaseGps(l0) : null; liveRef.current = l; setLiveState(l); if (l && l !== l0) void saveLive(key, l); }); }, [key]);
   useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 250); return () => window.clearInterval(t); }, []);
   // Every 5 seconds as well as after every tap
   useEffect(() => { const t = window.setInterval(() => { if (liveRef.current && !liveRef.current.finishedAt) void saveLive(key, liveRef.current); }, 5000); return () => window.clearInterval(t); }, [key]);
