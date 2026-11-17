@@ -157,3 +157,39 @@ describe('a free run with a pace goal', () => {
     expect(paceRange(st.pace![0], st.pace![1], 'mi')).toBe('7:55–8:05/mi');
   });
 });
+
+describe('pauses in the pace and in the saved stream', () => {
+  // One fix a second at 3.2 m/s (5:13/km), from second `from` to second `to`
+  const t0 = 1_800_000_000_000;
+  const feed = (s: ReturnType<typeof startTrack>, from: number, to: number, at: (sec: number) => number, autoPause = false) => {
+    for (let i = from; i <= to; i++) s = addFix(s, { t: t0 + i * 1000, lat: 35.9 + at(i) / 111195, lon: 14.5, acc: 5 }, autoPause);
+    return s;
+  };
+  it('a 40 s pause by the runner is not in "Pace now" and not in the stream clock', () => {
+    let s = feed(startTrack(t0), 0, 30, (i) => i * 3.2);
+    s = setPaused(s, true, t0 + 30_000);
+    s = feed(s, 31, 69, () => 30 * 3.2);
+    s = setPaused(s, false, t0 + 70_000);
+    s = feed(s, 70, 73, (i) => 30 * 3.2 + (i - 70) * 3.2);
+    // Too little running since the resume to say a pace: a dash, not 11:00/km
+    expect(currentPace(s)).toBeUndefined();
+    s = feed(s, 74, 100, (i) => 30 * 3.2 + (i - 70) * 3.2);
+    expect(currentPace(s)!).toBeGreaterThan(300);
+    expect(currentPace(s)!).toBeLessThan(325);
+    const st = toStreams(s);
+    expect(Math.abs(st[st.length - 1].t - s.movingS)).toBeLessThanOrEqual(1);
+    expect(s.movingS).toBeCloseTo(60, 0);
+    // No jump in the stream clock where the pause was
+    expect(Math.max(...st.slice(1).map((x, i) => x.t - st[i].t))).toBeLessThanOrEqual(2);
+  });
+  it('after an automatic pause, the pace is from the running since it ended and the stream clock is the moving time', () => {
+    let s = feed(startTrack(t0), 0, 30, (i) => i * 3.2, true);
+    s = feed(s, 31, 45, () => 30 * 3.2, true);
+    expect(s.autoPaused).toBe(true);
+    s = feed(s, 46, 66, (i) => 30 * 3.2 + (i - 45) * 3.2, true);
+    expect(s.autoPaused).toBe(false);
+    expect(currentPace(s)!).toBeLessThan(330);
+    const st = toStreams(s);
+    expect(Math.abs(st[st.length - 1].t - s.movingS)).toBeLessThanOrEqual(1);
+  });
+});

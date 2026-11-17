@@ -90,7 +90,10 @@ export default function RunPage() {
   const lastGaugeCue = useRef(0);
   const wake = useRef<{ release: () => Promise<void> } | null>(null);
   const shown = what === 'planned' ? cards[Math.min(shownIdx, Math.max(0, cards.length - 1))] : undefined;
-  const sessionPlan = shown;
+  // Once Start is pressed the run follows the session that was chosen, by its id. Starting a later day's session
+  // moves it to today, which reorders the cards: following the card's position then picked the other session.
+  const [chosenId, setChosenId] = useState<string>();
+  const sessionPlan = phase !== 'ready' && chosenId ? plan?.sessions.find((s) => s.id === chosenId) ?? shown : shown;
   const unitM = U === 'km' ? 1000 : 1609.344;
   const goalNum = Number(goalValue.replace(',', '.'));
   const goalPace = goal === 'pace' ? parsePace(goalValue) : undefined;
@@ -132,11 +135,16 @@ export default function RunPage() {
   }, [phase, settings.screenOn]);
 
   // Every second: clock, steps, cues; every 5 seconds: save on the device
+  // The timer is made once per run and reads what it needs through `tick`, kept up to date on every render. Made
+  // afresh on every render (each GPS fix renders), it never fired when fixes came faster than once a second.
+  const tick = useRef({ steps, settings, sessionPlan, cues, key, U });
+  tick.current = { steps, settings, sessionPlan, cues, key, U };
   useEffect(() => {
     if (phase !== 'running') return;
     const id = window.setInterval(() => {
       const t = trackRef.current;
       if (!t) return;
+      const { steps, settings, sessionPlan, cues, key, U } = tick.current;
       const now = { ...t, elapsedS: (Date.now() - t.startedAt) / 1000 };
       trackRef.current = now; setTrack(now);
       // spoken kilometre splits
@@ -144,8 +152,8 @@ export default function RunPage() {
         const km = Math.floor(now.distanceM / (U === 'km' ? 1000 : 1609.344));
         if (km > lastKm.current) { lastKm.current = km; const ap = avgPace(now); say(`${km} ${U === 'km' ? 'kilometre' : 'mile'}${km > 1 ? 's' : ''}. Average pace ${ap ? fmtPace(ap, U, false).replace(':', ' ') : ''}.`, cues); }
       }
-      // workout steps
-      if (steps.length && settings.cues !== 'off') {
+      // workout steps: the step card moves on with the voice off too (every cue below is silenced by `cues`)
+      if (steps.length) {
         const st = steps[stepIdxRef.current];
         const left = st && stepLeft(st, stepStart.current.s, stepStart.current.m, now.movingS, now.distanceM);
         if (st && left?.complete && stepIdxRef.current < steps.length - 1) {
@@ -170,7 +178,7 @@ export default function RunPage() {
       if (Math.floor(now.elapsedS) % 5 === 0) void set(key, { track: now, sessionId: sessionPlan?.id, stepIdx: stepIdxRef.current, stepStart: stepStart.current, savedAt: Date.now() } satisfies Saved).catch(() => {});
     }, 1000);
     return () => window.clearInterval(id);
-  });
+  }, [phase]);
 
   // Load the device's voices as soon as the screen opens, so "5" at the start already uses the chosen voice
   // A Quick run starts by itself once GPS is ready: check the voice afresh (the Quick run tap unlocked it), and
@@ -185,6 +193,7 @@ export default function RunPage() {
   const begin = () => {
     // A later day's session started today is moved to today first (when the plan allows it), so the run links to it
     if (sessionPlan && sessionPlan.date !== t0 && plan && moveTargets(sessionPlan, today).includes(t0)) moveSession(sessionPlan.id, t0);
+    setChosenId(sessionPlan?.id);
     goalDone.current = false;
     setPhase('countdown'); setCount(settings.countdown);
     let n = settings.countdown;
@@ -249,7 +258,7 @@ export default function RunPage() {
     void del(key).catch(() => {});
     nav(`/activity/${id}`);
   };
-  const discard = () => { void del(key).catch(() => {}); trackRef.current = undefined; setTrack(undefined); setPhase('ready'); setUnfinished(undefined); };
+  const discard = () => { void del(key).catch(() => {}); trackRef.current = undefined; setTrack(undefined); setPhase('ready'); setUnfinished(undefined); setChosenId(undefined); };
 
   // Hold to finish: 1.5 seconds, so a bump in a pocket does not end the run
   const holdTimer = useRef<number | undefined>(undefined);
