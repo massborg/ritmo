@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOADS, STATIONS, loadFor } from './hyroxDivisions';
-import { advance, buttonLabel, clock, deltaTag, enteredRace, finish, pause, practicePlan, records, resume, segmentMs, segmentWork, simulationPlan, startLive, summarise, targetMs, totalMs, undo, type HyroxSession, type Live } from './hyrox';
+import { advance, buttonLabel, clock, deltaTag, enteredRace, finish, pause, practicePlan, records, resume, segmentMs, segmentWork, simulationPlan, startLive, stopEarly, summarise, targetMs, totalMs, undo, wholeHyrox, type HyroxSession, type Live } from './hyrox';
 
 const live = (o: Partial<Parameters<typeof startLive>[0]> = {}): Live => startLive({ id: 'h1', title: 'HYROX full simulation', mode: 'full', division: 'men_open', plan: simulationPlan('full', 'men_open'), roxzone: false, indoor: true, ...o }, 0);
 
@@ -71,6 +71,44 @@ describe('the live recorder', () => {
     f = undo(f);
     expect(f.finishedAt).toBeUndefined();
     expect(f.idx).toBe(1);
+  });
+  it('undo after a pause in the last segment does not take the pause off twice', () => {
+    let l = live({ mode: 'practice', plan: practicePlan('wall_balls', 1, 'men_open') });
+    l = resume(pause(l, 60_000), 90_000);
+    l = advance(l, 120_000);
+    expect(l.done[0].ms).toBe(90_000);
+    l = undo(l);
+    expect(segmentMs(l, 120_000)).toBe(90_000);
+    l = advance(l, 130_000);
+    expect(l.done[0].ms).toBe(100_000);
+    expect(finish(l).totalMs).toBe(totalMs(l, 130_000));
+  });
+  it('"Stop here" taken back returns to the segment in progress, still paused, with every finished segment kept', () => {
+    let l = advance(advance(live(), 240_000), 490_000); // run 1 4:00, SkiErg 4:10
+    l = pause(l, 610_000); // 2:00 into run 2
+    const stopped = stopEarly(l, 620_000);
+    expect(stopped.finishedAt).toBe(620_000);
+    expect(finish(stopped).totalMs).toBe(490_000);
+    // Five minutes on the Finished screen, then "Not finished: undo"
+    const back = undo(stopped);
+    expect(back.finishedAt).toBeUndefined();
+    expect(back.done.map((x) => x.ms)).toEqual([240_000, 250_000]);
+    expect(back.idx).toBe(2);
+    expect(back.pausedAt).toBe(610_000);
+    expect(segmentMs(back, 920_000)).toBe(120_000);
+    expect(totalMs(back, 920_000)).toBe(610_000);
+    // Carrying on: the time on the Finished screen is not in the run
+    expect(advance(resume(back, 920_000), 980_000).done[2].ms).toBe(180_000);
+  });
+  it('a whole HYROX is eight 1 km runs and eight stations; a custom session with short runs is not', () => {
+    const t = Array(8).fill(240);
+    const race = enteredRace({ id: 'r', date: '2026-11-12', division: 'men_open', runs: t, stations: t });
+    expect(wholeHyrox(race)).toBe(true);
+    expect(wholeHyrox({ ...race, mode: 'custom', segments: race.segments.map((x) => (x.kind === 'run' ? { ...x, distanceM: 500 } : x)) })).toBe(false);
+    expect(wholeHyrox({ ...race, mode: 'custom', segments: race.segments.map((x) => (x.kind === 'station' ? { ...x, distanceM: 1, reps: 1 } : x)) })).toBe(false);
+    expect(wholeHyrox({ ...race, mode: 'custom' })).toBe(true);
+    // The record's date is the day on the athlete's calendar
+    expect(records([race]).race?.date).toBe('2026-11-12');
   });
   it('Roxzone timing: two taps per transition, kept as its own segment', () => {
     let l = live({ roxzone: true });

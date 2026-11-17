@@ -28,7 +28,9 @@ export default function HyroxSessionPage() {
   if (after.race?.id === s.id) set.push(before.race ? `Best race: ${clock(s.totalMs)} (was ${clock(before.race.ms)})` : `First race result: ${clock(s.totalMs)}`);
   if (after.run && (!before.run || after.run.ms < before.run.ms) && s.segments.some((x) => x.kind === 'run' && x.ms === after.run!.ms)) set.push(`Best 1 km run split: ${clock(after.run.ms)}`);
   for (const x of stations) { const k = x.key as StationKey; if (!x.swapped && after.stations[k]?.ms === x.ms && before.stations[k] && x.ms < before.stations[k]!.ms) set.push(`Best ${segmentName(x).toLowerCase()}: ${clock(x.ms)} (was ${clock(before.stations[k]!.ms)})`); }
-  const goal = s.goalMs;
+  // The goal is for the whole thing: a session stopped early is not measured against it (4:00 is not "goal met")
+  const whole = sum.runs.length === 8 && stations.length === 8;
+  const goal = whole ? s.goalMs : undefined;
   return (
     <div className="stack-lg hyrox-summary" style={{ maxWidth: 720 }}>
       <AppHeader title="HYROX" back large={false} />

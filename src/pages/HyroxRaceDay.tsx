@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { HYROX_WARMUP, hyroxSessions, predictHyrox, racePacing } from '../hyrox/predict';
-import { clock } from '../hyrox/hyrox';
+import { clock, sessionDay } from '../hyrox/hyrox';
 import { divisionLabel } from '../hyrox/hyroxDivisions';
 import { longDate, pace, parseYmd, ymd } from '../lib/format';
 
@@ -16,7 +16,7 @@ export default function HyroxRaceDay() {
   const pacing = racePacing(data.profile, thresholdS);
   const pred = predictHyrox(data.profile, thresholdS);
   const t = ymd(today);
-  const raced = hyroxSessions(data.profile).filter((x) => x.isRace && (!h.raceDate || x.startedAt.slice(0, 10) >= h.raceDate)).pop();
+  const raced = hyroxSessions(data.profile).filter((x) => x.isRace && (!h.raceDate || sessionDay(x) >= h.raceDate)).pop();
   const days = h.raceDate ? Math.round((parseYmd(h.raceDate).getTime() - parseYmd(t).getTime()) / 86400000) : undefined;
   const runTotal = pacing ? pacing.runs.reduce((a, r) => a + r.paceS, 0) : 0;
   return (

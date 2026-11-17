@@ -2,7 +2,7 @@
 // the facts the Coach is given. No screen code here.
 import type { Lap, Profile } from '../lib/types';
 import { STATIONS, divisionLabel, loadFor, stationByKey, type Division, type StationKey } from './hyroxDivisions';
-import { clock, records, simulationPlan, summarise, type HyroxSession, type Segment } from './hyrox';
+import { clock, records, sessionDay, simulationPlan, summarise, wholeHyrox, type HyroxSession, type Segment } from './hyrox';
 import { RUN_SHARE, ownRunShare } from './plan-goal';
 
 export const hyroxSessions = (profile: Pick<Profile, 'log'>): HyroxSession[] =>
@@ -35,7 +35,9 @@ export interface HyroxPrediction {
  */
 export function predictHyrox(profile: Pick<Profile, 'log' | 'hyrox'>, thresholdS: number | undefined): HyroxPrediction | undefined {
   const all = hyroxSessions(profile);
-  const fulls = all.filter((h) => h.segments.filter((x) => x.kind === 'run').length === 8 && h.segments.filter((x) => x.kind === 'station').length === 8);
+  // Only a whole HYROX (eight 1 km runs) says anything about the race's running time: a custom session with
+  // shortened runs does not
+  const fulls = all.filter(wholeHyrox);
   const last = fulls[fulls.length - 1];
   if (!thresholdS && !last) return undefined;
   const T = thresholdS ?? 270;
@@ -156,7 +158,7 @@ export function hyroxFacts(profile: Pick<Profile, 'athleteType' | 'hyrox' | 'log
   const last = all[all.length - 1];
   if (last) {
     const s = summarise(last);
-    f.push(`Latest HYROX session (${last.startedAt.slice(0, 10)}, ${last.title}): total ${clock(last.totalMs)}; running ${clock(s.runningMs)}, stations ${clock(s.stationsMs)}${s.roxzoneMs ? `, Roxzone ${clock(s.roxzoneMs)}` : ''}. Splits: ${last.segments.filter((x) => x.kind !== 'roxzone' && x.kind !== 'rest').map((x) => `${x.kind === 'run' ? `run ${x.n}` : name(x.key as StationKey)}${x.swapped ? ' (swapped)' : ''} ${clock(x.ms)}`).join(', ')}.${s.slowLine ? ` ${s.slowLine}` : ''}`);
+    f.push(`Latest HYROX session (${sessionDay(last)}, ${last.title}): total ${clock(last.totalMs)}; running ${clock(s.runningMs)}, stations ${clock(s.stationsMs)}${s.roxzoneMs ? `, Roxzone ${clock(s.roxzoneMs)}` : ''}. Splits: ${last.segments.filter((x) => x.kind !== 'roxzone' && x.kind !== 'rest').map((x) => `${x.kind === 'run' ? `run ${x.n}` : name(x.key as StationKey)}${x.swapped ? ' (swapped)' : ''} ${clock(x.ms)}`).join(', ')}.${s.slowLine ? ` ${s.slowLine}` : ''}`);
   }
   const rec = records(all);
   const bests = STATIONS.filter((s) => rec.stations[s.key]).map((s) => `${s.name.toLowerCase()} ${clock(rec.stations[s.key]!.ms)}`);

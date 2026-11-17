@@ -7,7 +7,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Pause, Play, Smartphone, Undo2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { PocketMode } from '../components/PocketMode';
-import { advance, buttonLabel, clock, finish, pause, resume, roxzoneMs, segmentMs, segmentName, segmentWork, targetMs, totalMs, undo, type HyroxSession, type Live } from '../hyrox/hyrox';
+import { advance, buttonLabel, clock, finish, pause, resume, roxzoneMs, segmentMs, segmentName, segmentWork, stopEarly, targetMs, totalMs, undo, type HyroxSession, type Live } from '../hyrox/hyrox';
 import { clearLive, liveKey, loadLive, saveLive } from '../hyrox/live-store';
 import { hasBackgroundGps, watchGps } from '../run/native-gps';
 import { addFix, startTrack, type TrackState } from '../run/tracker';
@@ -147,7 +147,7 @@ export default function HyroxLive() {
         <button type="button" onClick={() => setPocket(true)}><Smartphone size={18} aria-hidden="true" />Pocket mode</button>
       </div>
       {live.pausedAt && <button type="button" className="hx-end" onClick={discard}>End without saving</button>}
-      {live.pausedAt && nDone > 0 && <button type="button" className="hx-end" onClick={() => setLive({ ...resume(live, Date.now()), finishedAt: Date.now() })}>Stop here and save what is done</button>}
+      {live.pausedAt && nDone > 0 && <button type="button" className="hx-end" onClick={() => setLive(stopEarly(live, Date.now()))}>Stop here and save what is done</button>}
     </div>
   );
 }

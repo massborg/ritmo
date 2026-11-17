@@ -142,6 +142,8 @@ function CareCard() {
  *  audio cues play later, even when a Quick run starts by itself once GPS is ready. */
 /** A simulation or the race itself is recorded with the HYROX recorder, not the run recorder */
 const hyroxRecorded = (s: { hyrox?: { kind: string } }) => !!s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind);
+/** Where Start goes: the race opens Race day, a half simulation opens with the half selected */
+const hyroxStart = (s: { hyrox?: { kind: string } }) => (s.hyrox?.kind === 'race' ? '/hyrox?tab=race' : s.hyrox?.kind === 'sim_half' ? '/hyrox?sim=half' : '/hyrox');
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
@@ -387,7 +389,7 @@ export default function Today() {
                 {!swappedNote && s.status !== 'partial' && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
               : isToday && s.type !== 'rest' && s.status === 'planned'
                 ? <>
-                    <Link to={hyroxRecorded(s) ? '/hyrox' : '/run'} className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+                    <Link to={hyroxRecorded(s) ? hyroxStart(s) : '/run'} className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
                     <button className="btn" onClick={() => setEditing(s)}><Pencil size={18} strokeWidth={2} aria-hidden="true" />Edit</button>
                     <button className="btn" onClick={() => setSheetDay(s.date)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Swap</button>
                     <button className="btn btn-ghost" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I’ve done this run</button>

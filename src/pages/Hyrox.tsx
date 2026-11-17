@@ -13,7 +13,7 @@ import { NumInput } from '../components/StrengthBits';
 import { StatusLine } from '../components/ui';
 import { DIVISIONS, HYROX_SEASON, RUN_M, STATIONS, divisionLabel, loadFor, stationByKey, type Division, type StationKey } from '../hyrox/hyroxDivisions';
 import { MODE_LABEL, clock, enteredRace, practicePlan, records, segmentName, segmentWork, simulationPlan, startLive, stationPlan, type HyroxMode, type HyroxSession, type HyroxTemplate, type Live, type SegmentPlan } from '../hyrox/hyrox';
-import { liveKey, saveLive } from '../hyrox/live-store';
+import { liveKey, loadLive, saveLive } from '../hyrox/live-store';
 import { resetVoice, unlockAudio } from '../run/cues';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
@@ -29,7 +29,9 @@ export default function Hyrox() {
   const roxzone = prefs.roxzone ?? false, indoor = prefs.indoor ?? false, swaps = prefs.swaps ?? {};
   const [params] = useSearchParams();
   const [tab, setTab] = useState<Tab>(params.get('tab') === 'race' ? 'race' : params.get('tab') === 'practice' ? 'practice' : 'simulate');
-  const [sim, setSim] = useState<Sim>('full');
+  // ?sim=half: Start on a planned half simulation opens with the half selected, not the full one
+  const simParam = params.get('sim');
+  const [sim, setSim] = useState<Sim>(simParam === 'half' || simParam === 'half_front' ? 'half_front' : simParam === 'half_back' ? 'half_back' : 'full');
   const [sheet, setSheet] = useState<'division' | 'swaps'>();
   const [goalS, setGoalS] = useState<number | undefined>(prefs.goalS);
   // Custom
@@ -45,10 +47,10 @@ export default function Hyrox() {
   const [stn, setStn] = useState<(number | undefined)[]>(Array(8).fill(undefined));
   const [roxS, setRoxS] = useState<number>();
   const [badSplits, setBadSplits] = useState<string[]>([]);
-  // A session left unfinished on this device (the app closed or the page reloaded)
+  // A session left on this device: unfinished (the app closed or the page reloaded), or finished but not saved yet
   const key = liveKey(session?.user.id);
   const [unfinished, setUnfinished] = useState<Live>();
-  useEffect(() => { get(key).then((v) => { if (v && !(v as Live).finishedAt) setUnfinished(v as Live); }).catch(() => {}); }, [key]);
+  useEffect(() => { get(key).then((v) => { if (v) setUnfinished(v as Live); }).catch(() => {}); }, [key]);
 
   const sessions = (data.profile.log ?? []).filter((e) => e.kind === 'hyrox' && e.hyrox).map((e) => e.hyrox as HyroxSession).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const rec = records(sessions);
@@ -57,20 +59,26 @@ export default function Hyrox() {
   const begin = async (mode: HyroxMode, plan: SegmentPlan[], title: string, tId?: string) => {
     if (!plan.length) return;
     resetVoice(); unlockAudio();
+    // A session still kept on this device (unfinished, or finished and not saved) is never replaced without asking
+    const kept = await loadLive(key);
+    if (kept && !window.confirm(`${kept.title} is still on this device and not saved. Start a new session and discard it?`)) { setUnfinished(kept); return; }
     setHyroxPrefs({ division, goalS });
     const live = startLive({ id: uid(), title, mode, division, plan, roxzone, indoor, goalMs: (mode === 'full' || mode === 'race') && goalS ? goalS * 1000 : undefined, templateId: tId }, Date.now());
     await saveLive(key, live);
     nav('/hyrox/live');
   };
   const startSim = () => {
-    if (sim === 'custom') return begin('custom', custom, customName.trim() ? `HYROX · ${customName.trim()}` : MODE_LABEL.custom, templateId);
+    if (sim === 'custom') return begin('custom', fresh(custom), customName.trim() ? `HYROX · ${customName.trim()}` : MODE_LABEL.custom, templateId);
     return begin(sim, simulationPlan(sim, division, swaps), `${MODE_LABEL[sim]} · ${divisionLabel(division)}`);
   };
+  // Stations in the custom list follow the swaps and the division as they are now (not as they were when the
+  // list or a saved session was made), so a swapped station is marked and never counts toward records
+  const fresh = (l: SegmentPlan[]): SegmentPlan[] => l.map((p) => (p.kind === 'station' ? { ...stationPlan(p.key as StationKey, division, swaps, p.n), distanceM: p.distanceM, reps: p.reps } : p));
   const saveCustom = () => {
     const name = customName.trim() || 'My HYROX session';
     const id = templateId ?? uid();
     const was = templates.find((t) => t.id === id);
-    const t: HyroxTemplate = { id, name, segments: custom, createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
+    const t: HyroxTemplate = { id, name, segments: fresh(custom), createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
     setHyroxPrefs({ templates: was ? templates.map((x) => (x.id === id ? t : x)) : [...templates, t] });
     setTemplateId(id); setCustomName(name);
   };
@@ -99,9 +107,9 @@ export default function Hyrox() {
       <AppHeader title="HYROX" eyebrow={`Season ${HYROX_SEASON}`} back />
       {unfinished && (
         <section className="card stack-sm" aria-label="Unfinished session">
-          <StatusLine kind="info">An unfinished session is saved on this device: {unfinished.title}, {unfinished.done.filter((s) => s.kind !== 'roxzone').length} of {unfinished.plan.length} segments done.</StatusLine>
+          <StatusLine kind="info">{unfinished.finishedAt ? 'A finished session is on this device and not saved yet' : 'An unfinished session is saved on this device'}: {unfinished.title}, {unfinished.done.filter((s) => s.kind !== 'roxzone').length} of {unfinished.plan.length} segments done.</StatusLine>
           <div className="row wrap" style={{ gap: 8 }}>
-            <Link to="/hyrox/live" className="btn btn-primary">Carry on</Link>
+            <Link to="/hyrox/live" className="btn btn-primary">{unfinished.finishedAt ? 'Save it' : 'Carry on'}</Link>
             <button type="button" className="btn btn-ghost" onClick={() => { void del(key); setUnfinished(undefined); }}>Discard it</button>
           </div>
         </section>
@@ -124,7 +132,7 @@ export default function Hyrox() {
                 </div>
               )}
               <ol className="build-list">
-                {custom.map((p, i) => (
+                {fresh(custom).map((p, i) => (
                   <li key={i} className="build-row">
                     <div className="row-between" style={{ gap: 8 }}>
                       <span className="label">{i + 1}. {p.kind === 'run' ? 'Run' : segmentName(p)}</span>
