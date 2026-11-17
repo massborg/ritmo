@@ -20,6 +20,8 @@ export function NumInput({ value, onChange, label, decimal, id, placeholder, max
   return (
     <input id={id} className="input num-input" inputMode={decimal ? 'decimal' : 'numeric'} pattern={decimal ? '[0-9]*[.,]?[0-9]*' : '[0-9]*'} autoComplete="off" aria-label={label} placeholder={placeholder} value={text}
       onFocus={(e) => e.target.select()}
+      // Leaving the field: show the number that is actually used (a value above the limit is capped, lb are rounded)
+      onBlur={() => { if (value != null && Number(text.replace(',', '.')) !== value) setText(String(value)); }}
       onChange={(e) => { const t = e.target.value.replace(decimal ? /[^0-9.,]/g : /[^0-9]/g, ''); setText(t); onChange(parse(t)); }} />
   );
 }
@@ -96,7 +98,7 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
             </svg>
             <ul className="list">
               {[...pts].reverse().map((p, i) => (
-                <li key={i} className="list-item row-between"><span className="label">{day(p.date)}</span><span className="caption" style={{ textAlign: 'right' }}>{p.text}{p.volumeKg ? <><br />Volume {showLoad(p.volumeKg, unit)}{p.e1rm ? ` · est. 1-rep max ${showLoad(p.e1rm, unit)}` : ''}</> : null}</span></li>
+                <li key={i} className="list-item row-between"><span className="label">{day(p.date)}</span><span className="caption" style={{ textAlign: 'right' }}>{p.text}{p.volumeKg ? <><br />Volume {p.volume}{p.e1rm ? ` · est. 1-rep max ${showLoad(p.e1rm, unit)}` : ''}</> : null}</span></li>
               ))}
             </ul>
             {loaded && <p className="caption">The estimated 1-rep max is worked out from your best set (weight × (1 + reps ÷ 30)). It is a guide for tracking progress, not a lift to attempt.</p>}

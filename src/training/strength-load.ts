@@ -51,6 +51,11 @@ export function doubleProgression(e: Exercise, last: SetLog[] | undefined, plann
   if (!easy) return { reps, load: load || undefined, note: `Same again: ${reps} reps${load ? ` at ${kg(load)}` : ''}${allDone ? ' (the last session felt hard)' : ' (some sets were missed)'}`, change: 'repeat' };
   if (reps < hi) return { reps: reps + 1, load: load || undefined, note: `+1 rep: ${reps + 1} reps${load ? ` at ${kg(load)}` : ''} for all sets`, change: 'reps' };
   if (load > 0) { const next = Math.round((load + loadStep(e)) * 100) / 100; return { reps: lo, load: next, note: `Add load: ${kg(next)} for ${lo} reps (you reached ${hi} reps at ${kg(load)})`, change: 'load' }; }
+  // A band has no kilograms: at the top of the range the next step is a heavier band, not "no load"
+  if (top.loadType === 'band') {
+    const band = top.band ?? 'medium', up = band === 'light' ? 'medium' : band === 'medium' ? 'heavy' : undefined;
+    return { reps: hi, note: up ? `${hi} reps reached with the ${band} band: try the ${up} band next time` : `${hi} reps reached with the heavy band: the harder version comes with the next block`, change: 'repeat' };
+  }
   return { reps: hi, note: `${hi} reps reached with no load: add a little weight, or the harder version comes with the next block`, change: 'repeat' };
 }
 
@@ -68,6 +73,12 @@ export function exerciseSummary(sets: SetLog[], unit: WeightUnit = 'kg'): Exerci
   const one = (s: SetLog) => `${s.seconds ? `${s.seconds} s` : s.reps ?? '–'}${s.load ? ` · ${showLoad(s.load, unit)}` : ''}`;
   const text = !sets.length ? 'No sets' : same ? `${sets.length} × ${one(first)}` : sets.map(one).join(', ');
   return { volumeKg: Math.round(volumeKg), best, text };
+}
+/** Volume in the runner's unit, as a whole number that agrees with the weights shown: in lb each set's weight is
+ *  rounded as it is displayed (to 0.5 lb) before it is multiplied by its reps */
+export function showVolume(sets: SetLog[], unit: WeightUnit = 'kg'): string {
+  const v = sets.reduce((a, s) => a + (s.load ? toUnit(s.load, unit) : 0) * (s.reps ?? 0) * (s.perSide ? 2 : 1), 0);
+  return `${Math.round(v)} ${unit}`;
 }
 /** A whole session: total volume, and the best set across its exercises */
 export function sessionSummary(exercises: { id: string; name: string; sets: SetLog[] }[]): { volumeKg: number; best?: { name: string; load: number; reps: number; e1rm: number } } {
@@ -141,7 +152,7 @@ export function lastLine(sets: SetLog[], unit: WeightUnit = 'kg'): string {
   const dose = (s: SetLog) => (s.seconds ? `${s.seconds} s` : `${s.reps ?? '–'}`);
   return same ? `${sets.length} × ${dose(f)}${f.load ? ` at ${showLoad(f.load, unit)}` : ''}` : sets.map((s) => `${dose(s)}${s.load ? ` at ${showLoad(s.load, unit)}` : ''}`).join(', ');
 }
-export interface HistoryPoint { date: string; volumeKg: number; topLoad?: number; reps?: number; seconds?: number; e1rm?: number; text: string }
+export interface HistoryPoint { date: string; volumeKg: number; topLoad?: number; reps?: number; seconds?: number; e1rm?: number; text: string; /** "1650 lb", in the runner's unit */ volume: string }
 /** Every session of an exercise, oldest first, for its history chart */
 export function historyOf(log: Logged[] | undefined, exerciseId: string, unit: WeightUnit = 'kg'): HistoryPoint[] {
   return (log ?? []).filter((e) => e.kind === 'strength' && e.strength?.exercises.some((x) => x.id === exerciseId && x.sets.length))
@@ -149,7 +160,7 @@ export function historyOf(log: Logged[] | undefined, exerciseId: string, unit: W
     .map((e) => {
       const sets = e.strength!.exercises.find((x) => x.id === exerciseId)!.sets;
       const s = exerciseSummary(sets, unit);
-      return { date: e.date, volumeKg: s.volumeKg, topLoad: Math.max(0, ...sets.map((x) => x.load ?? 0)) || undefined, reps: Math.max(0, ...sets.map((x) => x.reps ?? 0)) || undefined, seconds: Math.max(0, ...sets.map((x) => x.seconds ?? 0)) || undefined, e1rm: s.best?.e1rm, text: s.text };
+      return { date: e.date, volumeKg: s.volumeKg, topLoad: Math.max(0, ...sets.map((x) => x.load ?? 0)) || undefined, reps: Math.max(0, ...sets.map((x) => x.reps ?? 0)) || undefined, seconds: Math.max(0, ...sets.map((x) => x.seconds ?? 0)) || undefined, e1rm: s.best?.e1rm, text: s.text, volume: showVolume(sets, unit) };
     });
 }
 /** A workout as a template's exercise list, from what was done */

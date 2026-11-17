@@ -128,7 +128,7 @@ function LogStrength({ onClose }: { onClose: () => void }) {
         <DateField id="ls-date" label="Date" value={date} onChange={setDate} />
         <Chips<'gym' | 'class' | 'home'> label="Type" value={type} onChange={setType} options={[{ value: 'gym', label: 'Gym' }, { value: 'class', label: 'Class' }, { value: 'home', label: 'At home' }]} />
         <Stepper id="ls-min" label="Duration" value={minutes} min={5} max={240} step={5} unit="min" onChange={setMinutes} />
-        <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[2, 3, 4, 5, 6, 7, 8, 9, 10].map((x) => ({ value: x, label: String(x) }))} />
+        <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((x) => ({ value: x, label: String(x) }))} />
         <Stepper id="ls-hr" label="Average heart rate (optional, from your watch)" value={hr} min={60} max={200} unit="bpm" onChange={setHr} />
         {planned && <p className="caption">This counts as your planned {planned.strengthPlan!.routine === 'A' || planned.strengthPlan!.routine === 'B' ? 'strength' : planned.strengthPlan!.routine} session on {longDate(parseYmd(date))}.</p>}
         <p className="caption">Strength counts toward your streak and sessions done, and as light load in readiness. It never counts as running distance.</p>

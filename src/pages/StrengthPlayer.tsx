@@ -14,7 +14,7 @@ import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
 import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout } from '../components/StrengthBits';
 import { exById, resolveStrength, type Exercise, type Routine } from '../training/strength';
-import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
+import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
 import { duration, ymd } from '../lib/format';
 
@@ -50,7 +50,9 @@ export default function StrengthPlayer() {
     if (free) {
       const items: Item[] = free.exercises.filter((x) => exById.has(x.exerciseId)).map((x) => {
         const ex = exById.get(x.exerciseId)!, t = prefs?.progress?.[ex.id]?.target;
-        return { id: ex.id, ex, sets: x.sets, reps: x.seconds ? undefined : t?.reps ?? x.reps ?? ex.reps, seconds: x.seconds ? t?.seconds ?? x.seconds : undefined, load: t?.load ?? x.weightKg, note: t?.note };
+        // A hold stays a hold: a saved 0 seconds falls back to the exercise's usual time, never to reps
+        const timed = x.seconds != null;
+        return { id: ex.id, ex, sets: x.sets, reps: timed ? undefined : t?.reps ?? x.reps ?? ex.reps, seconds: timed ? t?.seconds ?? (x.seconds || ex.seconds || 30) : undefined, load: t?.load ?? x.weightKg, note: t?.note };
       });
       return { title: free.name, items };
     }
@@ -160,7 +162,7 @@ export default function StrengthPlayer() {
           <div><p className="caption">Time</p><p className="stat-xl" style={{ fontSize: 36 }}>{duration(elapsed)}</p></div>
           <div><p className="caption">Exercises</p><p className="stat" style={{ fontSize: 28 }}>{logged.length}</p></div>
           <div><p className="caption">Sets</p><p className="stat" style={{ fontSize: 28 }}>{doneSets}</p></div>
-          {sum.volumeKg > 0 && <div><p className="caption">Volume</p><p className="stat" style={{ fontSize: 28 }}>{showLoad(sum.volumeKg, unit)}</p></div>}
+          {sum.volumeKg > 0 && <div><p className="caption">Volume</p><p className="stat" style={{ fontSize: 28 }}>{showVolume(logged.flatMap((x) => x.sets), unit)}</p></div>}
         </section>
         {logged.length > 0 && (
           <section className="card stack-sm" aria-label="What you did">
@@ -176,7 +178,7 @@ export default function StrengthPlayer() {
           <section className="card stack-sm" aria-label="Save as a workout">
             {savedAs ? <p className="label" role="status"><Check size={16} aria-hidden="true" /> Saved as "{savedAs}"</p> : <>
               <div className="field"><label htmlFor="sp-save-name">Save this as a workout, to start it again</label><input id="sp-save-name" className="input" maxLength={40} placeholder="Leg day" value={saveName} onChange={(e) => setSaveName(e.target.value)} /></div>
-              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={!saveName.trim()} onClick={() => { saveTemplate({ name: saveName, exercises: asTemplateExercises(logged) }); setSavedAs(saveName.trim()); }}>Save as a workout</button>
+              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={!saveName.trim()} onClick={() => { const stored = freeName(prefs?.templates ?? [], saveName.trim()); saveTemplate({ name: stored, exercises: asTemplateExercises(logged) }); setSavedAs(stored); }}>Save as a workout</button>
             </>}
           </section>
         )}
@@ -190,7 +192,8 @@ export default function StrengthPlayer() {
   const vol = exerciseSummary(filled, unit), lastVol = was ? exerciseSummary(was.sets, unit).volumeKg : 0;
   const pct = lastVol && vol.volumeKg ? Math.round((vol.volumeKg / lastVol - 1) * 100) : undefined;
   const doneLog = curSets.filter((x) => x.done).map((x) => asLog(x, curMeta, cur.ex));
-  const next = doneLog.length ? doubleProgression(cur.ex, doneLog, curSets.length, undefined, unit) : undefined;
+  // The next-time advice only once every set of this exercise is done: sets still to come are not "missed"
+  const next = doneLog.length && doneLog.length === curSets.length ? doubleProgression(cur.ex, doneLog, curSets.length, undefined, unit) : undefined;
   const types: LoadType[] = cur.ex.equipment === 'none' ? ['bodyweight', 'bodyweight_plus', 'band'] : ['added', 'bodyweight', 'band'];
   const timed = curSets.some((x) => x.seconds != null);
 
@@ -257,7 +260,7 @@ export default function StrengthPlayer() {
         )}
         {vol.volumeKg > 0 && (
           <div className="volume-card" role="status" aria-label="Volume">
-            <p className="row-between"><span className="label">Volume {showLoad(vol.volumeKg, unit)}</span>{pct != null && <span className="vs-last">{pct >= 0 ? '+' : ''}{pct}% vs last</span>}</p>
+            <p className="row-between"><span className="label">Volume {showVolume(filled, unit)}</span>{pct != null && <span className="vs-last">{pct >= 0 ? '+' : ''}{pct}% vs last</span>}</p>
             <p className="caption">{vol.best ? `Best set: ${showLoad(vol.best.load, unit)} × ${vol.best.reps}, estimated 1-rep max ${showLoad(vol.best.e1rm, unit)}.` : ''}{next ? ` Next time: ${next.note}.` : ''}</p>
           </div>
         )}

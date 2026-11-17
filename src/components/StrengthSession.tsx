@@ -10,6 +10,7 @@ import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { ExerciseDemo } from './ExerciseDemo';
 import { alternatives, blockOf, doseText, EQUIPMENT_LABEL, EXERCISES, excluded, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, WEEK_FOCUS, type BlockWeek, type Routine, type StrengthItem } from '../training/strength';
+import { exerciseSummary, type WeightUnit } from '../training/strength-load';
 import type { PlannedSession } from '../lib/types';
 
 /** The strength block and week of a session, and how many planned sessions in a row were skipped before it */
@@ -28,7 +29,11 @@ export function StrengthCard({ session, compact }: { session: PlannedSession; co
   const at = useStrengthAt(session.date);
   if (!session.strengthPlan) return null;
   const r = resolveStrength(session.strengthPlan, data.profile.strength, at);
-  const done = (data.profile.log ?? []).some((e) => e.kind === 'strength' && e.strength?.sessionId === session.id);
+  const entry = (data.profile.log ?? []).find((e) => e.kind === 'strength' && e.strength?.sessionId === session.id);
+  const done = !!entry;
+  // Once done, the card lists what was done, not the targets the saved workout set for the next session
+  const did = entry?.strength?.exercises.filter((x) => x.sets.length) ?? [];
+  const unit: WeightUnit = data.profile.strength?.units ?? 'kg';
   const only = session.type === 'rest';
   return (
     <section className={`card stack-sm strength-card${compact ? ' compact' : ''}`} aria-label={`Strength: ${r.title}`}>
@@ -39,8 +44,11 @@ export function StrengthCard({ session, compact }: { session: PlannedSession; co
       <p className="caption strength-meta">{r.minutes} min · {r.items.length} exercises · {EQUIPMENT_LABEL[r.equipment]} · <Link to="/strength-plan" className="strength-block-link">Block {at.block}, week {at.week}: {WEEK_FOCUS[at.week].name}</Link></p>
       {at.skips >= 2 && <p className="caption">Two sessions were skipped, so this one is a step back: a little easier, to pick up again.</p>}
       <ul className="strength-list">
-        {r.items.slice(0, 4).map((x) => <li key={x.id}><span>{x.ex.name}</span><span className="caption">{doseText(x)}</span></li>)}
-        {r.items.length > 4 && <li className="caption">+ {r.items.length - 4} more</li>}
+        {did.length
+          ? <>{did.slice(0, 4).map((x, i) => <li key={`${x.id}-${i}`}><span>{x.name}</span><span className="caption">{exerciseSummary(x.sets, unit).text}</span></li>)}
+            {did.length > 4 && <li className="caption">+ {did.length - 4} more</li>}</>
+          : <>{r.items.slice(0, 4).map((x) => <li key={x.id}><span>{x.ex.name}</span><span className="caption">{doseText(x)}</span></li>)}
+            {r.items.length > 4 && <li className="caption">+ {r.items.length - 4} more</li>}</>}
       </ul>
       <p className="caption"><strong style={{ color: 'var(--ink)' }}>Why: </strong>{session.strengthPlan.why}</p>
       {!done && (

@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { blockOf, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, targetFor, WEEK_FOCUS, type BlockWeek } from '../training/strength';
-import { exerciseSummary, sessionSummary, showLoad, type WeightUnit } from '../training/strength-load';
+import { exerciseSummary, sessionSummary, showLoad, showVolume, type WeightUnit } from '../training/strength-load';
 import { ExerciseHistory } from '../components/StrengthBits';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
@@ -30,11 +30,12 @@ export default function StrengthPlan() {
     const cell = (x?: (typeof cols)[number][number]) => (x ? `${x.ex.name}${x.harder ? ` ${x.harder}` : ''}` : '–');
     return { routine, title: ROUTINE_TITLE[routine], rows: cols[0].map((_, i) => cols.map((c) => cell(c[i]))) };
   });
-  const last = logs[0];
+  // The newest session that has exercises (a hand-logged class has none, and nothing to tap)
+  const last = logs.find((e) => e.strength!.exercises.length > 0) ?? logs[0];
   // A long wait for the next session is explained (update 4): a race or taper, or how the week is laid out
   const gapWhy = (() => {
     if (!next) return undefined;
-    const lastDate = [last?.date, ...(plan?.sessions ?? []).filter((x) => x.strengthPlan && x.date < t).map((x) => x.date)].filter(Boolean).sort().pop();
+    const lastDate = [logs[0]?.date, ...(plan?.sessions ?? []).filter((x) => x.strengthPlan && x.date < t).map((x) => x.date)].filter(Boolean).sort().pop();
     if (!lastDate) return undefined;
     const gap = Math.round((parseYmd(next.date).getTime() - parseYmd(lastDate).getTime()) / 86400000);
     if (gap <= 8) return undefined;
@@ -85,13 +86,13 @@ export default function StrengthPlan() {
           <>
             <p className="caption">{last.strength!.title} · {longDate(parseYmd(last.date))}{last.rpe ? ` · effort ${last.rpe}/10` : ''}</p>
             {(() => { const sum = sessionSummary(last.strength!.exercises); return sum.volumeKg > 0 ? (
-              <p className="caption last-volume">Volume {showLoad(sum.volumeKg, unit)}{sum.best ? ` · best set: ${sum.best.name}, ${showLoad(sum.best.load, unit)} × ${sum.best.reps} · estimated 1-rep max ${showLoad(sum.best.e1rm, unit)}` : ''}</p>
+              <p className="caption last-volume">Volume {showVolume(last.strength!.exercises.flatMap((x) => x.sets), unit)}{sum.best ? ` · best set: ${sum.best.name}, ${showLoad(sum.best.load, unit)} × ${sum.best.reps} · estimated 1-rep max ${showLoad(sum.best.e1rm, unit)}` : ''}</p>
             ) : null; })()}
             <ul className="list">
               {last.strength!.exercises.map((x) => {
                 const pr = prefs.progress?.[x.id];
                 const ex = exById.get(x.id);
-                const nx = ex && pr ? targetFor({ id: x.id, sets: x.planned ?? x.sets.length, reps: ex.reps, seconds: ex.seconds }, pr, week).note : undefined;
+                const nx = ex && pr ? targetFor({ id: x.id, sets: x.planned ?? x.sets.length, reps: ex.reps, seconds: ex.seconds }, pr, week, unit).note : undefined;
                 return (
                   <li key={x.id}>
                     <button type="button" className="list-item row-between last-ex" style={{ alignItems: 'flex-start', width: '100%', textAlign: 'left' }} aria-label={`${x.name}: history`} onClick={() => setHistory({ id: x.id, name: x.name })}>
@@ -102,7 +103,7 @@ export default function StrengthPlan() {
                 );
               })}
             </ul>
-            <p className="caption">Tap an exercise for its history.</p>
+            {last.strength!.exercises.length > 0 ? <p className="caption">Tap an exercise for its history.</p> : <p className="caption">Logged without exercises.</p>}
             <p className="caption">All sets done at an effort of 7 or less: one more rep next time, up to the top of the range (4 above the starting reps). Then more weight, and back to the starting reps. Harder than that, or sets missed: the same again. Two skipped sessions: a step back.</p>
           </>
         ) : <p className="muted">No strength session recorded yet. Start one from Training.</p>}

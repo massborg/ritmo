@@ -10,7 +10,7 @@ import { Chips, DateField, Sheet, Stepper } from '../components/inputs';
 import { StatusLine } from '../components/ui';
 import { ExerciseLibrary, NumInput, exclusionNote, stashWorkout } from '../components/StrengthBits';
 import { exById, type Exercise } from '../training/strength';
-import { MAX_FAVOURITES, defaultLoadType, fromUnit, sortTemplates, templateLine, toUnit, type StrengthTemplate, type TemplateExercise, type WeightUnit } from '../training/strength-load';
+import { MAX_FAVOURITES, defaultLoadType, freeName, fromUnit, sortTemplates, templateLine, toUnit, type StrengthTemplate, type TemplateExercise, type WeightUnit } from '../training/strength-load';
 import { ymd } from '../lib/format';
 
 export default function StrengthFree() {
@@ -37,7 +37,8 @@ export default function StrengthFree() {
   const add = (e: Exercise) => { setList((l) => [...l, { exerciseId: e.id, sets: e.sets, reps: e.seconds ? undefined : e.reps ?? 10, seconds: e.seconds, weightKg: e.equipment === 'none' ? undefined : prefs.last?.[e.id]?.load }]); setMsg(undefined); };
   const patch = (i: number, p: Partial<TemplateExercise>) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const move = (i: number, d: -1 | 1) => setList((l) => { const n = [...l]; const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
-  const valid = list.filter((x) => exById.has(x.exerciseId) && x.sets > 0);
+  // A row counts when it has sets, and a hold has a time (an emptied Seconds field is not a 0-second hold)
+  const valid = list.filter((x) => exById.has(x.exerciseId) && x.sets > 0 && !(x.seconds != null && x.seconds <= 0));
   const start = (w: { name: string; templateId?: string; exercises: TemplateExercise[] }) => { stashWorkout(w); nav('/strength/free?w=1'); };
   const use = (t: StrengthTemplate) => {
     if (logMode) { setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setMsg(`"${t.name}" loaded. Change anything that was different, then save.`); return; }
@@ -45,8 +46,10 @@ export default function StrengthFree() {
   };
   const edit = (t: StrengthTemplate) => { setEditing(t); setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setMenu(undefined); setMsg(undefined); window.scrollTo({ top: 0 }); };
   const saveWorkout = () => {
-    saveTemplate({ id: editing?.id, name: name.trim() || 'My workout', exercises: valid });
-    setMsg(editing ? `"${name.trim() || 'My workout'}" updated.` : `Saved as "${name.trim() || 'My workout'}". It is in your saved workouts.`);
+    // The name as it is stored: a name already taken gets a number ("Core 2"), and the message says so
+    const stored = freeName((prefs.templates ?? []).filter((x) => x.id !== editing?.id), name.trim() || 'My workout');
+    saveTemplate({ id: editing?.id, name: stored, exercises: valid });
+    setMsg(editing ? `"${stored}" updated.` : `Saved as "${stored}". It is in your saved workouts.`);
     setEditing(undefined); setList([]); setName(''); setNaming(false);
   };
   const saveLog = () => {
@@ -130,7 +133,7 @@ export default function StrengthFree() {
             <div className="field"><label htmlFor="sf-name">Name (optional)</label><input id="sf-name" className="input" value={name} maxLength={40} placeholder="Strength session" onChange={(e) => setName(e.target.value)} /></div>
             <DateField id="sf-date" label="Date" value={date} onChange={setDate} />
             <Stepper id="sf-min" label="Duration" value={minutes} min={5} max={240} step={5} unit="min" onChange={setMinutes} />
-            <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => ({ value: v, label: String(v) }))} />
+            <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => ({ value: v, label: String(v) }))} />
             <button type="button" className="btn btn-primary btn-block" disabled={!valid.length || !minutes} onClick={saveLog}>Save to my log</button>
           </div>
         ) : naming || editing ? (
@@ -160,7 +163,7 @@ export default function StrengthFree() {
           {rename != null ? (
             <div className="stack">
               <div className="field"><label htmlFor="sf-rename">New name</label><input id="sf-rename" className="input" autoFocus maxLength={40} value={rename} onChange={(e) => setRename(e.target.value)} /></div>
-              <button type="button" className="btn btn-primary btn-block" disabled={!rename.trim()} onClick={() => { saveTemplate({ id: menu.id, name: rename, exercises: menu.exercises }); setMenu(undefined); }}>Save name</button>
+              <button type="button" className="btn btn-primary btn-block" disabled={!rename.trim()} onClick={() => { const stored = freeName((prefs.templates ?? []).filter((x) => x.id !== menu.id), rename.trim()); saveTemplate({ id: menu.id, name: stored, exercises: menu.exercises }); setMsg(`Renamed to "${stored}".`); setMenu(undefined); }}>Save name</button>
             </div>
           ) : confirmDelete ? (
             <div className="stack">

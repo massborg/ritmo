@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exById } from './strength';
-import { doubleProgression, epley, exerciseSummary, freeName, fromUnit, groupsOf, loadStep, repRange, sessionSummary, sortTemplates, templateLine, toggleFavourite, toUnit, type SetLog, type StrengthTemplate } from './strength-load';
+import { doubleProgression, epley, exerciseSummary, showVolume, freeName, fromUnit, groupsOf, loadStep, repRange, sessionSummary, sortTemplates, templateLine, toggleFavourite, toUnit, type SetLog, type StrengthTemplate } from './strength-load';
 
 const goblet = exById.get('goblet-squat')!; // 3 × 10, light weights
 const sets = (n: number, reps: number, load: number, effort = 6): SetLog[] => Array.from({ length: n }, () => ({ reps, load, effort }));
@@ -92,5 +92,22 @@ describe('a back-dated log', () => {
     expect(newerLogged(log, 'goblet-squat', '2026-11-17')).toBe(false);
     expect(newerLogged(log, 'goblet-squat', '2026-11-18')).toBe(false);
     expect(newerLogged(log, 'plank', '2026-11-07')).toBe(false);
+  });
+});
+
+describe('QA sweep 2: band notes and volume in lb', () => {
+  it('a band exercise at the top of its range suggests a heavier band, not "no load"', () => {
+    const walk = exById.get('band-walk')!;
+    const hi = repRange(walk)[1];
+    const t = doubleProgression(walk, [{ reps: hi, loadType: 'band', band: 'medium', effort: 6 }], 1);
+    expect(t.note).toBe(`${hi} reps reached with the medium band: try the heavy band next time`);
+    expect(doubleProgression(walk, [{ reps: hi, loadType: 'band', band: 'heavy', effort: 6 }], 1).note).toMatch(/heavy band: the harder version comes with the next block/);
+  });
+  it('volume in lb is a whole number that agrees with the lb weights shown', () => {
+    const kg100lb = fromUnit(100, 'lb');
+    expect(showVolume(sets(3, 10, kg100lb), 'lb')).toBe('3000 lb');
+    expect(showVolume(sets(3, 10, 25), 'lb')).toBe('1650 lb');
+    expect(showVolume([{ reps: 10, load: fromUnit(22, 'lb'), perSide: true }, { reps: 10, load: fromUnit(22, 'lb'), perSide: true }, { reps: 10, load: fromUnit(22, 'lb'), perSide: true }], 'lb')).toBe('1320 lb');
+    expect(showVolume(sets(3, 10, 20), 'kg')).toBe('600 kg');
   });
 });

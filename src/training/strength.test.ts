@@ -1,7 +1,7 @@
 // Strength (update 3, §4, §5, §8)
 import { describe, expect, it } from 'vitest';
 import type { Profile, Race } from '../lib/types';
-import { alternatives, EXERCISES, exById, resolveStrength } from './strength';
+import { alternatives, EXERCISES, exById, resolveStrength, targetFor } from './strength';
 import { generatePlan, type GenResult } from './generator';
 import { trainingPaces } from './fitness';
 import { crossLoad } from './load';
@@ -125,5 +125,14 @@ describe('"Always use this instead" holds through later blocks', () => {
     const other = resolveStrength({ routine: 'A', intensity: 'heavy', why: '', custom: [{ id: 'goblet-squat', sets: 4, reps: 8 }] }, { equipment: 'light', progress }, { block: 1, week: 1 });
     expect(other.items[0]).toMatchObject({ sets: 4, reps: 8, load: 20 });
     expect(other.items[0].note).toBeUndefined();
+  });
+});
+
+describe('QA sweep 2: step-back notes use the runner\'s unit', () => {
+  it('a step back after skipped sessions shows lb for an lb user, kg otherwise', () => {
+    const pr = { reps: 14, load: 20, next: 'back' as const, at: '2026-11-01', target: { reps: 10, load: 22.5, note: 'Add load' } };
+    const x = { id: 'goblet-squat', sets: 3, reps: 10 };
+    expect(targetFor(x, pr, 1).note).toBe('a step back (18 kg)');
+    expect(targetFor(x, pr, 1, 'lb').note).toBe('a step back (39.5 lb)');
   });
 });
