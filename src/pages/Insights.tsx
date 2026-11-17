@@ -93,6 +93,8 @@ export default function Insights() {
   const balance = easyHardBalance({ activities: acts, typeOf, sessions: (plan?.sessions ?? []).map((x) => ({ ...x, phase: PHASE_LABEL[x.phase].toLowerCase() })), today });
   const easyPct = balance?.easyPct ?? 0;
 
+  // Against the estimate 12 months back, only when there was one then; says which way it went
+  const yearAgo = (v: (number | null)[]) => { const now = v[v.length - 1], then = v[v.length - 13]; return now != null && then != null ? `${duration(Math.abs(now - then) * 60)} ${now <= then ? 'faster' : 'slower'} than a year ago` : undefined; };
   // Training load (last 120 days, weekly samples)
   const loadSlice = series.slice(-120).filter((_, i, arr) => (arr.length - 1 - i) % 7 === 0);
 
@@ -226,7 +228,7 @@ export default function Insights() {
           <div className="grid-3">
             {[['5K', est.five], ['10K', est.ten], ['Half', est.half], ['Marathon', est.mar]].map(([l, v]) => {
               const arr = (v as (number | null)[]).filter((x): x is number => x != null);
-              return <Kpi key={l as string} label={l as string} value={arr.length ? duration(arr[arr.length - 1] * 60) : '–'} sub={arr.length > 12 ? `${arr[arr.length - 1] < arr[arr.length - 13] ? '' : '+'}${duration(Math.abs(arr[arr.length - 1] - arr[arr.length - 13]) * 60)} vs a year ago` : undefined} />;
+              return <Kpi key={l as string} label={l as string} value={arr.length ? duration(arr[arr.length - 1] * 60) : '–'} sub={yearAgo(v as (number | null)[])} />;
             })}
           </div>
         </section>

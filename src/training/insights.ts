@@ -1,6 +1,6 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
-import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, ymd } from '../lib/format';
+import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, type Units, ymd } from '../lib/format';
 import { officialTimeS, predictRace, raceEvidence, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 
@@ -147,7 +147,21 @@ export interface RaceReadiness {
   summary: string;
 }
 
-export function raceReadiness(race: Race, activities: Activity[], vdot: number, today: Date): RaceReadiness {
+/**
+ * The run that was the race: on the race date, the one the runner marked as the race first, then the one nearest the
+ * race distance, then the most detailed. One choice for the race page and the race report.
+ */
+export function raceRunFor(race: Pick<Race, 'date' | 'distanceM'>, activities: Activity[]): Activity | undefined {
+  return activities.filter((a) => a.startTime.slice(0, 10) === race.date)
+    .sort((a, b) => Number(!!b.isRace) - Number(!!a.isRace) || Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM) || (b.detailScore ?? 0) - (a.detailScore ?? 0))[0];
+}
+/** A race result as shown everywhere: the elapsed (official) time, or the moving time when that is all there is */
+export const raceResultS = (a: Pick<Activity, 'durationS' | 'movingS'>) => Math.round(a.durationS || a.movingS);
+
+export function raceReadiness(race: Race, activities: Activity[], vdot: number, today: Date, units: Units = 'km'): RaceReadiness {
+  // Distances in the runner's unit (km keeps the round figures: "21.1 km of 9 km")
+  const far = (m: number, digits: number) => (units === 'km' ? `${(m / 1000).toFixed(digits)} km` : `${toUnit(m, units).toFixed(digits)} mi`);
+  const need = (m: number, digits: number) => (units === 'km' ? `${m / 1000} km` : `${toUnit(m, units).toFixed(digits)} mi`);
   const predictedS = predictRace(vdot, race.distanceM, activities, today).timeS * (race.courseType === 'trail' ? 1.12 : race.courseType === 'cross-country' ? 1.06 : 1);
   const last42 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d <= 42; });
   const longest = last42.reduce((x, a) => Math.max(x, a.distanceM), 0);
@@ -162,8 +176,8 @@ export function raceReadiness(race: Race, activities: Activity[], vdot: number, 
   const goalScore = race.goalS ? Math.min(1, Math.max(0, 1 - (race.goalS < predictedS ? (predictedS - race.goalS) / race.goalS * 8 : 0))) : 1;
   const score = Math.round((longScore * 0.3 + volScore * 0.25 + consScore * 0.2 + goalScore * 0.25) * 100);
   const parts = [
-    { label: 'Longest run, last 6 weeks', value: `${(longest / 1000).toFixed(1)} km of ${LONG_NEEDED(race.distanceM) / 1000} km`, ok: longScore >= 0.9 },
-    { label: 'Weekly average, last 6 weeks', value: `${(weekly / 1000).toFixed(0)} km of ${WEEKLY_NEEDED(race.distanceM) / 1000} km`, ok: volScore >= 0.85 },
+    { label: 'Longest run, last 6 weeks', value: `${far(longest, 1)} of ${need(LONG_NEEDED(race.distanceM), 1)}`, ok: longScore >= 0.9 },
+    { label: 'Weekly average, last 6 weeks', value: `${far(weekly, 0)} of ${need(WEEKLY_NEEDED(race.distanceM), 0)}`, ok: volScore >= 0.85 },
     { label: 'Consistent weeks (3+ runs), last 8', value: `${consistentWeeks} of 8`, ok: consScore >= 0.85 },
   ];
   if (race.goalS) parts.push({ label: 'Goal compared with prediction', value: race.goalS >= predictedS ? 'Within reach' : `${predictedS - race.goalS < 90 ? `${Math.round(predictedS - race.goalS)} s` : `${Math.round((predictedS - race.goalS) / 60)} min`} quicker than predicted`, ok: race.goalS >= predictedS * 0.99 });

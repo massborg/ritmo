@@ -99,11 +99,16 @@ export function readinessScore(o: {
   const endOf = (a: Activity) => new Date(a.startTime).getTime() + (a.durationS || a.movingS) * 1000;
   const isHard = (a: Activity) => HARD_TYPES.includes(typeOf(a)) || (!o.hrSuspect && !!a.avgHr && !!o.zones && zoneOf(a.avgHr, o.zones) >= 4);
   const lastHard = activities.filter((a) => endOf(a) <= now.getTime() && now.getTime() - endOf(a) < 14 * 86400000 && isHard(a)).sort((a, b) => endOf(b) - endOf(a))[0];
-  if (lastHard) {
-    const h = (now.getTime() - endOf(lastHard)) / 3600000;
+  // A HYROX simulation or race recorded in Ritmo is a hard session too. It is kept in the log, not with the runs.
+  const hyroxHard = (profile.log ?? []).filter((e) => e.kind === 'hyrox' && !!e.hyrox && ['full', 'half_front', 'half_back', 'race'].includes(e.hyrox.mode))
+    .map((e) => ({ end: new Date(e.hyrox!.startedAt).getTime() + e.hyrox!.totalMs, what: e.hyrox!.isRace ? 'HYROX race' : 'HYROX simulation' }))
+    .filter((x) => x.end <= now.getTime() && now.getTime() - x.end < 14 * 86400000).sort((a, b) => b.end - a.end)[0];
+  const hardEnd = Math.max(lastHard ? endOf(lastHard) : 0, hyroxHard?.end ?? 0);
+  if (hardEnd) {
+    const h = (now.getTime() - hardEnd) / 3600000;
     const when = h < 24 ? `${Math.max(1, Math.round(h))} hours ago` : `${Math.round(h / 24)} day${Math.round(h / 24) === 1 ? '' : 's'} ago`;
-    const short = SESSION_SHORT[typeOf(lastHard)];
-    const what = short && short !== 'easy run' && short !== 'long run' ? short : 'run at a hard effort';
+    const short = lastHard ? SESSION_SHORT[typeOf(lastHard)] : undefined;
+    const what = hyroxHard && hyroxHard.end === hardEnd ? hyroxHard.what : short && short !== 'easy run' && short !== 'long run' ? short : 'run at a hard effort';
     if (h < 24) factors.push({ key: 'recovery', name: 'Recovery', value: 'Under 24 h', tone: 'bad', effect: -20, explain: `Your last hard session (${what}) was ${when}.` });
     else if (h < 48) factors.push({ key: 'recovery', name: 'Recovery', value: '24–48 h', tone: 'warn', effect: -8, explain: `Your last hard session (${what}) was ${when}.` });
     else factors.push({ key: 'recovery', name: 'Recovery', value: 'Recovered', tone: 'good', effect: 0, explain: `Your last hard session (${what}) was ${when}.` });

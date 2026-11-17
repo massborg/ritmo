@@ -6,7 +6,7 @@ import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine } from '../components/ui';
 import { daysUntil, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
-import { pacingPlan, raceReadiness, taperGuidance } from '../training/insights';
+import { pacingPlan, raceReadiness, raceResultS, raceRunFor, taperGuidance } from '../training/insights';
 import { effortOf } from '../training/derive';
 import { estimateFitness, predictTime, vdotFromPerformance } from '../training/fitness';
 import type { CourseType, Race, RacePriority } from '../lib/types';
@@ -73,12 +73,12 @@ export default function RacePage() {
 
   const past = race.date < ymd(today);
   const days = daysUntil(today, race.date);
-  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today) : undefined;
+  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today, data.profile.units) : undefined;
   const target = race.goalS && rr && race.goalS >= rr.predictedS * 0.98 ? race.goalS : rr?.predictedS;
   const pp = target ? pacingPlan(race, target) : [];
 
   // Post-race review: find the race activity on that day
-  const result = past ? data.activities.filter((a) => a.startTime.slice(0, 10) === race.date).sort((a, b) => Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM))[0] : undefined;
+  const result = past ? raceRunFor(race, data.activities) : undefined;
   const before = past ? estimateFitness(forStats(data.activities).filter((a) => a.startTime.slice(0, 10) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
   const after = past ? estimateFitness(forStats(data.activities), hr, addDay(parseYmd(race.date), 1)) : undefined;
   const predictedBefore = before ? predictTime(before.vdot, race.distanceM) : undefined;
@@ -139,7 +139,7 @@ export default function RacePage() {
           {result ? (
             <>
               <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-                <div><p className="caption">Result · official race time</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(Math.round(result.durationS || result.movingS))}</p></div>
+                <div><p className="caption">Result · official race time</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(raceResultS(result))}</p></div>
                 {(() => { const e = Math.round(Math.min(effortOf(result, race.distanceM) ?? Infinity, result.movingS * (race.distanceM / result.distanceM))); return Number.isFinite(e) && Math.abs(e - Math.round(result.durationS || result.movingS)) >= 1 ? <div><p className="caption">Best effort ({distanceLabel(race.distanceM)}, GPS)</p><p className="stat">{duration(e)}</p></div> : null; })()}
                 {predictedBefore && <div><p className="caption">Predicted beforehand</p><p className="stat">{duration(predictedBefore)}</p></div>}
                 {race.goalS && <div><p className="caption">Goal</p><p className="stat">{duration(race.goalS)}</p></div>}

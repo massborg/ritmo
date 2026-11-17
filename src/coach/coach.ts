@@ -2,7 +2,7 @@
 // When the Supabase "coach" function is configured with a Claude API key, it phrases answers from the same facts.
 import { hyroxFacts } from '../hyrox/predict';
 import type { Activity, PlannedSession, Profile, Race } from '../lib/types';
-import { daysUntil, distanceLabel, duration, longDate, parseYmd, pace, paceRange, shortDate, type Units, ymd } from '../lib/format';
+import { daysUntil, distanceLabel, duration, localise, longDate, parseYmd, pace, paceRange, shortDate, type Units, ymd } from '../lib/format';
 import type { StageInfo } from '../training/stage';
 import type { FitnessEstimate, TrainingPaces } from '../training/fitness';
 import type { Readiness } from '../training/load';
@@ -210,7 +210,7 @@ export function localReply(q: string, c: CoachContext): CoachReply {
         : `Your fitness currently predicts ${duration(r.predictedS)}, ${gapWords(gap)} slower than your goal of ${duration(race.goalS)}.`
       : `Your current fitness predicts ${duration(r.predictedS)}.`;
     const weak = r.parts.find((p) => !p.ok);
-    return { text: `${goal} Race preparation is ${r.score} out of 100 with ${days} days to go. ${weak ? `The gap is ${weak.label.toLowerCase()} (${weak.value}).` : 'Every marker is where it should be.'} ${r.summary}`, facts };
+    return { text: `${goal} Race preparation is ${r.score} out of 100 with ${days} days to go. ${weak ? `The gap is ${weak.label.toLowerCase()} (${localise(weak.value, U)}).` : 'Every marker is where it should be.'} ${r.summary}`, facts };
   }
 
   if (/last run|yesterday|how did|my run/.test(lower) && !c.last) {

@@ -224,7 +224,8 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
   if (!best) {
     // fall back to average easy running: easy pace ~ 70% VO2max
     const easy = activities
-      .filter((a) => new Date(a.startTime).getTime() > from && a.distanceM >= 1500 && a.movingS >= 600)
+      // Only runs up to the day asked about: a month before the runner's first run has no estimate
+      .filter((a) => { const t = new Date(a.startTime).getTime(); return t > from && t <= at.getTime() && a.distanceM >= 1500 && a.movingS >= 600; })
       .map((a) => a.movingS / (a.distanceM / 1000));
     if (!easy.length) return undefined;
     easy.sort((a, b) => a - b);
