@@ -66,7 +66,8 @@ function Entry({ kind, id, value, onChange, label, small, placeholderS, invalid,
           </span>
         ))}
       </span>
-      <input ref={ref} id={id} className="time-entry-input" inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={shown}
+      {/* No pattern attribute: the value holds colons ("1:15:00"), and a digits-only pattern made the browser refuse the form */}
+      <input ref={ref} id={id} className="time-entry-input" inputMode="numeric" autoComplete="off" value={shown}
         aria-label={`${label}: ${digits ? sayEntry(e) : 'empty'}`} aria-invalid={bad || undefined} aria-describedby={described}
         onChange={(ev) => change(ev.target.value)} onClick={caretToEnd}
         onKeyDown={(ev) => {

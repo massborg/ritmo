@@ -25,7 +25,7 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
   const [prio, setPrio] = useState<RacePriority>(race?.priority ?? 'A');
   const [err, setErr] = useState('');
   return (
-    <form className="stack-lg" onSubmit={(e) => {
+    <form className="stack-lg" noValidate onSubmit={(e) => {
       e.preventDefault();
       const distanceM = dm === 'custom' ? (customKm ?? 0) * 1000 : Number(dm);
       if (!name.trim()) { setErr('Give the race a name.'); return; }
