@@ -10,7 +10,7 @@ import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
 import { Empty, StatusLine } from '../components/ui';
 import { distanceLabel, duration, longDate, pace, parseYmd, ymd } from '../lib/format';
-import { raceReadiness } from '../training/insights';
+import { raceReadiness, raceResultS, raceRunFor } from '../training/insights';
 import { fuelling, raceReport, targetSplits, warmup, type Strategy, type WarmupStep } from '../training/raceday';
 
 export default function RaceDay() {
@@ -19,9 +19,7 @@ export default function RaceDay() {
   const race = data.races.find((r) => r.id === id);
   const [strategy, setStrategy] = useState<Strategy>('even');
   const result = race && race.date <= ymd(today)
-    ? data.activities.filter((a) => a.startTime.slice(0, 10) === race.date)
-      // The run marked as the race first, then the one nearest the race distance, then the most detailed
-      .sort((a, b) => Number(!!b.isRace) - Number(!!a.isRace) || Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM) || b.detailScore - a.detailScore)[0]
+    ? raceRunFor(race, data.activities)
     : undefined;
   const { run } = useRunDetail(result, data.mode === 'real');
   if (!race) return <Empty title="Race not found" action={<Link to="/" className="btn">Back to Training</Link>} />;
@@ -65,7 +63,9 @@ export default function RaceDay() {
         <section className="card stack" aria-labelledby="rd-report">
           <h2 id="rd-report" className="title">Race report</h2>
           <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-            <div><p className="caption">Result</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(result.movingS * (race.distanceM / result.distanceM))}</p></div>
+            {/* The same result as the race page: the elapsed time. The moving time scaled to the race distance is the best effort. */}
+            <div><p className="caption">Result</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(raceResultS(result))}</p></div>
+            {Math.abs(Math.round(result.movingS * (race.distanceM / result.distanceM)) - raceResultS(result)) >= 1 && <div><p className="caption">Best effort ({distanceLabel(race.distanceM)}, GPS)</p><p className="stat">{duration(result.movingS * (race.distanceM / result.distanceM))}</p></div>}
             {target && <div><p className="caption">{race.goalS ? 'Goal' : 'Predicted'}</p><p className="stat">{duration(target)}</p></div>}
           </div>
           {report ? (

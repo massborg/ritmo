@@ -137,7 +137,10 @@ function RunLine({ p, U }: { p: Post; U: 'km' | 'mi' }) {
       <span className="stack-sm" style={{ gap: 0, flex: 1, minWidth: 0 }}>
         <span className="caption">{d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
         <span className="label profile-run-title">{p.title}</span>
-        <span className="caption">{dist(p.stats.distanceM, U)} · {fmtPace(p.stats.paceS, U)} · {duration(p.stats.movingS)}</span>
+        {/* A strength or HYROX post has no distance or pace: its time, and what was done */}
+        <span className="caption">{p.stats.type === 'strength'
+          ? [duration(p.stats.movingS), ...(p.stats.strength ? (p.stats.hyrox ? [`${p.stats.strength.exercises} station${p.stats.strength.exercises === 1 ? '' : 's'}`, `${p.stats.strength.sets} run${p.stats.strength.sets === 1 ? '' : 's'}`] : [`${p.stats.strength.exercises} exercise${p.stats.strength.exercises === 1 ? '' : 's'}`, `${p.stats.strength.sets} set${p.stats.strength.sets === 1 ? '' : 's'}`]) : [])].join(' · ')
+          : `${dist(p.stats.distanceM, U)} · ${fmtPace(p.stats.paceS, U)} · ${duration(p.stats.movingS)}`}</span>
       </span>
       <span className="row caption" style={{ gap: 4 }}><Flame size={16} strokeWidth={2} className="flame" aria-hidden="true" />{p.ritmo_count}</span>
     </>

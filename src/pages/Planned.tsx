@@ -8,7 +8,7 @@ import { StrengthCard } from '../components/StrengthSession';
 import { LogRunSheet } from '../components/LogRun';
 import { AppHeader } from '../components/app';
 import { Empty, StatusLine, ZoneTag } from '../components/ui';
-import { DAY_SHORT, dist, durationWords, localise, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
+import { DAY_SHORT, dist, durationWords, localise, localiseStep, longDate, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { keepPlanToday } from '../training/readiness';
 
@@ -60,7 +60,7 @@ export default function Planned() {
       )}
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(s.date))} · {PHASE_LABEL[s.phase]} phase{s.movedFrom ? ` · moved from ${DAY_SHORT[weekday(parseYmd(s.movedFrom))]}` : ''}</p>
-        <h1 className="display-lg">{s.title}</h1>
+        <h1 className="display-lg">{localise(s.title, U)}</h1>
         <div className="row wrap"><span className="tag">{s.focus}</span>
           {s.status === 'done' && <StatusLine kind="success">Completed</StatusLine>}
           {s.status === 'swapped' && <StatusLine kind="info">Swapped: run as an easy run instead</StatusLine>}
@@ -87,7 +87,7 @@ export default function Planned() {
               <div><p className="caption">Time</p><p className="stat" style={{ fontSize: 24, lineHeight: '30px' }}>{durationWords(s.durationS)}</p></div>
             </div>
           )}
-          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localiseStep(st.detail, st.pace, U)}</li>)}</ol>
           {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
           {s.strength && !s.strengthPlan && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
           {s.paceTarget && <div><p className="caption">Target pace</p><p className="stat">{paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}</p></div>}

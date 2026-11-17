@@ -6,7 +6,15 @@
 import type { PlannedSession, StreamPoint } from '../lib/types';
 
 export interface Fix { t: number; lat: number; lon: number; acc: number; alt?: number | null; speed?: number | null }
-export interface TrackPoint { t: number; lat: number; lon: number; d: number; alt?: number; moving: boolean; /** First point after a GPS gap */ gap?: boolean }
+export interface TrackPoint {
+  t: number; lat: number; lon: number; d: number; alt?: number; moving: boolean;
+  /** First point after a GPS gap */
+  gap?: boolean;
+  /** First moving point after a pause (by the runner or automatic): the time since the point before it was not running */
+  resumed?: boolean;
+  /** The run clock (moving seconds) at this point, so the saved stream's clock matches the run's time */
+  ms?: number;
+}
 /** A stretch with no GPS (ms timestamps), and the distance when it started */
 export interface TrackGap { fromT: number; toT: number; atM: number }
 
@@ -58,7 +66,7 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
     // Time from the start (or Resume) to this first fix counts as running time
     if (!s.paused) next.movingS = s.movingS + Math.max(0, (f.t - (s.resumedAt ?? s.startedAt)) / 1000);
     next.last = f;
-    next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: !s.paused }];
+    next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: !s.paused, ms: next.movingS, ...(!s.paused && s.points.length ? { resumed: true } : {}) }];
     return next;
   }
   const dt = (f.t - prev.t) / 1000;
@@ -67,7 +75,7 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
     // GPS was gone (a locked phone, a paused page): start again from here, with nothing added for the gap
     next.gaps = [...(s.gaps ?? []), { fromT: prev.t, toT: f.t, atM: s.distanceM }];
     next.last = f; next.recent = [f]; next.stillSince = undefined; next.autoPaused = false;
-    next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: true, gap: true }];
+    next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: s.distanceM, alt: f.alt ?? undefined, moving: true, gap: true, ms: next.movingS }];
     return next;
   }
   const dd = haversine(prev, f);
@@ -87,7 +95,8 @@ export function addFix(s: TrackState, f: Fix, autoPause = true): TrackState {
   const moving = !s.paused && !autoPaused;
   next.autoPaused = autoPaused; next.stillSince = stillSince; next.last = f;
   if (moving) { next.distanceM = s.distanceM + dd; next.movingS = s.movingS + dt; }
-  next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: next.distanceM, alt: f.alt ?? undefined, moving }];
+  const before = s.points[s.points.length - 1];
+  next.points = [...s.points, { t: next.elapsedS, lat: f.lat, lon: f.lon, d: next.distanceM, alt: f.alt ?? undefined, moving, ms: next.movingS, ...(moving && before && !before.moving ? { resumed: true } : {}) }];
   return next;
 }
 
@@ -123,13 +132,16 @@ export function lapSplits(s: TrackState, now: number): { n: number; s: number; m
   return marks.map((x, i) => { const r = { n: i + 1, s: Math.max(0, x.atS - ps), m: Math.max(0, x.atM - pm) }; ps = x.atS; pm = x.atM; return r; });
 }
 
-/** Pace over the last 30 seconds of moving (s/km), or undefined when there is not enough movement. */
+/**
+ * Pace over the last 30 seconds of moving (s/km), or undefined when there is not enough movement. The window never
+ * reaches back past a pause: point times are wall time, so the pause would be counted as slow running.
+ */
 export function currentPace(s: TrackState, windowS = 30): number | undefined {
   const pts = s.points.filter((p) => p.moving);
   if (pts.length < 2) return undefined;
   const end = pts[pts.length - 1];
   let i = pts.length - 1;
-  while (i > 0 && end.t - pts[i - 1].t <= windowS) i--;
+  while (i > 0 && !pts[i].resumed && end.t - pts[i - 1].t <= windowS) i--;
   const a = pts[i];
   const dd = end.d - a.d, dt = end.t - a.t;
   return dd > 15 && dt > 0 ? dt / (dd / 1000) : undefined;
@@ -139,10 +151,13 @@ export const avgPace = (s: TrackState) => (s.distanceM > 20 ? s.movingS / (s.dis
 
 /** Streams for the saved run (moving points only, so pauses do not count). */
 export function toStreams(s: TrackState): StreamPoint[] {
-  let t = 0, prevT: number | undefined;
+  let t = 0, prevT: number | undefined, base: number | undefined;
   return s.points.filter((p) => p.moving).map((p) => {
-    // A gap adds no time: the run's clock only counts what GPS saw
-    if (prevT != null && !p.gap) t += Math.min(p.t - prevT, 30);
+    if (p.ms != null) {
+      // The run clock at this point, counted from the first point: pauses and gaps are not in it
+      base ??= p.ms - t;
+      t = Math.max(t, p.ms - base);
+    } else if (prevT != null && !p.gap) t += Math.min(p.t - prevT, 30); // a track recorded before points carried the run clock
     prevT = p.t;
     return { t: Math.round(t), d: Math.round(p.d * 10) / 10, lat: p.lat, lon: p.lon, alt: p.alt, ...(p.gap ? { gap: true } : {}) };
   });

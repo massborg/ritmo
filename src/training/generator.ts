@@ -745,8 +745,10 @@ function describePlan(r: Resolved, roles: Role[], race: Race | undefined, input:
   const dayOf = (role: Role) => roles.map((x, i) => (x === role ? i : -1)).filter((i) => i >= 0).map((i) => DAYS_PLURAL[i]);
   const q = [...dayOf('q1'), ...dayOf('q2')];
   const easy = dayOf('easy');
+  // The long-run days as they are in the week (a week the runner chose may put it on another day than the setting)
+  const long = dayOf('long');
   const vol = r.peakKm > r.weeklyKm ? `starting at ${r.weeklyKm} km a week and building to about ${r.peakKm} km` : `holding about ${r.weeklyKm} km a week`;
-  return `Built a ${weeks}-week plan${race ? ` for ${race.name}${race.id === 'hyrox' ? '' : ` (${raceWord(race.distanceM)})`} on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} ${race ? (weeks * 7 > TAPER_DAYS[r.dc] + 6 ? `The taper starts ${TAPER_DAYS[r.dc]} days before race day.` : 'The race is close, so this is a taper: short, easy running to arrive fresh.') : ''}`.replace(/\s+\./g, '.').trim();
+  return `Built a ${weeks}-week plan${race ? ` for ${race.name}${race.id === 'hyrox' ? '' : ` (${raceWord(race.distanceM)})`} on ${parseYmd(race.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : ''}, ${vol}, on ${r.daysPerWeek} days. Long runs on ${long.length ? long.join(' and ') : DAYS_PLURAL[r.longDay]} (up to ${Math.round(caps.longKm)} km)${q.length ? `, quality on ${q.join(' and ')}` : ''}${easy.length ? `, easy runs on ${easy.join(', ')}` : ''}. ${input.pacesFrom ? `Paces are based on ${input.pacesFrom}.` : ''} ${race ? (weeks * 7 > TAPER_DAYS[r.dc] + 6 ? `The taper starts ${TAPER_DAYS[r.dc]} days before race day.` : 'The race is close, so this is a taper: short, easy running to arrive fresh.') : ''}`.replace(/\s+\./g, '.').trim();
 }
 
 // ---------------------------------------------------------------------------

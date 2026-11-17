@@ -1,7 +1,7 @@
 // Strength (update 3, §4, §5, §8)
 import { describe, expect, it } from 'vitest';
 import type { Profile, Race } from '../lib/types';
-import { alternatives, EXERCISES, exById, resolveStrength } from './strength';
+import { alternatives, EXERCISES, exById, resolveStrength, targetFor } from './strength';
 import { generatePlan, type GenResult } from './generator';
 import { trainingPaces } from './fitness';
 import { crossLoad } from './load';
@@ -105,5 +105,34 @@ describe('how strength counts', () => {
     const adapted = adaptPlan({ plan: p, activities: [], feedback: [], today: new Date('2026-11-12T12:00:00'), typeOf: () => 'easy', paces: trainingPaces(55),
       profile: { ...base, log: [{ id: 'l', date: '2026-11-10', kind: 'strength', minutes: 30, at: '', strength: { title: 'x', source: 'ritmo', sessionId: tue.id, exercises: [] } }] } });
     expect(adapted.sessions.find((s) => s.id === tue.id)!.status).toBe('done');
+  });
+});
+
+describe('"Always use this instead" holds through later blocks', () => {
+  const ids = (prefs: Parameters<typeof resolveStrength>[1], routine: 'A' | 'B', block: number) => resolveStrength({ routine, intensity: 'heavy', why: '' }, prefs, { block, week: 1 }).items.map((x) => x.id);
+  it('an exercise swapped away for good is not brought back by a new block', () => {
+    const none = { equipment: 'none' as const, swaps: { 'reverse-lunge': 'split-squat' } };
+    expect(ids(none, 'A', 1)).toContain('split-squat');
+    for (const b of [2, 3]) expect(ids(none, 'A', b)).not.toContain('reverse-lunge');
+    const gym = { equipment: 'gym' as const, swaps: { 'trap-deadlift': 'db-rdl' } };
+    expect(ids(gym, 'B', 1)).toContain('db-rdl');
+    for (const b of [2, 3]) { expect(ids(gym, 'B', b)).not.toContain('trap-deadlift'); expect(ids(gym, 'B', b)).toContain('db-rdl'); }
+  });
+  it('a day edited by the runner keeps its own sets and reps, with the weight from the last session', () => {
+    const progress = { 'goblet-squat': { reps: 10, load: 20, next: 'up' as const, at: '', target: { reps: 11, load: 20, note: '+1 rep: 11 reps at 20 kg for all sets' } } };
+    const r = resolveStrength({ routine: 'A', intensity: 'heavy', why: '', custom: [{ id: 'goblet-squat', sets: 3, reps: 11 }, { id: 'plank', sets: 2, seconds: 30 }] }, { equipment: 'light', progress }, { block: 1, week: 1 });
+    expect(r.items[0]).toMatchObject({ id: 'goblet-squat', sets: 3, reps: 11, load: 20, note: '+1 rep: 11 reps at 20 kg for all sets' });
+    const other = resolveStrength({ routine: 'A', intensity: 'heavy', why: '', custom: [{ id: 'goblet-squat', sets: 4, reps: 8 }] }, { equipment: 'light', progress }, { block: 1, week: 1 });
+    expect(other.items[0]).toMatchObject({ sets: 4, reps: 8, load: 20 });
+    expect(other.items[0].note).toBeUndefined();
+  });
+});
+
+describe('QA sweep 2: step-back notes use the runner\'s unit', () => {
+  it('a step back after skipped sessions shows lb for an lb user, kg otherwise', () => {
+    const pr = { reps: 14, load: 20, next: 'back' as const, at: '2026-11-01', target: { reps: 10, load: 22.5, note: 'Add load' } };
+    const x = { id: 'goblet-squat', sets: 3, reps: 10 };
+    expect(targetFor(x, pr, 1).note).toBe('a step back (18 kg)');
+    expect(targetFor(x, pr, 1, 'lb').note).toBe('a step back (39.5 lb)');
   });
 });

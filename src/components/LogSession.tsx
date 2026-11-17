@@ -158,7 +158,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
         </div>
       )}
 
-      <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[2, 3, 4, 5, 6, 7, 8, 9, 10].map((x) => ({ value: x, label: String(x) }))} />
+      <Chips<number> label="Effort, 1 easy to 10 all out" value={rpe} onChange={setRpe} options={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((x) => ({ value: x, label: String(x) }))} />
       <Chips<string> label="How did it feel?" value={tag} onChange={setTag} options={FEEL_TAGS.map((f) => ({ value: f.value, label: f.label }))} />
       <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="label" style={{ marginBottom: 6 }}>Any pain or niggles?</legend>

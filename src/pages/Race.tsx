@@ -6,7 +6,7 @@ import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine } from '../components/ui';
 import { daysUntil, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
-import { pacingPlan, raceReadiness, taperGuidance } from '../training/insights';
+import { pacingPlan, raceReadiness, raceResultS, raceRunFor, taperGuidance } from '../training/insights';
 import { effortOf } from '../training/derive';
 import { estimateFitness, predictTime, vdotFromPerformance } from '../training/fitness';
 import type { CourseType, Race, RacePriority } from '../lib/types';
@@ -19,15 +19,15 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
   const [name, setName] = useState(race?.name ?? '');
   const [date, setDate] = useState(race?.date ?? '');
   const [dm, setDm] = useState(race ? (known ? String(race.distanceM) : 'custom') : '10000');
-  const [customKm, setCustomKm] = useState<number | undefined>(race && !known ? Math.round(race.distanceM / 1000) : 15);
+  const [customKm, setCustomKm] = useState<number | undefined>(race && !known ? Math.round(race.distanceM / 100) / 10 : 15);
   const [course, setCourse] = useState<CourseType>(race?.courseType ?? 'road');
   const [goalS, setGoalS] = useState<number | undefined>(race?.goalS);
   const [prio, setPrio] = useState<RacePriority>(race?.priority ?? 'A');
   const [err, setErr] = useState('');
   return (
-    <form className="stack-lg" onSubmit={(e) => {
+    <form className="stack-lg" noValidate onSubmit={(e) => {
       e.preventDefault();
-      const distanceM = dm === 'custom' ? (customKm ?? 0) * 1000 : Number(dm);
+      const distanceM = dm === 'custom' ? Math.round((customKm ?? 0) * 10) * 100 : Number(dm);
       if (!name.trim()) { setErr('Give the race a name.'); return; }
       if (!date) { setErr('Choose the race date.'); return; }
       if (!distanceM) { setErr('Choose a distance.'); return; }
@@ -39,7 +39,7 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
       </section>
       <section className="card stack">
         <Chips label="Distance" value={dm} onChange={setDm} options={DIST_OPTS} />
-        {dm === 'custom' && <Stepper id="rkm" label="Distance" unit="km" value={customKm} onChange={setCustomKm} min={1} max={250} />}
+        {dm === 'custom' && <Stepper id="rkm" label="Distance" unit="km" decimal value={customKm} onChange={setCustomKm} min={1} max={250} />}
         <Chips<CourseType> label="Course" value={course} onChange={setCourse} options={[{ value: 'road', label: 'Road' }, { value: 'trail', label: 'Trail' }, { value: 'track', label: 'Track' }, { value: 'cross-country', label: 'Cross-country' }]} />
       </section>
       <section className="card stack">
@@ -73,12 +73,12 @@ export default function RacePage() {
 
   const past = race.date < ymd(today);
   const days = daysUntil(today, race.date);
-  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today) : undefined;
+  const rr = fitness && stage.predictions ? raceReadiness(race, forStats(data.activities), fitness.vdot, today, data.profile.units) : undefined;
   const target = race.goalS && rr && race.goalS >= rr.predictedS * 0.98 ? race.goalS : rr?.predictedS;
   const pp = target ? pacingPlan(race, target) : [];
 
   // Post-race review: find the race activity on that day
-  const result = past ? data.activities.filter((a) => a.startTime.slice(0, 10) === race.date).sort((a, b) => Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM))[0] : undefined;
+  const result = past ? raceRunFor(race, data.activities) : undefined;
   const before = past ? estimateFitness(forStats(data.activities).filter((a) => a.startTime.slice(0, 10) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
   const after = past ? estimateFitness(forStats(data.activities), hr, addDay(parseYmd(race.date), 1)) : undefined;
   const predictedBefore = before ? predictTime(before.vdot, race.distanceM) : undefined;
@@ -89,7 +89,7 @@ export default function RacePage() {
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(race.date))} · {distanceLabel(race.distanceM)} · {race.courseType}</p>
         <h1 className="display-lg">{race.name}</h1>
-        <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days} days to go</span>}</div>
+        <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days === 0 ? 'Race day' : `${days} ${days === 1 ? 'day' : 'days'} to go`}</span>}</div>
       </div>
       {race.priority === 'A' && (!past || daysUntil(today, race.date) >= -30) && (
         <Link to={`/race/${race.id}/day`} className="btn btn-primary race-day-link" style={{ alignSelf: 'flex-start' }}>
@@ -139,7 +139,7 @@ export default function RacePage() {
           {result ? (
             <>
               <div className="row wrap" style={{ gap: 'var(--s5)' }}>
-                <div><p className="caption">Result · official race time</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(Math.round(result.durationS || result.movingS))}</p></div>
+                <div><p className="caption">Result · official race time</p><p className="stat-xl" style={{ fontSize: 40, lineHeight: '44px' }}>{duration(raceResultS(result))}</p></div>
                 {(() => { const e = Math.round(Math.min(effortOf(result, race.distanceM) ?? Infinity, result.movingS * (race.distanceM / result.distanceM))); return Number.isFinite(e) && Math.abs(e - Math.round(result.durationS || result.movingS)) >= 1 ? <div><p className="caption">Best effort ({distanceLabel(race.distanceM)}, GPS)</p><p className="stat">{duration(e)}</p></div> : null; })()}
                 {predictedBefore && <div><p className="caption">Predicted beforehand</p><p className="stat">{duration(predictedBefore)}</p></div>}
                 {race.goalS && <div><p className="caption">Goal</p><p className="stat">{duration(race.goalS)}</p></div>}

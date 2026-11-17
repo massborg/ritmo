@@ -15,7 +15,7 @@ import { StatusLine } from '../components/ui';
 import { SessionSheet } from '../components/training';
 import { moveTargets } from '../training/plan';
 import { ZONE_NAMES } from '../training/fitness';
-import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
+import { DAY_SHORT, dist, duration, durationWords, localise, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, paceGoalStep, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
 import { primeVoices, type SpeakOptions } from '../run/voice';
@@ -90,7 +90,10 @@ export default function RunPage() {
   const lastGaugeCue = useRef(0);
   const wake = useRef<{ release: () => Promise<void> } | null>(null);
   const shown = what === 'planned' ? cards[Math.min(shownIdx, Math.max(0, cards.length - 1))] : undefined;
-  const sessionPlan = shown;
+  // Once Start is pressed the run follows the session that was chosen, by its id. Starting a later day's session
+  // moves it to today, which reorders the cards: following the card's position then picked the other session.
+  const [chosenId, setChosenId] = useState<string>();
+  const sessionPlan = phase !== 'ready' && chosenId ? plan?.sessions.find((s) => s.id === chosenId) ?? shown : shown;
   const unitM = U === 'km' ? 1000 : 1609.344;
   const goalNum = Number(goalValue.replace(',', '.'));
   const goalPace = goal === 'pace' ? parsePace(goalValue) : undefined;
@@ -132,11 +135,16 @@ export default function RunPage() {
   }, [phase, settings.screenOn]);
 
   // Every second: clock, steps, cues; every 5 seconds: save on the device
+  // The timer is made once per run and reads what it needs through `tick`, kept up to date on every render. Made
+  // afresh on every render (each GPS fix renders), it never fired when fixes came faster than once a second.
+  const tick = useRef({ steps, settings, sessionPlan, cues, key, U });
+  tick.current = { steps, settings, sessionPlan, cues, key, U };
   useEffect(() => {
     if (phase !== 'running') return;
     const id = window.setInterval(() => {
       const t = trackRef.current;
       if (!t) return;
+      const { steps, settings, sessionPlan, cues, key, U } = tick.current;
       const now = { ...t, elapsedS: (Date.now() - t.startedAt) / 1000 };
       trackRef.current = now; setTrack(now);
       // spoken kilometre splits
@@ -144,8 +152,8 @@ export default function RunPage() {
         const km = Math.floor(now.distanceM / (U === 'km' ? 1000 : 1609.344));
         if (km > lastKm.current) { lastKm.current = km; const ap = avgPace(now); say(`${km} ${U === 'km' ? 'kilometre' : 'mile'}${km > 1 ? 's' : ''}. Average pace ${ap ? fmtPace(ap, U, false).replace(':', ' ') : ''}.`, cues); }
       }
-      // workout steps
-      if (steps.length && settings.cues !== 'off') {
+      // workout steps: the step card moves on with the voice off too (every cue below is silenced by `cues`)
+      if (steps.length) {
         const st = steps[stepIdxRef.current];
         const left = st && stepLeft(st, stepStart.current.s, stepStart.current.m, now.movingS, now.distanceM);
         if (st && left?.complete && stepIdxRef.current < steps.length - 1) {
@@ -170,7 +178,7 @@ export default function RunPage() {
       if (Math.floor(now.elapsedS) % 5 === 0) void set(key, { track: now, sessionId: sessionPlan?.id, stepIdx: stepIdxRef.current, stepStart: stepStart.current, savedAt: Date.now() } satisfies Saved).catch(() => {});
     }, 1000);
     return () => window.clearInterval(id);
-  });
+  }, [phase]);
 
   // Load the device's voices as soon as the screen opens, so "5" at the start already uses the chosen voice
   // A Quick run starts by itself once GPS is ready: check the voice afresh (the Quick run tap unlocked it), and
@@ -185,6 +193,7 @@ export default function RunPage() {
   const begin = () => {
     // A later day's session started today is moved to today first (when the plan allows it), so the run links to it
     if (sessionPlan && sessionPlan.date !== t0 && plan && moveTargets(sessionPlan, today).includes(t0)) moveSession(sessionPlan.id, t0);
+    setChosenId(sessionPlan?.id);
     goalDone.current = false;
     setPhase('countdown'); setCount(settings.countdown);
     let n = settings.countdown;
@@ -249,7 +258,7 @@ export default function RunPage() {
     void del(key).catch(() => {});
     nav(`/activity/${id}`);
   };
-  const discard = () => { void del(key).catch(() => {}); trackRef.current = undefined; setTrack(undefined); setPhase('ready'); setUnfinished(undefined); };
+  const discard = () => { void del(key).catch(() => {}); trackRef.current = undefined; setTrack(undefined); setPhase('ready'); setUnfinished(undefined); setChosenId(undefined); };
 
   // Hold to finish: 1.5 seconds, so a bump in a pocket does not end the run
   const holdTimer = useRef<number | undefined>(undefined);
@@ -287,7 +296,8 @@ export default function RunPage() {
       {st && (
         <section className={`card stack-sm run-step${gauge ? ` gauge-${gauge}` : ''}`} aria-label="Current step">
           <span className="label">{st.label}{st.pace ? ` @ ${paceRange(st.pace[0], st.pace[1], U)}` : ''}</span>
-          <span className="stat" style={{ fontSize: 28 }}>{left?.leftM != null ? `${Math.round(left.leftM)} m left` : left?.leftS != null ? `${duration(Math.round(left.leftS))} left` : 'Press Lap when done'}</span>
+          {/* "Press Lap when done" only when Lap moves on to a next step: a pace goal on a free run has none */}
+          {(left?.leftM != null || left?.leftS != null || steps[stepIdx + 1]) && <span className="stat" style={{ fontSize: 28 }}>{left?.leftM != null ? `${Math.round(left.leftM)} m left` : left?.leftS != null ? `${duration(Math.round(left.leftS))} left` : 'Press Lap when done'}</span>}
           {gauge && <span className="label">{gauge === 'ok' ? 'On target' : gauge === 'fast' ? 'Too fast: ease off' : 'Too slow: pick it up'}</span>}
           {steps[stepIdx + 1] && <span className="caption">Next: {steps[stepIdx + 1].label}</span>}
         </section>
@@ -365,14 +375,14 @@ export default function RunPage() {
                 onTouchStart={(e) => { swipe.current = e.touches[0].clientX; }}
                 onTouchEnd={(e) => { const x0 = swipe.current; swipe.current = undefined; if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) setShownIdx((i) => Math.max(0, Math.min(cards.length - 1, i + (dx < 0 ? 1 : -1)))); }}>
                 <div className="row-between"><span className="caption">{dayCaption(shown.date)}</span>{zone(shown) && <span className="zone-chip"><span className={`zone-dot z${zone(shown)}`} aria-hidden="true" />Z{zone(shown)} {ZONE_NAMES[zone(shown)! - 1]}</span>}</div>
-                <h2 className="title">{shown.title}</h2>
+                <h2 className="title">{localise(shown.title, U)}</h2>
                 <div className="run-card-stats">
                   <div><span className="caption">Distance</span><span className="stat">{shown.distanceM > 0 ? <>{plannedNum(shown.distanceM, U)}<small> {U}</small></> : '–'}</span></div>
                   <div><span className="caption">{workStep(shown) ? 'Rep pace' : 'Target pace'}</span><span className="stat">{targetPace(shown)}<small>/{U}</small></span></div>
                   <div><span className="caption">Time</span><span className="stat">{durationWords(shown.durationS)}</span></div>
                 </div>
                 <WorkoutGraph session={shown} height={36} />
-                <p className="caption run-structure">{structureLine(shown)}</p>
+                <p className="caption run-structure">{localise(structureLine(shown), U)}</p>
                 <p className="run-tip"><strong>Coach tip: </strong>{shown.howItHelps || shown.purpose}</p>
               </section>
               {cards.length > 1 && (
@@ -407,7 +417,7 @@ export default function RunPage() {
                 {goal === 'pace' && <span className="caption">Type the digits: 5 0 0 becomes 5:00.</span>}
               </div>
             )}
-            {todays && <button className="link-btn run-switch" onClick={() => { setWhat('planned'); setShownIdx(0); }}><span className="caption">Today's plan: {todays.title}</span><span>Switch to plan <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></span></button>}
+            {todays && <button className="link-btn run-switch" onClick={() => { setWhat('planned'); setShownIdx(0); }}><span className="caption">Today's plan: {localise(todays.title, U)}</span><span>Switch to plan <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></span></button>}
           </section>
         )}
 
@@ -443,7 +453,7 @@ export default function RunPage() {
         pocket={pocketNext} setPocket={setPocketNext} source={settings.voiceSource ?? 'phone'} setSource={(voiceSource) => setSettings((x) => ({ ...x, voiceSource }))} />
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Run settings">
         <div className="stack">
-          <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: 'Every step and km' }, { value: 'km', label: 'Every km' }, { value: 'off', label: 'Off' }]} />
+          <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: `Every step and ${U === 'km' ? 'km' : 'mile'}` }, { value: 'km', label: `Every ${U === 'km' ? 'km' : 'mile'}` }, { value: 'off', label: 'Off' }]} />
           <Chips<Settings['countdown']> label="Countdown" value={settings.countdown} onChange={(c) => setSettings((x) => ({ ...x, countdown: c }))} options={[3, 5, 10].map((v) => ({ value: v as Settings['countdown'], label: `${v} s` }))} />
           <div id="run-voice-settings"><VoicePicker voiceURI={settings.voiceURI} rate={settings.rate} source={settings.voiceSource ?? 'phone'} onChange={(v) => setSettings((x) => ({ ...x, ...v }))} /></div>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.autoPause} onChange={(e) => setSettings((x) => ({ ...x, autoPause: e.target.checked }))} /> Pause automatically when I stop</label>

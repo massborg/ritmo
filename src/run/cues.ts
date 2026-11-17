@@ -87,10 +87,20 @@ function next() {
   if (!name || !audio) { playing = false; return; }
   playing = true;
   audio.volume = 1;
-  audio.src = loaded.get(name) ?? `/audio/cues/${name}.mp3`;
+  const path = `/audio/cues/${name}.mp3`;
+  const kept = loaded.get(name);
+  audio.src = kept ?? path;
   audio.dataset.clip = name;
   audio.onended = () => next();
-  audio.onerror = () => next();
+  // The in-memory copy could not be played (for example blocked by a site rule): try the file itself once
+  let retried = !kept;
+  audio.onerror = () => {
+    if (retried || !audio) { next(); return; }
+    retried = true;
+    loaded.delete(name);
+    audio.src = path;
+    void audio.play().catch(() => { playing = false; queue = []; });
+  };
   void audio.play().catch(() => { playing = false; queue = []; });
 }
 /** Play a cue from the recorded clips */

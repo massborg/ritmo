@@ -21,7 +21,7 @@ export default function ProfileHyrox() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string }>();
   const thresholdS = paces ? Math.round((paces.threshold[0] + paces.threshold[1]) / 2) : undefined;
   const save = () => {
-    const hyrox: HyroxPrefs = { ...data.profile.hyrox, ...h, raceDate: h.raceDate, previousS: h.previousS, goalS: h.goalS, targets: h.goalS ? targetsFromGoal(h.goalS) : undefined };
+    const hyrox: HyroxPrefs = { ...data.profile.hyrox, ...h, raceDate: h.raceDate, previousS: h.previousS, goalS: h.goalS, targets: h.goalS ? targetsFromGoal(h.goalS, undefined, thresholdS) : undefined };
     updateProfile({ athleteType: type, hyrox });
     if (!plan) { setMsg({ ok: true, text: 'Saved.' }); return; }
     // The profile is saved first; the plan is rebuilt from it straight after

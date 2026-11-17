@@ -17,7 +17,7 @@ import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_NAMES, daysBetween, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -142,6 +142,8 @@ function CareCard() {
  *  audio cues play later, even when a Quick run starts by itself once GPS is ready. */
 /** A simulation or the race itself is recorded with the HYROX recorder, not the run recorder */
 const hyroxRecorded = (s: { hyrox?: { kind: string } }) => !!s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind);
+/** Where Start goes: the race opens Race day, a half simulation opens with the half selected */
+const hyroxStart = (s: { hyrox?: { kind: string } }) => (s.hyrox?.kind === 'race' ? '/hyrox?tab=race' : s.hyrox?.kind === 'sim_half' ? '/hyrox?sim=half' : '/hyrox');
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
@@ -350,7 +352,7 @@ export default function Today() {
           {s.changedFor && s.status === 'planned' && (
             <p className="changed-for"><span className="pill-on-brand">Changed for your {s.changedFor.label}</span> <s className="was-planned">{s.changedFor.title}{s.changedFor.distanceM > 0 ? ` · ${plannedNum(s.changedFor.distanceM, U)} ${U}` : ''}</s></p>
           )}
-          <h2 id="session-title" className="display-lg">{s.title}</h2>
+          <h2 id="session-title" className="display-lg">{localise(s.title, U)}</h2>
           {s.edited && <span className="pill-on-brand edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
           {s.type !== 'rest' ? (
             <>
@@ -387,7 +389,7 @@ export default function Today() {
                 {!swappedNote && s.status !== 'partial' && <span className="pill-on-brand"><Check size={14} strokeWidth={2.5} aria-hidden="true" /> Linked to your {new Date(done.startTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} run</span>}</>
               : isToday && s.type !== 'rest' && s.status === 'planned'
                 ? <>
-                    <Link to={hyroxRecorded(s) ? '/hyrox' : '/run'} className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+                    <Link to={hyroxRecorded(s) ? hyroxStart(s) : '/run'} className="btn btn-primary" onClick={primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
                     <button className="btn" onClick={() => setEditing(s)}><Pencil size={18} strokeWidth={2} aria-hidden="true" />Edit</button>
                     <button className="btn" onClick={() => setSheetDay(s.date)}><ArrowLeftRight size={18} strokeWidth={2} aria-hidden="true" />Swap</button>
                     <button className="btn btn-ghost" onClick={() => setLogSession(s)}><Check size={18} strokeWidth={2} aria-hidden="true" />I’ve done this run</button>
@@ -463,7 +465,7 @@ export default function Today() {
               : <div><p className="caption">Effort</p><p className="label">Easy: you can talk in full sentences</p></div>)}
             {s.hrZones && data.activities.some((a) => a.avgHr) && <ZoneTag zones={s.hrZones} />}
           </div>
-          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localiseStep(st.detail, st.pace, U)}</li>)}</ol>
           {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
           {s.strength && !s.strengthPlan && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
         </section>

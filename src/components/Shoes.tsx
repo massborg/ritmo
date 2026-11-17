@@ -17,13 +17,16 @@ export function Shoes({ heading = true }: { heading?: boolean } = {}) {
   const totals = useMemo(() => shoeTotals(data.activities, shoes, typeOf), [data.activities, shoes, typeOf]);
   const [adding, setAdding] = useState(false);
   const save = (list: Shoe[]) => updateProfile({ shoes: list });
+  // Shoe distance is kept in km and shown in the runner's unit
+  const U = data.profile.units;
+  const inU = (km: number) => Math.round(U === 'mi' ? km / 1.609344 : km);
   if (data.mode === 'sample') return null;
   return (
     <>
     <GearQuestion />
     <section className="card stack" aria-labelledby="shoes" id="shoes-card">
       <div className="row-between"><h2 id="shoes" className={heading ? 'title' : 'sr-only'}>Shoes</h2><button className="btn btn-small" onClick={() => setAdding(true)}>Add shoes</button></div>
-      {!shoes.length && !adding && <p className="caption">Add your shoes and Ritmo counts the distance, so you know when they are worn out. Most running shoes last 500 to 800 km.</p>}
+      {!shoes.length && !adding && <p className="caption">Add your shoes and Ritmo counts the distance, so you know when they are worn out. Most running shoes last {U === 'mi' ? '300 to 500 miles' : '500 to 800 km'}.</p>}
       {shoes.length > 0 && <p className="caption">Runs are assigned automatically: fast shoes for intervals, tempo runs and races, long-run shoes for long runs, everyday shoes for the rest. Change a run's shoes on its page.</p>}
       <ul className="list">{shoes.map((s) => {
         const km = totals.get(s.id) ?? s.startKm;
@@ -36,7 +39,7 @@ export function Shoes({ heading = true }: { heading?: boolean } = {}) {
                 <ShoeImage shoe={s} size={64} />
                 <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{s.name}{s.retired ? ' (retired)' : ''}</span><span className="caption">{SHOE_USE[s.use ?? 'everyday']}</span></span>
               </span>
-              <span className="stat" style={{ whiteSpace: 'nowrap' }}>{Math.round(km)} / {s.retireKm} km</span>
+              <span className="stat" style={{ whiteSpace: 'nowrap' }}>{inU(km)} / {inU(s.retireKm)} {U}</span>
             </div>
             <div className="progress" role="progressbar" aria-label={`${s.name} distance`} aria-valuemin={0} aria-valuemax={s.retireKm} aria-valuenow={Math.round(km)}><span style={{ width: `${Math.min(100, (km / s.retireKm) * 100)}%`, background: near ? 'var(--warning)' : undefined }} /></div>
             <div className="row-between"><span className="caption">Since {shortDate(parseYmd(s.startDate))}</span>
@@ -45,7 +48,7 @@ export function Shoes({ heading = true }: { heading?: boolean } = {}) {
               <ShoePhotoButton shoeId={s.id} label={s.photo ? 'Change photo' : 'Add a photo of your pair'} onDone={(p) => save(shoes.map((x) => (x.id === s.id ? { ...x, photo: p } : x)))} />
               {s.photo && <button className="btn btn-ghost btn-small" onClick={() => { void removeShoePhoto(s.photo!); save(shoes.map((x) => (x.id === s.id ? { ...x, photo: undefined } : x))); }}>Remove photo</button>}
             </div>
-            {near && <StatusLine kind="warning">{alert === 'retire' ? `Time for new shoes: ${s.name} have done ${Math.round(km)} km.` : `Nearly worn out: about ${Math.max(0, Math.round(s.retireKm - km))} km left. Think about new shoes soon.`}</StatusLine>}
+            {near && <StatusLine kind="warning">{alert === 'retire' ? `Time for new shoes: ${s.name} have done ${inU(km)} ${U}.` : `Nearly worn out: about ${inU(Math.max(0, s.retireKm - km))} ${U} left. Think about new shoes soon.`}</StatusLine>}
           </li>
         );
       })}</ul>

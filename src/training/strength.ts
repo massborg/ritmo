@@ -134,7 +134,7 @@ export interface StrengthPlan {
   extra?: string[];
 }
 export interface StrengthItem { id: string; sets: number; reps?: number; seconds?: number; /** How this block is harder when there is no harder version of the exercise: "+ reps", "+ reps and a set" */ harder?: string }
-export interface StrengthPrefs { equipment?: Equipment; swaps?: Record<string, string>; never?: string[]; last?: Record<string, { reps?: number; load?: number; seconds?: number }>; /** What each exercise's last session means for the next (update 3, §9) */ progress?: Record<string, ExProgress> }
+export interface StrengthPrefs { equipment?: Equipment; /** Weights are stored in kg and shown in this unit */ units?: 'kg' | 'lb'; swaps?: Record<string, string>; never?: string[]; last?: Record<string, { reps?: number; load?: number; seconds?: number }>; /** What each exercise's last session means for the next (update 3, §9) */ progress?: Record<string, ExProgress> }
 
 /** Sets and reps for the intensity: heavy as planned, moderate one set fewer, light two sets and lighter */
 const dose = (e: Exercise, k: Intensity): StrengthItem => ({ id: e.id, sets: k === 'heavy' ? e.sets : k === 'moderate' ? Math.max(2, e.sets - 1) : 2, ...(e.reps ? { reps: k === 'light' ? Math.max(6, Math.round(e.reps * 0.8)) : e.reps } : {}), ...(e.seconds ? { seconds: k === 'light' ? Math.round(e.seconds * 0.75) : e.seconds } : {}) });
@@ -175,7 +175,13 @@ export function resolveStrength(sp: StrengthPlan, p: StrengthPrefs = {}, at?: { 
   const back = (at?.skips ?? 0) >= 2;
   const full = items.map((x) => {
     const pr = prog[x.id];
-    const t = at && !sp.custom ? targetFor(x, back && pr ? { ...pr, next: 'back' } : pr, at.week) : { ...x };
+    if (at && sp.custom) {
+      // The runner's own version of the day keeps its sets and reps; the weight still comes from the last session,
+      // and the "Today" note is shown when it says the same reps
+      const own = targetFor(x, pr, at.week, p.units);
+      return { ...x, load: own.load, ...(own.note && own.reps === x.reps && own.seconds === x.seconds ? { note: own.note } : {}), ex: exById.get(x.id)! };
+    }
+    const t = at ? targetFor(x, back && pr ? { ...pr, next: 'back' } : pr, at.week, p.units) : { ...x };
     return { ...t, ex: exById.get(x.id)! };
   }).filter((x) => x.ex);
   // About 45 s a set plus the rest between sets
@@ -210,9 +216,11 @@ export function levelFor(id: string, block: number, p: StrengthPrefs = {}): stri
   if (!ladder || block <= 1) return id;
   const eq = p.equipment ?? 'none', never = p.never ?? [];
   let at = ladder.indexOf(id);
+  // Exercises the runner swapped away for good ("Always use this instead") are never brought back by a new block
+  const away = new Set(Object.entries(p.swaps ?? {}).filter(([, to]) => !!to).map(([from]) => from));
   // One rung per block; a rung the runner can't do (equipment) or doesn't want is skipped for the next one that fits
   for (let k = 1; k < block; k++) {
-    const nx = ladder.findIndex((id, i) => i > at && !!exById.get(id) && EQ_RANK[exById.get(id)!.equipment] <= EQ_RANK[eq] && !excluded(exById.get(id)!, never));
+    const nx = ladder.findIndex((id, i) => i > at && !!exById.get(id) && EQ_RANK[exById.get(id)!.equipment] <= EQ_RANK[eq] && !excluded(exById.get(id)!, never) && !away.has(id));
     if (nx < 0) break;
     at = nx;
   }
@@ -253,7 +261,9 @@ export function nextAfter(done: { reps?: number; load?: number; seconds?: number
   return 'up';
 }
 /** The target for the next session of an exercise, from its last result (or the plan's dose) */
-export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: BlockWeek): StrengthItem & { load?: number; note?: string } {
+export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: BlockWeek, unit: 'kg' | 'lb' = 'kg'): StrengthItem & { load?: number; note?: string } {
+  // Loads in the notes are in the runner's unit (lb to the nearest 0.5, as everywhere else)
+  const w = (kg: number) => (unit === 'lb' ? `${Math.round(kg * 2.2046226218 * 2) / 2} lb` : `${kg} kg`);
   const lighter = week === 4;
   const base: StrengthItem & { load?: number; note?: string } = { ...x };
   if (week === 2 && base.reps) base.reps += 2;
@@ -269,7 +279,7 @@ export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: Blo
     if (lighter) { base.sets = Math.max(2, x.sets - 1); base.note = `${base.note}, lighter week`; }
     return base;
   }
-  if (pr.load) { base.load = Math.max(0, pr.load + 2 * k); if (pr.reps) base.reps = pr.reps; base.note = k > 0 ? `+2 kg (to ${base.load} kg)` : k < 0 ? `a step back (${base.load} kg)` : `same as last time (${pr.load} kg)`; }
+  if (pr.load) { base.load = Math.max(0, pr.load + 2 * k); if (pr.reps) base.reps = pr.reps; base.note = k > 0 ? `+${w(2)} (to ${w(base.load)})` : k < 0 ? `a step back (${w(base.load)})` : `same as last time (${w(pr.load)})`; }
   else if (pr.seconds && base.seconds) { base.seconds = Math.max(10, pr.seconds + 5 * k); base.note = k > 0 ? `+5 s (to ${base.seconds} s)` : k < 0 ? `a step back (${base.seconds} s)` : `same as last time (${pr.seconds} s)`; }
   else if (pr.reps && base.reps) { base.reps = Math.max(4, Math.min((x.reps ?? 10) + 6, pr.reps + k)); base.note = k > 0 ? `+${base.reps - pr.reps} reps (to ${base.reps})` : k < 0 ? `a step back (${base.reps} reps)` : `same as last time (${pr.reps} reps)`; }
   if (lighter) { base.sets = Math.max(2, x.sets - 1); base.note = `${base.note ? `${base.note}, ` : ''}lighter week`; }

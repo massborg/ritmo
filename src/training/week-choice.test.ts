@@ -64,3 +64,15 @@ describe('guard rails (warnings, never a block)', () => {
     expect(() => gen(week(['intervals', 'long', 'tempo', 'threshold', 'easy', 'easy', 'easy']))).not.toThrow();
   });
 });
+
+describe('QA sweep 2: the plan summary follows the chosen week', () => {
+  it('names the long-run day the runner chose, not the Long-run day setting', () => {
+    const p = gen(week(['rest', 'intervals', 'long', 'auto', 'auto', 'auto', 'auto']));
+    const summary = p.changes?.[0]?.summary ?? '';
+    expect(summary).toMatch(/Long runs on Wednesdays/);
+    expect(summary).not.toMatch(/Long runs on Saturdays/);
+    // Ritmo's own week still names the setting's day
+    const auto = ok(generatePlan({ today: FRIDAY, profile: base, race: half, paces: trainingPaces(55), recentWeeklyKm: 60, longestRecentKm: 18 }));
+    expect(auto.changes?.[0]?.summary).toMatch(/Long runs on Saturdays/);
+  });
+});

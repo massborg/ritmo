@@ -24,6 +24,16 @@ describe('the HYROX race predictor (update 4, task 7)', () => {
     // A faster runner is predicted faster
     expect(predictHyrox({}, 220)!.totalS).toBeLessThan(p.totalS);
   });
+  it('a custom session with eight shortened runs is not taken as a full simulation', () => {
+    const base = predictHyrox({}, 270)!;
+    const half = full(Array(8).fill(150), Array(8).fill(120));
+    const custom: HyroxSession = { ...half, mode: 'custom', segments: half.segments.map((x) => (x.kind === 'run' ? { ...x, distanceM: 500 } : { ...x, distanceM: x.distanceM ? x.distanceM / 2 : undefined, reps: x.reps ? x.reps / 2 : undefined })) };
+    const p = predictHyrox({ log: log(custom) }, 270)!;
+    expect(p.runningS).toBe(base.runningS);
+    expect(p.totalS).toBe(base.totalS);
+    expect(p.confidence).toBe('low');
+    expect(p.basedOn).not.toMatch(/full simulation/);
+  });
   it('uses the athlete’s own stations: in-race times as they are, practice times a little slower', () => {
     const sim = full(Array(8).fill(270), [250, 200, 290, 320, 280, 130, 300, 380]);
     const practice: HyroxSession = { ...full([], []), id: 'p', mode: 'practice', startedAt: '2026-11-20T09:00:00.000Z', segments: [{ i: 0, kind: 'station', key: 'wall_balls', n: 1, reps: 100, startMs: 0, endMs: 300_000, ms: 300_000 }], totalMs: 300_000 };

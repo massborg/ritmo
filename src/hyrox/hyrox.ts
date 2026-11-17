@@ -1,6 +1,7 @@
 // HYROX recording (update 4, task 5): the segments of a session, the live recorder's state (one tap per segment,
 // undo, pause, optional Roxzone timing), and what the summary says about it. No screen code here.
 import { RUN_M, STATIONS, divisionLabel, loadFor, stationByKey, type Division, type StationKey } from './hyroxDivisions';
+import { ymd } from '../lib/format';
 
 export type HyroxMode = 'full' | 'half_front' | 'half_back' | 'custom' | 'practice' | 'race';
 export const MODE_LABEL: Record<HyroxMode, string> = { full: 'HYROX full simulation', half_front: 'HYROX half simulation (front)', half_back: 'HYROX half simulation (back)', custom: 'HYROX custom session', practice: 'HYROX station practice', race: 'HYROX race' };
@@ -23,6 +24,8 @@ export interface Segment extends Omit<SegmentPlan, 'kind' | 'key'> {
   ms: number;
   /** Distance measured by GPS (runs outdoors) */
   gpsM?: number;
+  /** GPS distance of the session's track when this segment started (outdoors), so an undo can restore it */
+  startM?: number;
 }
 export interface HyroxSession {
   id: string; startedAt: string; mode: HyroxMode; division: Division; title: string;
@@ -77,6 +80,17 @@ export function segmentWork(s: SegmentPlan, division: Division): string {
   const load = loadFor(division, st.key)?.text;
   return [d, load, st.standard].filter(Boolean).join(' · ');
 }
+/** The work of a swapped station ("100 reps"): its own, not the metres of the station it stands in for */
+export const swapWork = (s: { key: string; swapped?: string }): string | undefined =>
+  (s.swapped ? stationByKey.get(s.key as StationKey)?.swaps.find((x) => x.name === s.swapped)?.work : undefined);
+/** Runs numbered 1, 2, 3… in the order they are done (a custom list after a remove, an add or a move) */
+export function renumberRuns(plan: SegmentPlan[]): SegmentPlan[] {
+  let k = 0;
+  return plan.map((p) => (p.kind === 'run' ? { ...p, n: ++k } : p));
+}
+/** Does every run and station have an amount to do? A swapped station has its own work, so it always does. */
+export const hasAmounts = (plan: SegmentPlan[]): boolean =>
+  plan.every((p) => p.kind === 'rest' || !!p.swapped || (p.distanceM ?? 0) > 0 || (p.reps ?? 0) > 0);
 
 // ---------------------------------------------------------------- The live recorder
 
@@ -92,6 +106,8 @@ export interface Live {
   /** GPS distance when the current segment started */
   segStartM: number;
   finishedAt?: number;
+  /** Finished with "Stop here and save what is done": no segment was added, so undo only takes the stop back */
+  stoppedEarly?: boolean;
 }
 export function startLive(o: { id: string; title: string; mode: HyroxMode; division: Division; plan: SegmentPlan[]; roxzone: boolean; indoor: boolean; goalMs?: number; templateId?: string }, now: number): Live {
   return { ...o, startedAt: now, done: [], idx: 0, phase: 'segment', segStart: now, segPausedMs: 0, pausedMs: 0, segStartM: 0 };
@@ -114,27 +130,49 @@ export function advance(l0: Live, now: number, gpsM = 0): Live {
   const l = resume(l0, now);
   const p = l.plan[l.idx];
   const ms = Math.max(0, now - l.segStart - l.segPausedMs);
-  const base = { i: l.done.length, startMs: l.segStart - l.startedAt, endMs: now - l.startedAt, ms };
+  const base = { i: l.done.length, startMs: l.segStart - l.startedAt, endMs: now - l.startedAt, ms, ...(l.indoor ? {} : { startM: l.segStartM }) };
   const next = { segStart: now, segPausedMs: 0, segStartM: gpsM };
   if (l.phase === 'roxzone') return { ...l, ...next, phase: 'segment', done: [...l.done, { ...base, kind: 'roxzone', key: 'roxzone', n: p.n }] };
   const seg: Segment = { ...p, ...base, gpsM: p.kind === 'run' && !l.indoor && gpsM - l.segStartM > 0 ? Math.round(gpsM - l.segStartM) : undefined };
   const done = [...l.done, seg];
-  if (l.idx >= l.plan.length - 1) return { ...l, done, finishedAt: now };
+  // The pause inside the last segment is already in its time: cleared, so an undo does not take it off twice
+  if (l.idx >= l.plan.length - 1) return { ...l, done, finishedAt: now, segPausedMs: 0 };
   // With Roxzone timing, a run ends on arriving at the station; a second tap starts the station
   const rox = l.roxzone && p.kind === 'run' && l.plan[l.idx + 1].kind === 'station';
   return { ...l, ...next, done, idx: l.idx + 1, phase: rox ? 'roxzone' : 'segment' };
 }
+/**
+ * Stop before the end and keep what is done. No segment is added and the clock stays paused where it was, so
+ * taking the stop back returns to the segment in progress with nothing lost and no time added.
+ */
+export function stopEarly(l: Live, now: number): Live {
+  if (l.finishedAt) return l;
+  return { ...pause(l, now), finishedAt: now, stoppedEarly: true };
+}
 /** Take back the last tap: the segment before carries on as if it had not been pressed */
 export function undo(l: Live): Live {
+  // A stop taken back: every finished segment stays, and the one in progress is still paused
+  if (l.finishedAt && l.stoppedEarly) return { ...l, finishedAt: undefined, stoppedEarly: undefined };
   const last = l.done[l.done.length - 1];
   if (!last) return l;
   const done = l.done.slice(0, -1);
-  // Pauses inside the restored segment: its span minus its timed length
-  const restore = { segStart: l.startedAt + last.startMs, segPausedMs: last.endMs - last.startMs - last.ms + l.segPausedMs, segStartM: last.gpsM != null ? l.segStartM - last.gpsM : l.segStartM, finishedAt: undefined };
+  // Pauses inside the restored segment: its span minus its timed length. The GPS distance goes back to where the
+  // restored segment started (kept on the segment: after several undos the current start is not the run's end)
+  const restore = { segStart: l.startedAt + last.startMs, segPausedMs: last.endMs - last.startMs - last.ms + l.segPausedMs, segStartM: last.startM ?? (last.gpsM != null ? l.segStartM - last.gpsM : l.segStartM), finishedAt: undefined };
   // A Roxzone segment taken back: in the Roxzone again, before the same station
   if (last.kind === 'roxzone') return { ...l, ...restore, done, phase: 'roxzone' };
   // Roxzone segments are not in the plan, so the plan index is the number of the others done
   return { ...l, ...restore, done, idx: done.filter((x) => x.kind !== 'roxzone').length, phase: 'segment' };
+}
+
+/**
+ * A session opened again after a reload: the GPS track starts again from 0, so the current segment counts from here,
+ * and the starts kept on earlier segments (distances on the old track) are dropped. An undo back into a run then
+ * carries on from the distance that run had recorded.
+ */
+export function rebaseGps(l: Live): Live {
+  if (l.finishedAt || l.indoor || (!l.segStartM && !l.done.some((x) => x.startM != null))) return l;
+  return { ...l, segStartM: 0, done: l.done.map(({ startM: _s, ...x }) => x) }; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 /** The label on the big button: "Station done → Run 5", "Run done → Sled push", "Start sled push" */
@@ -186,22 +224,37 @@ export function summarise(s: HyroxSession): HyroxSummary {
   let slowLine: string | undefined;
   if (slow.length) {
     const avg = Math.round(slow.reduce((a, r) => a + r.over, 0) / slow.length / 1000);
-    const after = [...new Set(slow.map((r) => r.after).filter(Boolean) as string[])];
+    // Runs that followed a station are named by it; a run with no station before it (run 1) is named on its own
+    const followed = slow.filter((r) => r.after);
+    const after = [...new Set(followed.map((r) => r.after as string))];
     const list = after.length > 1 ? `${after.slice(0, -1).join(', ')} and ${after[after.length - 1]}` : after[0];
     const first = slow.filter((r) => !r.after).map((r) => `run ${r.n}`);
-    slowLine = list ? `${slow.length > 1 ? 'Runs' : 'The run'} after ${list} ${slow.length > 1 ? 'were' : 'was'} ${avg} s slower than your other runs.` : `${first.join(' and ')} was ${avg} s slower than your other runs.`.replace(/^r/, 'R');
+    const parts = [...first, ...(list ? [`${followed.length > 1 ? 'runs' : 'the run'} after ${list}`] : [])];
+    const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    slowLine = `${who[0].toUpperCase()}${who.slice(1)} ${slow.length > 1 ? 'were' : 'was'} ${avg} s slower than your other runs.`;
   }
   return { runningMs: sum(runSegs), stationsMs: sum(of('station')), roxzoneMs: sum(of('roxzone')), restMs: sum(of('rest')), runs: runs.map(({ over: _o, ...r }) => r), slowLine, vsGoalMs: s.goalMs ? s.totalMs - s.goalMs : undefined }; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 /** A station done to the standard: not swapped, and the standard amount of work */
-const standard = (x: Segment) => { const st = stationByKey.get(x.key as StationKey); return x.kind === 'station' && !x.swapped && !!st && x.distanceM === st.distanceM && x.reps === st.reps; };
+export const standard = (x: Segment) => { const st = stationByKey.get(x.key as StationKey); return x.kind === 'station' && !x.swapped && !!st && x.distanceM === st.distanceM && x.reps === st.reps; };
+/**
+ * A whole HYROX: eight 1 km runs and eight stations, as a full simulation or race, or with every station done to
+ * the standard. A custom session with shortened runs or stations is not one.
+ */
+export function wholeHyrox(s: HyroxSession): boolean {
+  const runs = s.segments.filter((x) => x.kind === 'run'), stations = s.segments.filter((x) => x.kind === 'station');
+  if (runs.length !== 8 || stations.length !== 8 || runs.some((x) => x.distanceM !== RUN_M)) return false;
+  return s.mode === 'full' || s.mode === 'race' || stations.every(standard);
+}
+/** The day a session was done, on the athlete's own calendar (not the UTC day) */
+export const sessionDay = (s: Pick<HyroxSession, 'startedAt'>) => ymd(new Date(s.startedAt));
 export interface HyroxRecords { simulation?: { ms: number; date: string; id: string }; race?: { ms: number; date: string; id: string }; run?: { ms: number; date: string }; stations: Partial<Record<StationKey, { ms: number; date: string }>> }
 /** Best full simulation, best race, best 1 km run split and best time per station. Swapped stations never count. */
 export function records(sessions: HyroxSession[]): HyroxRecords {
   const out: HyroxRecords = { stations: {} };
   for (const s of sessions) {
-    const date = s.startedAt.slice(0, 10);
+    const date = sessionDay(s);
     const whole = s.segments.filter((x) => x.kind === 'run').length === 8 && s.segments.filter(standard).length === 8;
     if (whole && s.mode === 'full' && (!out.simulation || s.totalMs < out.simulation.ms)) out.simulation = { ms: s.totalMs, date, id: s.id };
     if (whole && s.isRace && (!out.race || s.totalMs < out.race.ms)) out.race = { ms: s.totalMs, date, id: s.id };

@@ -101,3 +101,15 @@ describe('reminders use the adapted sessions (update 3, §1.1)', () => {
     expect(typeof planPush).toBe('function');
   });
 });
+
+describe('this week against a plan that started mid-week', () => {
+  it('counts only the runs since the plan started, the same on Training and in Coach', async () => {
+    const { weekDoneForPlan } = await import('./session-view');
+    const acts = [{ startTime: '2026-11-09T07:00:00', distanceM: 20000 }, { startTime: '2026-11-11T07:00:00', distanceM: 24300 }, { startTime: '2026-11-12T07:00:00', distanceM: 5000 }];
+    expect(weekDoneForPlan(acts.slice(0, 2), '2026-11-12', '2026-11-09', '2026-11-12')).toBe(0);
+    expect(weekDoneForPlan(acts, '2026-11-12', '2026-11-09', '2026-11-13')).toBe(5000);
+    // A plan from an earlier week, or no plan: everything since Monday
+    expect(weekDoneForPlan(acts, '2026-10-01', '2026-11-09', '2026-11-13')).toBe(49300);
+    expect(weekDoneForPlan(acts, undefined, '2026-11-09', '2026-11-13')).toBe(49300);
+  });
+});

@@ -47,7 +47,7 @@ async function signUp(b, mock, email) {
   await page.getByRole('button', { name: '5K', exact: true }).click();
   const t = page.locator('#s-racetime');
   await t.waitFor();
-  check(await t.getAttribute('inputmode') === 'numeric' && await t.getAttribute('pattern') === '[0-9]*', 'the time field asks for the numbers-only keypad');
+  check(await t.getAttribute('inputmode') === 'numeric' && await t.getAttribute('pattern') === null, 'the time field asks for the numbers-only keypad');
   await t.click();
   const seen = [];
   for (const d of '2005') { await page.keyboard.type(d); seen.push(await t.inputValue()); }

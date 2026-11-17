@@ -9,7 +9,7 @@ import { QuickAdd } from '../components/QuickAdd';
 import { resolveStrength } from '../training/strength';
 import { sessionAmount, structureLine } from '../training/session-view';
 import { resetVoice, unlockAudio } from '../run/cues';
-import { ymd } from '../lib/format';
+import { localise, ymd } from '../lib/format';
 
 // A tap that leads to the run recorder unlocks speech, so the first voice cue is heard
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
@@ -43,10 +43,10 @@ export default function Record() {
       {s ? (
         <section className="record-today" aria-label="Today's planned session">
           <p className="record-eyebrow">Ritmo plan · today</p>
-          <h2 className="record-today-title">{strength?.title ?? s.title}</h2>
-          {line && <p className="record-today-sub">{line}</p>}
+          <h2 className="record-today-title">{strength?.title ?? localise(s.title, data.profile.units)}</h2>
+          {line && <p className="record-today-sub">{strength ? line : localise(line, data.profile.units)}</p>}
           <div className="row" style={{ gap: 8 }}>
-            <Link to={strength ? `/strength/${s.id}` : s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) ? '/hyrox' : '/run'} className="btn btn-primary record-start" onClick={strength ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
+            <Link to={strength ? `/strength/${s.id}` : s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) ? (s.hyrox.kind === 'race' ? '/hyrox?tab=race' : s.hyrox.kind === 'sim_half' ? '/hyrox?sim=half' : '/hyrox') : '/run'} className="btn btn-primary record-start" onClick={strength ? undefined : primeSpeech}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start session</Link>
             <Link to={`/session/${s.id}`} className="btn record-details">Details</Link>
           </div>
         </section>

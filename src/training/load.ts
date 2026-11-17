@@ -49,7 +49,11 @@ export function loadSeries(activities: Activity[], hr: HrSetup, thresholdPace: n
     const k = a.startTime.slice(0, 10);
     byDay.set(k, (byDay.get(k) ?? 0) + activityLoad(a, hr, thresholdPace));
   }
+  // A HYROX session made from a run's laps (id "laps-<run id>") is the same effort as that run: the run already
+  // counts, so the entry adds nothing
+  const fromRun = new Set(activities.map((a) => `laps-${a.id}`));
   for (const e of log) {
+    if (e.kind === 'hyrox' && (fromRun.has(e.id) || (!!e.hyrox && fromRun.has(e.hyrox.id)))) continue;
     const l = crossLoad(e);
     if (l > 0) byDay.set(e.date, (byDay.get(e.date) ?? 0) + l);
   }

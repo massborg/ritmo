@@ -20,6 +20,8 @@ export function NumInput({ value, onChange, label, decimal, id, placeholder, max
   return (
     <input id={id} className="input num-input" inputMode={decimal ? 'decimal' : 'numeric'} pattern={decimal ? '[0-9]*[.,]?[0-9]*' : '[0-9]*'} autoComplete="off" aria-label={label} placeholder={placeholder} value={text}
       onFocus={(e) => e.target.select()}
+      // Leaving the field: show the number that is actually used (a value above the limit is capped, lb are rounded)
+      onBlur={() => { if (value != null && Number(text.replace(',', '.')) !== value) setText(String(value)); }}
       onChange={(e) => { const t = e.target.value.replace(decimal ? /[^0-9.,]/g : /[^0-9]/g, ''); setText(t); onChange(parse(t)); }} />
   );
 }
@@ -96,7 +98,7 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
             </svg>
             <ul className="list">
               {[...pts].reverse().map((p, i) => (
-                <li key={i} className="list-item row-between"><span className="label">{day(p.date)}</span><span className="caption" style={{ textAlign: 'right' }}>{p.text}{p.volumeKg ? <><br />Volume {showLoad(p.volumeKg, unit)}{p.e1rm ? ` · est. 1-rep max ${showLoad(p.e1rm, unit)}` : ''}</> : null}</span></li>
+                <li key={i} className="list-item row-between"><span className="label">{day(p.date)}</span><span className="caption" style={{ textAlign: 'right' }}>{p.text}{p.volumeKg ? <><br />Volume {p.volume}{p.e1rm ? ` · est. 1-rep max ${showLoad(p.e1rm, unit)}` : ''}</> : null}</span></li>
               ))}
             </ul>
             {loaded && <p className="caption">The estimated 1-rep max is worked out from your best set (weight × (1 + reps ÷ 30)). It is a guide for tracking progress, not a lift to attempt.</p>}
@@ -110,5 +112,8 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
 /** A free workout on its way from the builder to the recorder. Kept for the tab, so a reload does not lose it. */
 export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[] }
 const KEY = 'ritmo:strength:free';
-export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); } catch { /* */ } };
+/** Where the recorder keeps a workout in progress for the tab (sets done, notes), so a stray Back or a reload does not lose it */
+export const liveWorkoutKey = (id: string) => `ritmo:strength:live:${id}`;
+// A workout started afresh from the builder replaces whatever was in progress
+export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); sessionStorage.removeItem(liveWorkoutKey('free:w')); } catch { /* */ } };
 export const stashedWorkout = (): FreeWorkout | undefined => { try { const v = sessionStorage.getItem(KEY); return v ? JSON.parse(v) : undefined; } catch { return undefined; } };

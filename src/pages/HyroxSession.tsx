@@ -4,7 +4,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
-import { clock, deltaTag, records, segmentName, summarise, targetMs, type HyroxSession } from '../hyrox/hyrox';
+import { clock, deltaTag, records, segmentName, summarise, swapWork, targetMs, type HyroxSession } from '../hyrox/hyrox';
 import { divisionLabel, type StationKey } from '../hyrox/hyroxDivisions';
 import { parseYmd, ymd } from '../lib/format';
 
@@ -28,7 +28,9 @@ export default function HyroxSessionPage() {
   if (after.race?.id === s.id) set.push(before.race ? `Best race: ${clock(s.totalMs)} (was ${clock(before.race.ms)})` : `First race result: ${clock(s.totalMs)}`);
   if (after.run && (!before.run || after.run.ms < before.run.ms) && s.segments.some((x) => x.kind === 'run' && x.ms === after.run!.ms)) set.push(`Best 1 km run split: ${clock(after.run.ms)}`);
   for (const x of stations) { const k = x.key as StationKey; if (!x.swapped && after.stations[k]?.ms === x.ms && before.stations[k] && x.ms < before.stations[k]!.ms) set.push(`Best ${segmentName(x).toLowerCase()}: ${clock(x.ms)} (was ${clock(before.stations[k]!.ms)})`); }
-  const goal = s.goalMs;
+  // The goal is for the whole thing: a session stopped early is not measured against it (4:00 is not "goal met")
+  const whole = sum.runs.length === 8 && stations.length === 8;
+  const goal = whole ? s.goalMs : undefined;
   return (
     <div className="stack-lg hyrox-summary" style={{ maxWidth: 720 }}>
       <AppHeader title="HYROX" back large={false} />
@@ -52,12 +54,12 @@ export default function HyroxSessionPage() {
           <div className="hx-bars" role="img" aria-label={`Run splits: ${sum.runs.map((r) => `run ${r.n} ${clock(r.ms)}${r.slow ? ' (slower)' : ''}`).join(', ')}`}>
             {sum.runs.map((r, i) => (
               <div key={i} className="hx-bar-col">
-                <span className={`hx-bar${r.slow ? ' slow' : ''}`} style={{ height: `${Math.round(30 + 70 * (maxRun === minRun ? 1 : (r.ms - minRun * 0.9) / (maxRun - minRun * 0.9)))}%` }} />
+                <span className="hx-bar-track"><span className={`hx-bar${r.slow ? ' slow' : ''}`} style={{ height: `${Math.round(30 + 70 * (maxRun === minRun ? 1 : (r.ms - minRun * 0.9) / (maxRun - minRun * 0.9)))}%` }} /></span>
                 <span className="hx-bar-t">{clock(r.ms)}</span>
               </div>
             ))}
           </div>
-          {sum.slowLine ? <p className="hx-slow">{sum.slowLine} That is normal after a heavy station: practising a run straight after it is how it gets better.</p> : sum.runs.length >= 3 ? <p className="caption">Your runs were even: none was more than 15 s slower than the others.</p> : null}
+          {sum.slowLine ? <p className="hx-slow">{sum.slowLine}{sum.runs.some((r) => r.slow && r.after) ? ' That is normal after a heavy station: practising a run straight after it is how it gets better.' : ''}</p> : sum.runs.length >= 3 ? <p className="caption">Your runs were even: none was more than 15 s slower than the others.</p> : null}
         </section>
       )}
 
@@ -69,7 +71,7 @@ export default function HyroxSessionPage() {
               const tag = t ? deltaTag(x.ms, t.ms) : undefined;
               return (
                 <li key={i} className="list-item row-between">
-                  <span className="stack-sm" style={{ gap: 0 }}><span>{s.mode === 'practice' ? `${x.n}. ` : `${x.n} `}{segmentName(x)}{x.distanceM ? ` ${x.distanceM} m` : x.reps ? ` ${x.reps}` : ''}</span>{x.swapped && <span className="caption">Swapped: not counted for records</span>}</span>
+                  <span className="stack-sm" style={{ gap: 0 }}><span>{s.mode === 'practice' ? `${x.n}. ` : `${x.n} `}{segmentName(x)}{x.swapped ? ` ${swapWork(x) ?? ''}` : x.distanceM ? ` ${x.distanceM} m` : x.reps ? ` ${x.reps}` : ''}</span>{x.swapped && <span className="caption">Swapped: not counted for records</span>}</span>
                   <span className="row" style={{ gap: 8 }}><span className="stat">{clock(x.ms)}</span>{tag ? <span className={`hx-tag ${tag.tone}`} title={t!.from === 'target' ? 'Against your target' : 'Against your best before'}>{tag.text}</span> : null}</span>
                 </li>
               );

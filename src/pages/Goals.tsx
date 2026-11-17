@@ -10,6 +10,7 @@ import type { Injury, TrainingSettings } from '../lib/types';
 import { checkVolumeFit, resolveSettings, sessionCaps, splitWeek, weekRoles } from '../training/generator';
 import { forStats } from '../data/quality';
 import { WeekChooser, describeWeek } from '../components/WeekChooser';
+import { applyWeekChoice } from '../training/week-choice';
 
 const MI = 1.609344;
 
@@ -53,10 +54,12 @@ export default function Goals() {
   const fit = paces ? checkVolumeFit(resolved, paces) : undefined;
   const preview = useMemo(() => {
     if (!paces || !fit?.fits) return undefined;
-    const { roles } = weekRoles(resolved);
+    // Ritmo's week, with the runner's own days laid over it when they choose each day
+    const { roles: autoRoles } = weekRoles(resolved);
+    const { roles } = applyWeekChoice(autoRoles, resolved.week);
     const caps = sessionCaps(resolved, paces);
-    const split = splitWeek(resolved.peakKm, roles.filter((x) => x === 'q1' || x === 'q2').length, roles.filter((x) => x === 'easy').length, true, caps);
-    return { roles, split };
+    const split = splitWeek(resolved.peakKm, roles.filter((x) => x === 'q1' || x === 'q2').length, roles.filter((x) => x === 'easy').length, roles.includes('long'), caps);
+    return { autoRoles, roles, split };
   }, [paces, fit?.fits, resolved]);
 
   const save = (andRebuild: boolean) => {
@@ -73,11 +76,22 @@ export default function Goals() {
       }, 50);
       return;
     }
-    if (andRebuild || setup) { setTimeout(() => setMsg(buildMyPlan()), 0); if (setup) nav('/'); }
+    // A first build: on to Training, where the new plan is (or the reason shows here when it could not be built)
+    if (andRebuild || setup) { setTimeout(() => { const m = buildMyPlan(); if (m) setMsg(m); else if (!setup) nav('/'); }, 0); if (setup) nav('/'); }
     else nav(-1);
   };
-  const classic = !!preview && longDay === 5 && preview.roles[0] === 'q1' && preview.roles[3] === 'q2';
+  // The week the runner chose: its long-run day (if any) is the one that counts, not the Long-run day setting
+  const ownWeek = t.week?.mode === 'custom';
+  const ownLong = ownWeek ? t.week!.days.indexOf('long') : -1;
+  const classic = !!preview && !ownWeek && longDay === 5 && preview.roles[0] === 'q1' && preview.roles[3] === 'q2';
   const roleName = { long: 'Long run', q1: classic ? 'Threshold' : 'Quality', q2: classic ? 'Intervals' : 'Quality', easy: 'Easy', rest: 'Rest' } as const;
+  // Switching a day off keeps "Days to run each week" at a number that can be used
+  const toggleDay = (i: number) => {
+    const next = days.includes(i) ? days.filter((y) => y !== i) : [...days, i];
+    setDays(next);
+    const len = new Set([...next, longDay]).size;
+    if (t.daysPerWeek != null && t.daysPerWeek > len) set({ daysPerWeek: Math.max(2, len) });
+  };
   /** "Classic week": threshold on Monday, intervals on Thursday, long run on Saturday, easy days between */
   const useClassic = () => {
     let list = [...new Set([...days, 0, 3, 5])].sort((a, b) => a - b);
@@ -122,7 +136,7 @@ export default function Goals() {
 
       <section className="card stack" aria-labelledby="days">
         <h2 id="days" className="title">Your week</h2>
-        <WeekChooser value={t.week} onChange={(w) => set({ week: w })} autoRoles={preview?.roles ?? weekRoles(resolved).roles} />
+        <WeekChooser value={t.week} onChange={(w) => set({ week: w })} autoRoles={preview?.autoRoles ?? weekRoles(resolved).roles} />
         <div className="preset">
           <div className="stack-sm" style={{ flex: 1 }}>
             <span className="label">{classic ? 'Preset in use: Classic week' : 'Apply preset: Classic week'}</span>
@@ -132,14 +146,19 @@ export default function Goals() {
         </div>
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Days you could run</legend>
-          <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={days.includes(i)} aria-label={DAY_NAMES[i]} onClick={() => setDays((x) => (x.includes(i) ? x.filter((y) => y !== i) : [...x, i]))}>{d}</button>)}</div>
+          <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={days.includes(i)} aria-label={DAY_NAMES[i]} onClick={() => toggleDay(i)}>{d}</button>)}</div>
         </fieldset>
         <Stepper id="dpw" label="Days to run each week" value={t.daysPerWeek} placeholder={String(resolved.daysPerWeek)} min={2} max={Math.max(2, draft.daysAvailable.length)} onChange={(v) => set({ daysPerWeek: v })} />
         <p className="caption">{draft.daysAvailable.length > resolved.daysPerWeek ? `${draft.daysAvailable.length} days available. Ritmo picks the best ${resolved.daysPerWeek}, keeping a day between hard sessions.` : `${resolved.daysPerWeek} days a week.`}</p>
         <fieldset className="stack-sm" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label">Long-run day</legend>
-          <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={longDay === i} aria-label={DAY_NAMES[i]} onClick={() => setLongDay(i)}>{d}</button>)}</div>
-          <p className="caption">Your long run is on {DAY_NAMES[longDay]}. Hard sessions move around it so two hard days never touch.</p>
+          {ownLong >= 0
+            ? <p className="caption">Your long run is on {DAY_NAMES[ownLong]}, from the week you chose above.</p>
+            : <>
+              {/* The long-run day is a running day: picking it switches that day on above */}
+              <div className="row wrap">{DAY_SHORT.map((d, i) => <button type="button" key={d} className="chip" aria-pressed={longDay === i} aria-label={DAY_NAMES[i]} onClick={() => { setLongDay(i); setDays((x) => (x.includes(i) ? x : [...x, i])); }}>{d}</button>)}</div>
+              <p className="caption">Your long run is on {DAY_NAMES[longDay]}. Hard sessions move around it so two hard days never touch.</p>
+            </>}
         </fieldset>
         <Chips label={`The day after the long run (${DAY_NAMES[(longDay + 1) % 7]})`} value={t.dayAfterLong ?? 'easy'} onChange={(v) => set({ dayAfterLong: v })} options={[{ value: 'easy', label: 'Easy run', sub: 'more volume' }, { value: 'off', label: 'Day off', sub: 'more recovery' }]} />
         <Chips label="Start the plan" value={t.startMode ?? 'today'} onChange={(v) => set({ startMode: v })} options={[{ value: 'today', label: 'Today' }, { value: 'monday', label: 'Next Monday' }]} />

@@ -116,7 +116,8 @@ export function checkIn(inj0: Injury, day: InjuryDay): CheckResult {
     message = `Two check-ins in a row with pain: back to step ${step} for now. That is normal, and it protects the ${where(inj)}.`;
   } else if (badDays >= 1) {
     change = 'stay';
-    message = `Stay on step ${step} for now. If it is the same or worse tomorrow, Ritmo goes back one step.`;
+    // Step 1 is the first step: there is no step to go back to, so the message does not promise one
+    message = step > 1 ? `Stay on step ${step} for now. If it is the same or worse tomorrow, Ritmo goes back one step.` : 'Stay on step 1 for now. If it is not settling, rest from running and see a physio.';
   } else if (clearDays === 1) {
     change = 'stay';
     message = `1 day clear. One more like this unlocks step ${Math.min(LAST_STEP, step + 1)}.`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { CLIP_WORDS, clipsFor } from './cues';
 
 describe('recorded voice clips (update 3, §2)', () => {
@@ -16,5 +16,9 @@ describe('recorded voice clips (update 3, §2)', () => {
     for (const n of [...Array.from({ length: 59 }, (_, i) => String(i + 1)), ...CLIP_WORDS, 'silence']) {
       expect(existsSync(`public/audio/cues/${n}.mp3`), n).toBe(true);
     }
+  });
+  it('the site rules allow the in-memory copies of the clips (blob: media) to play', () => {
+    const csp = /Content-Security-Policy = "([^"]+)"/.exec(readFileSync('netlify.toml', 'utf8'))?.[1] ?? '';
+    expect(csp).toMatch(/media-src 'self' blob:/);
   });
 });

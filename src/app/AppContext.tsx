@@ -24,11 +24,11 @@ import { asReadiness, readinessScore, type ReadinessScore } from '../training/re
 import { analyse, type Analysis, classify, type Zones, TYPE_LABEL, SESSION_SHORT } from '../training/analysis';
 import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
-import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/session-view';
+import { fitPlan, plannedNum, weekDoneForPlan, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { exById, nextAfter, type StrengthPlan } from '../training/strength';
 import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
-import { doubleProgression, freeName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
+import { doubleProgression, freeName, newerLogged, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, correctDetails, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
@@ -106,6 +106,8 @@ export interface AthleteState {
   totalM: number;
   /** Monday to today */
   weekM: number;
+  /** This week's distance that counts against the plan's week target: since the plan started, when that was mid-week */
+  weekPlanM: number;
   weekRuns: number;
   lastRun?: Activity;
   /** Plan sessions dated today or earlier (the ones that can be done so far) */
@@ -335,6 +337,7 @@ function computeDerived(data: AppData): Derived {
     runCount: acts.length,
     totalM: acts.reduce((x, a) => x + a.distanceM, 0),
     weekM: thisWeek.reduce((x, a) => x + a.distanceM, 0),
+    weekPlanM: weekDoneForPlan(acts, plan?.startDate, wkKey, tKey),
     weekRuns: thisWeek.length,
     lastRun: acts.length ? acts.reduce((m, a) => (a.startTime > m.startTime ? a : m)) : undefined,
     planDueSoFar: due.length,
@@ -1058,13 +1061,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const back = resetEdit(s);
     return { ...d, plan: { ...d.plan, sessions: d.plan.sessions.map((x) => (x.id === sessionId ? back : x)), changes: [...d.plan.changes, { id: `edit-reset:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary: `${back.title} on ${new Date(`${back.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} is back to the plan.` }] } };
   });
-  const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
-  const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
+  // Moves and swaps start from the plan as it is stored (adapted, with the body change log), never from the plan as
+  // shown: injury and ease-back changes are a view on top, applied once when shown. Storing the shown plan would
+  // apply them again on every edit (16 km became 11, then 8).
+  const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.planToStore ?? d.plan, sessionId, toDate) } : d));
+  const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.planToStore ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
     const m = d.coach.find((x) => x.id === messageId);
     const p = m?.proposal;
     if (!p || p.applied || !d.plan) return d;
-    const base = derived.plan ?? d.plan;
+    const base = derived.planToStore ?? d.plan;
     const plan = p.kind === 'move' && p.toDate ? movePlanSession(base, p.sessionId, p.toDate) : p.swap ? swapSession(base, p.sessionId, p.swap, derived.paces ?? trainingPaces(40)) : base;
     return { ...d, plan, coach: d.coach.map((x) => (x.id === messageId ? { ...x, proposal: { ...p, applied: true } } : x)) };
   });
@@ -1086,6 +1092,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const at = new Date().toISOString();
       const unit = d.profile.strength?.units ?? 'kg';
       for (const x of e.strength.exercises) {
+        // A session logged for an earlier day than the newest one of this exercise is history only: "last time" and
+        // the next target stay those of the newest session
+        if (newerLogged(d.profile.log, x.id, e.date)) continue;
         const s0 = x.sets[x.sets.length - 1];
         if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds };
         // Session to session: double progression (update 4, task 4b). All sets at effort 7 or less: more reps up to
@@ -1146,7 +1155,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
     if (!d.plan) return d;
-    const base = derived.plan ?? d.plan;
+    const base = derived.planToStore ?? d.plan;
     const from = base.sessions.find((x) => x.id === sessionId)?.date;
     let moved = toDate ? movePlanSession(base, sessionId, toDate) : base;
     // The session it changes places with lands on the missed day, which is in the past and can no longer be run:
@@ -1216,7 +1225,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         today: main.today, profile: data.profile, units: data.profile.units, readiness: main.readiness, stage: derived.stage,
         todaySession: main.todaySession, nextSessions: (main.plan?.sessions ?? []).filter((s) => s.date > t && s.type !== 'rest').slice(0, 3),
         race: derived.aRace, raceReadiness: derived.aRaceReadiness, fitness: derived.stage.predictions ? derived.fitness : undefined, paces: derived.paces,
-        weekDoneM: stravaHidden ? 0 : main.athlete.weekM,
+        weekDoneM: stravaHidden ? 0 : main.athlete.weekPlanM,
         weekPlannedM: main.weekTarget.m,
         weekSessionsDone: weekSessions.filter((s) => s.status === 'done').length,
         weekSessionsPlanned: weekSessions.length,

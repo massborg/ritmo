@@ -13,7 +13,22 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { closeRef.current(); return; }
+      // Tab stays inside the sheet (it is a modal dialog): from the last control back to the first, and the reverse
+      const box = ref.current;
+      if (e.key !== 'Tab' || !box) return;
+      const active = document.activeElement as HTMLElement | null;
+      // A sheet opened on top of this one keeps its own focus
+      const other = active?.closest('.sheet');
+      if (other && other !== box) return;
+      const stops = [...box.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((el) => el.getClientRects().length > 0);
+      if (!stops.length) return;
+      const first = stops[0], last = stops[stops.length - 1];
+      if (!active || !box.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     const t = setTimeout(() => { if (!ref.current?.contains(document.activeElement)) ref.current?.querySelector<HTMLElement>('[data-autofocus], button, input')?.focus(); }, 30);
@@ -88,9 +103,10 @@ export function DateField({ label, value, onChange, min, id }: { label: string; 
   );
 }
 
-export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, unit, id, placeholder }: { label: string; value?: number; onChange: (v: number | undefined) => void; min?: number; max?: number; step?: number; unit?: string; id: string; placeholder?: string }) {
+/** `decimal`: one decimal can be typed ("7.5") while the buttons still move by `step` */
+export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, unit, id, placeholder, decimal }: { label: string; value?: number; onChange: (v: number | undefined) => void; min?: number; max?: number; step?: number; unit?: string; id: string; placeholder?: string; decimal?: boolean }) {
   const v = value ?? undefined;
-  const dec = step % 1 !== 0;
+  const dec = !!decimal || step % 1 !== 0;
   // While typing a decimal ("8."), keep the text as typed
   const [typed, setTyped] = useState<string>();
   const set = (n: number) => onChange(Math.min(max, Math.max(min, dec ? Math.round(n * 10) / 10 : n)));

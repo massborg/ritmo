@@ -123,6 +123,16 @@ export function parseTime(t: string): number | undefined {
   return undefined;
 }
 
+/**
+ * A step's detail in the runner's units. In miles the step's pace is formatted from its own numbers (as "Target
+ * pace" is), not converted from the rounded per-km text, so the two never differ by a second.
+ */
+export function localiseStep(detail: string, stepPace: [number, number] | undefined, u: Units): string {
+  if (u === 'km' || !stepPace) return localise(detail, u);
+  const kmText = `${paceRange(stepPace[0], stepPace[1], 'km')}`;
+  return localise(detail.includes(kmText) ? detail.replace(kmText, paceRange(stepPace[0], stepPace[1], u)) : detail, u);
+}
+
 /** Show plan text in the runner's units: "4:13–4:44/km" and "12.6 km" become per-mile and miles. */
 export function localise(text: string, u: Units): string {
   if (u === 'km') return text;

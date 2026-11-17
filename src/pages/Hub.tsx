@@ -213,6 +213,8 @@ export function PostList({ feed, onComments, onGivers }: { feed: ReturnType<type
       {feed.posts.map((p) => <PostCard key={p.id} post={p} author={feed.people.get(p.user_id)} people={feed.people} givers={feed.givers.get(p.id) ?? []} given={feed.mine.has(p.id)} own={p.user_id === uid}
         onFuego={(on) => feed.toggle(p, on)} onComments={() => onComments(p)} onGivers={() => onGivers(p)}
         onDelete={async () => { await hub.deletePost(p.id); feed.setPosts((ps) => ps.filter((x) => x.id !== p.id)); }}
+        // The card shows the new audience at once (it used to keep the old one until the feed was loaded again)
+        onVisibility={(v) => feed.setPosts((ps) => ps.map((x) => (x.id === p.id ? { ...x, visibility: v } : x)))}
         onReport={async (why) => { await hub.report(uid, { post_id: p.id }, why); }}
         onBlock={async () => { await hub.block(uid, p.user_id); void feed.reload(); }} />)}
     </div>
@@ -281,9 +283,9 @@ export function PostMap({ route, onDoubleTap }: { route: [number, number][]; onD
   );
 }
 
-function PostCard({ post: p, author, people, givers, given, own, onFuego, onComments, onGivers, onDelete, onReport, onBlock }: {
+function PostCard({ post: p, author, people, givers, given, own, onFuego, onComments, onGivers, onDelete, onVisibility, onReport, onBlock }: {
   post: Post; author?: HubProfile; people: Map<string, HubProfile>; givers: string[]; given: boolean; own: boolean; onFuego: (on: boolean) => void; onComments: () => void; onGivers: () => void;
-  onDelete: () => Promise<void>; onReport: (why: string) => Promise<void>; onBlock: () => Promise<void>;
+  onDelete: () => Promise<void>; onVisibility: (v: Post['visibility']) => void; onReport: (why: string) => Promise<void>; onBlock: () => Promise<void>;
 }) {
   const { data } = useApp();
   const U = data.profile.units;
@@ -317,7 +319,7 @@ function PostCard({ post: p, author, people, givers, given, own, onFuego, onComm
       {menu && (
         <div className="row wrap hub-post-pad" style={{ gap: 6 }}>
           {own ? <>
-            {(['followers', 'everyone', 'only_me'] as const).map((v) => <button key={v} className="btn btn-small" aria-pressed={p.visibility === v} onClick={() => { void hub.setPostVisibility(p.id, v).then(() => { setDone(v === 'only_me' ? 'Hidden: only you can see this post.' : `Now shown to ${v === 'everyone' ? 'everyone' : 'your followers'}.`); setMenu(false); }).catch(() => setDone('That did not work. Please try again.')); }}>{v === 'followers' ? 'Followers' : v === 'everyone' ? 'Everyone' : 'Only me (hide)'}</button>)}
+            {(['followers', 'everyone', 'only_me'] as const).map((v) => <button key={v} className="btn btn-small" aria-pressed={p.visibility === v} onClick={() => { void hub.setPostVisibility(p.id, v).then(() => { onVisibility(v); setDone(v === 'only_me' ? 'Hidden: only you can see this post.' : `Now shown to ${v === 'everyone' ? 'everyone' : 'your followers'}.`); setMenu(false); }).catch(() => setDone('That did not work. Please try again.')); }}>{v === 'followers' ? 'Followers' : v === 'everyone' ? 'Everyone' : 'Only me (hide)'}</button>)}
             <button className="btn btn-small" onClick={() => void onDelete()}>Delete post</button>
           </> : <>
             <button className="btn btn-small" onClick={() => { void onReport('Reported from the feed'); setDone('Thanks, the post was reported.'); setMenu(false); }}>Report</button>
