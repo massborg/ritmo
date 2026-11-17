@@ -1,7 +1,7 @@
 // Adaptive training plans: generation by phase, and adaptation with explained changes.
 import { QUALITY_TYPES, SESSION_SHORT, sessionOutcome } from './analysis';
 import { groupIndex, groupRuns, type RunGroup } from './sessions';
-import type { Activity, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
+import type { Activity, LogEntry, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
 import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
 
 /** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
@@ -92,7 +92,11 @@ export function adaptPlan(opts: {
   const strengthDone = new Set((profile.log ?? []).filter((e) => e.kind === 'strength' && e.strength?.sessionId).map((e) => e.strength!.sessionId!));
   for (const s of plan.sessions) if (s.type === 'rest' && s.strengthPlan && strengthDone.has(s.id)) s.status = 'done';
   // A HYROX simulation or race is done once a HYROX session is recorded that day (update 4, task 6)
-  const hyroxDays = new Set((profile.log ?? []).filter((e) => e.kind === 'hyrox').map((e) => e.date));
+  // A short station practice does not count: it has to be a simulation or race, or a custom session with at least
+  // four runs and four stations
+  const simLike = (h: NonNullable<LogEntry['hyrox']>) => h.mode === 'full' || h.mode === 'half_front' || h.mode === 'half_back' || h.mode === 'race' || h.isRace
+    || (h.segments.filter((x) => x.kind === 'run').length >= 4 && h.segments.filter((x) => x.kind === 'station').length >= 4);
+  const hyroxDays = new Set((profile.log ?? []).filter((e) => e.kind === 'hyrox' && e.hyrox && simLike(e.hyrox)).map((e) => e.date));
   const hyroxDone = (s: PlannedSession) => !!s.hyrox && ['sim_half', 'sim_full', 'race'].includes(s.hyrox.kind) && hyroxDays.has(s.date);
   for (const s of plan.sessions) if (hyroxDone(s)) s.status = 'done';
   for (const s of plan.sessions) {

@@ -3,7 +3,7 @@ import type { Lap, LogEntry, Profile } from '../lib/types';
 import { enteredRace, type HyroxSession } from './hyrox';
 import { hyroxFacts, lapsToSegments, looksLikeHyrox, predictHyrox, racePacing } from './predict';
 
-const full = (runs: number[], st: number[], o: Partial<HyroxSession> = {}): HyroxSession => ({ ...enteredRace({ id: 's', date: '2026-11-14', division: 'men_open', runs, stations: st }), mode: 'full', isRace: false, entered: undefined, ...o });
+const full = (runs: number[], st: number[], o: Partial<HyroxSession> = {}): HyroxSession => ({ ...enteredRace({ id: 's', date: '2026-11-14', division: 'men_open', runs, stations: st }), mode: 'full', isRace: false, entered: undefined, partial: undefined, ...o });
 const log = (...h: HyroxSession[]): LogEntry[] => h.map((x, i) => ({ id: `${x.id}${i}`, date: x.startedAt.slice(0, 10), kind: 'hyrox', at: x.startedAt, hyrox: x }));
 const T = 255; // threshold 4:15/km
 
@@ -86,6 +86,19 @@ describe('laps from a watch', () => {
     const segs = lapsToSegments(laps, 'men_open')!;
     expect(segs[0]).toMatchObject({ kind: 'run', ms: 270_000 });
     expect(segs.filter((x) => x.kind === 'run').every((x) => x.ms === 270_000)).toBe(true);
+  });
+  it('Roxzone laps before a station are the transition, not the station', () => {
+    // 8 runs, 8 stations, and a 40 s walk to the station before stations 1, 3, 5 and 7
+    const laps: Lap[] = [];
+    for (let k = 0; k < 8; k++) { laps.push(lap(laps.length, 300, 1000)); if (k % 2 === 0) laps.push(lap(laps.length, 40, 60)); laps.push(lap(laps.length, 270 + k, 30)); }
+    const segs = lapsToSegments(laps, 'men_open')!;
+    const st = segs.filter((x) => x.kind === 'station');
+    expect(st.map((x) => x.ms)).toEqual([0, 1, 2, 3, 4, 5, 6, 7].map((k) => (270 + k) * 1000));
+    expect(st.map((x) => x.key)).toEqual(['skierg', 'sled_push', 'sled_pull', 'burpee_broad_jump', 'row', 'farmers_carry', 'sandbag_lunges', 'wall_balls']);
+    expect(segs.filter((x) => x.kind === 'roxzone').map((x) => x.ms)).toEqual([40_000, 40_000, 40_000, 40_000]);
+    // Nothing is lost: the segments add up to every lap
+    expect(segs.reduce((a, x) => a + x.ms, 0)).toBe(laps.reduce((a, l) => a + l.durationS * 1000, 0));
+    expect(segs[segs.length - 1].endMs).toBe(segs.reduce((a, x) => a + x.ms, 0));
   });
   it('fewer than 16 laps cannot be mapped', () => {
     expect(looksLikeHyrox(Array.from({ length: 10 }, (_, i) => lap(i, 300, 1000)))).toBe(false);

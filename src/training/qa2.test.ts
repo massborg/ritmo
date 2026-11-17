@@ -44,7 +44,7 @@ describe('fitness estimates over time', () => {
 
 describe('HYROX in load and readiness', () => {
   const t = Array(8).fill(300);
-  const sim = { ...enteredRace({ id: 'h', date: '2026-11-11', division: 'men_open', runs: t, stations: t }), mode: 'full' as const, isRace: false };
+  const sim = { ...enteredRace({ id: 'h', date: '2026-11-11', division: 'men_open', runs: t, stations: t }), mode: 'full' as const, isRace: false, partial: undefined };
   const entry = (id: string): LogEntry => ({ id, date: '2026-11-11', kind: 'hyrox', minutes: 80, rpe: 8, at: '', hyrox: { ...sim, id } });
   it('a session made from a run\'s laps is counted once: the run feeds the load, the entry adds nothing', () => {
     const a = run('act1', '2026-11-11T09:00:00', 8, 4800);
@@ -70,7 +70,7 @@ describe('HYROX in load and readiness', () => {
 
 describe('the built-in coach on HYROX', () => {
   const t = Array(8).fill(300);
-  const sim = { ...enteredRace({ id: 'h', date: '2026-11-01', division: 'men_open', runs: t, stations: t }), mode: 'full' as const, isRace: false };
+  const sim = { ...enteredRace({ id: 'h', date: '2026-11-01', division: 'men_open', runs: t, stations: t }), mode: 'full' as const, isRace: false, partial: undefined };
   const profile = { units: 'km', injuries: [], athleteType: 'hyrox', hyrox: { goalS: 4500, raceDate: '2026-12-12' }, log: [{ id: 'h', date: '2026-11-01', kind: 'hyrox', at: '', hyrox: sim }] } as unknown as Profile;
   const ctx = (o: Partial<CoachContext> = {}): CoachContext => ({ today: new Date('2026-11-12T09:00:00'), profile, units: 'km', readiness: { label: 'Ready (85)', summary: '', basedOn: [] } as never, stage: { stage: 'full', predictions: true } as never, nextSessions: [], weekDoneM: 0, weekPlannedM: 0, weekSessionsDone: 0, weekSessionsPlanned: 0, planSessionsDone: 0, planSessionsTotal: 0, runCount: 10, hasData: true, paces: trainingPaces(55),
     race: { id: 'r', name: '5K', date: '2026-12-06', distanceM: 5000, courseType: 'road', priority: 'A', goalS: 930 } as Race, raceReadiness: { predictedS: 951, score: 95, parts: [], summary: '' } as never, ...o });

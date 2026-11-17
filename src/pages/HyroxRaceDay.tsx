@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { HYROX_WARMUP, hyroxSessions, predictHyrox, racePacing } from '../hyrox/predict';
-import { clock, sessionDay } from '../hyrox/hyrox';
+import { clock, isPartial, sessionDay } from '../hyrox/hyrox';
 import { divisionLabel } from '../hyrox/hyroxDivisions';
 import { longDate, pace, parseYmd, ymd } from '../lib/format';
 
@@ -24,7 +24,7 @@ export default function HyroxRaceDay() {
       <AppHeader title="HYROX race day" back large={false} />
       <p className="caption hrd-when">{[divisionLabel(h.division ?? 'men_open'), h.raceDate ? longDate(parseYmd(h.raceDate)) : undefined, days != null && days >= 0 ? (days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} to go`) : undefined].filter(Boolean).join(' · ')}</p>
       {raced && (
-        <Link to={`/hyrox/session/${raced.id}`} className="card card-link row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">Your result</span><span className="caption">See your splits</span></span><span className="stat-xl" style={{ fontSize: 32 }}>{clock(raced.totalMs)}</span></Link>
+        <Link to={`/hyrox/session/${raced.id}`} className="card card-link row-between"><span className="stack-sm" style={{ gap: 0 }}><span className="label">{isPartial(raced) ? 'Your result (partial)' : 'Your result'}</span><span className="caption">See your splits</span></span><span className="stat-xl" style={{ fontSize: 32 }}>{clock(raced.totalMs)}</span></Link>
       )}
       <section className="card stack-sm" aria-labelledby="hrd-plan">
         <h2 id="hrd-plan" className="title">{h.goalS ? `Your plan for ${clock(h.goalS * 1000)}` : pred ? `Your plan: about ${clock(pred.totalS * 1000)}` : 'Your plan'}</h2>

@@ -34,6 +34,9 @@ export interface HyroxSession {
   indoor?: boolean;
   /** Entered after the race from the official splits, not recorded live */
   entered?: boolean;
+  /** An entered result that is not the whole race (a split is missing, or neither the Roxzone total nor the finish
+   *  time was given): its total is not a finish time, so it is not compared with a goal or counted as a best */
+  partial?: boolean;
   goalMs?: number; rpe?: number; notes?: string; templateId?: string;
   /** The Hub post made for it, if any */
   postId?: string;
@@ -186,13 +189,19 @@ export function finish(l: Live, extra: { rpe?: number; notes?: string } = {}): H
   return { id: l.id, startedAt: new Date(l.startedAt).toISOString(), mode: l.mode, division: l.division, title: l.title, segments: l.done, totalMs: l.done.reduce((a, s) => a + s.ms, 0), isRace: l.mode === 'race', indoor: l.indoor || undefined, goalMs: l.goalMs, templateId: l.templateId, ...extra };
 }
 /** A race entered afterwards from the official splits: 8 runs, 8 stations, and the Roxzone total (seconds) */
-export function enteredRace(o: { id: string; date: string; division: Division; runs: (number | undefined)[]; stations: (number | undefined)[]; roxzoneS?: number; goalMs?: number }): HyroxSession {
+export function enteredRace(o: { id: string; date: string; division: Division; runs: (number | undefined)[]; stations: (number | undefined)[]; roxzoneS?: number; finishS?: number; goalMs?: number }): HyroxSession {
   const segments: Segment[] = [];
   let at = 0;
   const push = (s: Omit<Segment, 'i' | 'startMs' | 'endMs'>) => { segments.push({ ...s, i: segments.length, startMs: at, endMs: at + s.ms }); at += s.ms; };
   simulationPlan('race', o.division).forEach((p) => { const sec = p.kind === 'run' ? o.runs[p.n - 1] : o.stations[p.n - 1]; if (sec) push({ ...p, ms: sec * 1000 }); });
-  if (o.roxzoneS) push({ kind: 'roxzone', key: 'roxzone', n: 0, ms: o.roxzoneS * 1000 });
-  return { id: o.id, startedAt: new Date(`${o.date}T09:00:00`).toISOString(), mode: 'race', division: o.division, title: `HYROX race · ${divisionLabel(o.division)}`, segments, totalMs: at, isRace: true, entered: true, goalMs: o.goalMs };
+  const all16 = segments.length === 16;
+  let roxS = o.roxzoneS;
+  // With every split and the official finish time, the rest of the time is the Roxzone
+  if (!roxS && all16 && o.finishS && o.finishS * 1000 > at) roxS = o.finishS - at / 1000;
+  if (roxS) push({ kind: 'roxzone', key: 'roxzone', n: 0, ms: Math.round(roxS * 1000) });
+  const partial = !all16 || (!roxS && !o.finishS);
+  if (o.finishS) at = o.finishS * 1000;
+  return { ...(partial ? { partial } : {}), id: o.id, startedAt: new Date(`${o.date}T09:00:00`).toISOString(), mode: 'race', division: o.division, title: `HYROX race · ${divisionLabel(o.division)}`, segments, totalMs: at, isRace: true, entered: true, goalMs: o.goalMs };
 }
 
 // ---------------------------------------------------------------- The summary
@@ -233,11 +242,14 @@ export function summarise(s: HyroxSession): HyroxSummary {
     const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
     slowLine = `${who[0].toUpperCase()}${who.slice(1)} ${slow.length > 1 ? 'were' : 'was'} ${avg} s slower than your other runs.`;
   }
-  return { runningMs: sum(runSegs), stationsMs: sum(of('station')), roxzoneMs: sum(of('roxzone')), restMs: sum(of('rest')), runs: runs.map(({ over: _o, ...r }) => r), slowLine, vsGoalMs: s.goalMs ? s.totalMs - s.goalMs : undefined }; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return { runningMs: sum(runSegs), stationsMs: sum(of('station')), roxzoneMs: sum(of('roxzone')), restMs: sum(of('rest')), runs: runs.map(({ over: _o, ...r }) => r), slowLine, vsGoalMs: s.goalMs && !isPartial(s) ? s.totalMs - s.goalMs : undefined }; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 /** A station done to the standard: not swapped, and the standard amount of work */
 export const standard = (x: Segment) => { const st = stationByKey.get(x.key as StationKey); return x.kind === 'station' && !x.swapped && !!st && x.distanceM === st.distanceM && x.reps === st.reps; };
+/** An entered result that is not the whole race. Results saved before this was recorded are judged the same way:
+ *  all 16 splits and the Roxzone total are needed for the sum to be a finish time. */
+export const isPartial = (s: HyroxSession): boolean => s.partial ?? (!!s.entered && (s.segments.filter((x) => x.kind === 'run' || x.kind === 'station').length < 16 || !s.segments.some((x) => x.kind === 'roxzone')));
 /**
  * A whole HYROX: eight 1 km runs and eight stations, as a full simulation or race, or with every station done to
  * the standard. A custom session with shortened runs or stations is not one.
@@ -257,7 +269,7 @@ export function records(sessions: HyroxSession[]): HyroxRecords {
     const date = sessionDay(s);
     const whole = s.segments.filter((x) => x.kind === 'run').length === 8 && s.segments.filter(standard).length === 8;
     if (whole && s.mode === 'full' && (!out.simulation || s.totalMs < out.simulation.ms)) out.simulation = { ms: s.totalMs, date, id: s.id };
-    if (whole && s.isRace && (!out.race || s.totalMs < out.race.ms)) out.race = { ms: s.totalMs, date, id: s.id };
+    if (whole && s.isRace && !isPartial(s) && (!out.race || s.totalMs < out.race.ms)) out.race = { ms: s.totalMs, date, id: s.id };
     for (const x of s.segments) {
       if (x.kind === 'run' && x.distanceM === RUN_M && x.ms > 0 && (!out.run || x.ms < out.run.ms)) out.run = { ms: x.ms, date };
       if (standard(x) && x.ms > 0) { const k = x.key as StationKey; if (!out.stations[k] || x.ms < out.stations[k]!.ms) out.stations[k] = { ms: x.ms, date }; }

@@ -94,7 +94,9 @@ export function buildFacts(c: CoachContext): string[] {
   return f;
 }
 
-const PAIN = /(pain|hurt|injur|sore|ache|niggle|swollen|sprain|strain|shin|knee|achilles|calf|hamstring|plantar|hip|back)/i;
+// Whole words only: "back to full fitness", "pushing" or "feedback" are not about pain. "Back" counts only when it
+// is clearly the body part ("my back", "lower back", "back pain").
+export const PAIN = /\b(pain(s|ful)?|hurt(s|ing)?|injur\w*|sore(ness)?|aches?|aching|niggles?|swollen|sprain(s|ed)?|strain(s|ed)?|shins?|knees?|achilles|calf|calves|hamstrings?|plantar|hips?|backache|(my|lower|upper|bad|sore|tight|stiff) back|back (pain|hurts?|aches?|is (sore|tight|stiff|bad)))\b/i;
 const MINUTES = /(\d{2,3})\s*(min|minutes|mins)/i;
 
 export function localReply(q: string, c: CoachContext): CoachReply {

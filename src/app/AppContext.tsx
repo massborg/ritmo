@@ -15,7 +15,7 @@ import { detailScore, merge, mergeWithRemoved } from '../data/integration';
 import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, smallAvatarPath, uploadAvatar, uploadSmallAvatar } from '../data/avatar';
-import { forgetPhoto, setHubPhoto } from '../data/hub';
+import { deletePost as hubDeletePost, forgetPhoto, setHubPhoto } from '../data/hub';
 import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
@@ -1221,7 +1221,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const sessions = d.plan.sessions.map((x) => (x.id !== sessionId || !x.strengthPlan ? x : patch === null ? { ...x, strengthPlan: undefined, strength: undefined } : { ...x, strengthPlan: { ...x.strengthPlan, ...patch } }));
     return { ...d, plan: { ...d.plan, sessions, changes: [...d.plan.changes, { id: `strength:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary }] } };
   });
-  const removeLog = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
+  const removeLog = (id: string) => {
+    // Its Hub post goes with it (a deleted session should not stay up for followers)
+    const e = (dataRef.current.profile.log ?? []).find((x) => x.id === id);
+    const postId = e?.strength?.postId ?? e?.hyrox?.postId;
+    if (postId) void hubDeletePost(postId).catch(() => {});
+    setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
+  };
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
     if (!d.plan) return d;

@@ -102,7 +102,7 @@ describe('the live recorder', () => {
   });
   it('a whole HYROX is eight 1 km runs and eight stations; a custom session with short runs is not', () => {
     const t = Array(8).fill(240);
-    const race = enteredRace({ id: 'r', date: '2026-11-12', division: 'men_open', runs: t, stations: t });
+    const race = enteredRace({ id: 'r', date: '2026-11-12', division: 'men_open', runs: t, stations: t, roxzoneS: 360 });
     expect(wholeHyrox(race)).toBe(true);
     expect(wholeHyrox({ ...race, mode: 'custom', segments: race.segments.map((x) => (x.kind === 'run' ? { ...x, distanceM: 500 } : x)) })).toBe(false);
     expect(wholeHyrox({ ...race, mode: 'custom', segments: race.segments.map((x) => (x.kind === 'station' ? { ...x, distanceM: 1, reps: 1 } : x)) })).toBe(false);
@@ -135,7 +135,7 @@ describe('the live recorder', () => {
   });
 });
 
-const session = (runs: number[], stations: number[], o: Partial<HyroxSession> = {}): HyroxSession => ({ ...enteredRace({ id: 's', date: '2026-11-14', division: 'men_open', runs, stations }), mode: 'full', isRace: false, entered: undefined, ...o });
+const session = (runs: number[], stations: number[], o: Partial<HyroxSession> = {}): HyroxSession => ({ ...enteredRace({ id: 's', date: '2026-11-14', division: 'men_open', runs, stations }), mode: 'full', isRace: false, entered: undefined, partial: undefined, ...o });
 
 describe('the summary', () => {
   const s = session([242, 254, 281, 258, 262, 265, 292, 276], [252, 221, 295, 271, 290, 150, 330, 360], { goalMs: 75 * 60000 });
