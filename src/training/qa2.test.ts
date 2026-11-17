@@ -7,6 +7,8 @@ import { estimateFitness } from './fitness';
 import { loadSeries, type LoadDay } from './load';
 import { readinessScore } from './readiness';
 import { enteredRace } from '../hyrox/hyrox';
+import { localReply, type CoachContext } from '../coach/coach';
+import { trainingPaces } from './fitness';
 
 const run = (id: string, start: string, km: number, movingS: number, extra: Partial<Activity> = {}): Activity => ({ id, source: 'upload', sourceIds: {}, name: 'Run', sport: 'run', startTime: start, distanceM: km * 1000, movingS, durationS: movingS, detailScore: 5, importedAt: '', ...extra } as Activity);
 const hr = { rest: 50, max: 190 } as Parameters<typeof loadSeries>[1];
@@ -63,5 +65,24 @@ describe('HYROX in load and readiness', () => {
     expect(rec.explain).toMatch(/HYROX simulation/);
     const none = readinessScore({ now, series, activities: [], feedback: [], profile: { ...profile, log: [] }, typeOf: () => 'easy' as never });
     expect(none.factors.find((f) => f.key === 'recovery')!.explain).toBe('No hard session in the last two weeks.');
+  });
+});
+
+describe('the built-in coach on HYROX', () => {
+  const t = Array(8).fill(300);
+  const sim = { ...enteredRace({ id: 'h', date: '2026-11-01', division: 'men_open', runs: t, stations: t }), mode: 'full' as const, isRace: false };
+  const profile = { units: 'km', injuries: [], athleteType: 'hyrox', hyrox: { goalS: 4500, raceDate: '2026-12-12' }, log: [{ id: 'h', date: '2026-11-01', kind: 'hyrox', at: '', hyrox: sim }] } as unknown as Profile;
+  const ctx = (o: Partial<CoachContext> = {}): CoachContext => ({ today: new Date('2026-11-12T09:00:00'), profile, units: 'km', readiness: { label: 'Ready (85)', summary: '', basedOn: [] } as never, stage: { stage: 'full', predictions: true } as never, nextSessions: [], weekDoneM: 0, weekPlannedM: 0, weekSessionsDone: 0, weekSessionsPlanned: 0, planSessionsDone: 0, planSessionsTotal: 0, runCount: 10, hasData: true, paces: trainingPaces(55),
+    race: { id: 'r', name: '5K', date: '2026-12-06', distanceM: 5000, courseType: 'road', priority: 'A', goalS: 930 } as Race, raceReadiness: { predictedS: 951, score: 95, parts: [], summary: '' } as never, ...o });
+  it('answers "on track for my HYROX race" from the HYROX prediction and goal, not the running race', () => {
+    const r = localReply('Am I on track for my HYROX race?', ctx()).text;
+    expect(r).toMatch(/Your HYROX prediction is 1:\d\d:\d\d/);
+    expect(r).toMatch(/your goal of 1:15:00, with 30 days to go/);
+    expect(r).not.toMatch(/15:51|930|Race preparation/);
+  });
+  it('answers station and pacing questions from the same facts', () => {
+    for (const q of ['What HYROX time can I expect?', 'How do I get better at wall balls?', 'What are my weakest stations?']) expect(localReply(q, ctx()).text).toMatch(/HYROX prediction/);
+    // A runner asking about a running race still gets the running answer
+    expect(localReply('Am I on track for my race?', ctx({ profile: { units: 'km', injuries: [] } as unknown as Profile })).text).not.toMatch(/HYROX/);
   });
 });

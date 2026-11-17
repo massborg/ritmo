@@ -1,6 +1,7 @@
 // The Ritmo coach. Answers are built only from the runner's computed data (facts), never invented numbers.
 // When the Supabase "coach" function is configured with a Claude API key, it phrases answers from the same facts.
-import { hyroxFacts } from '../hyrox/predict';
+import { hyroxFacts, hyroxSessions, predictHyrox } from '../hyrox/predict';
+import { clock as hxClock } from '../hyrox/hyrox';
 import type { Activity, PlannedSession, Profile, Race } from '../lib/types';
 import { daysUntil, distanceLabel, duration, localise, longDate, parseYmd, pace, paceRange, shortDate, type Units, ymd } from '../lib/format';
 import type { StageInfo } from '../training/stage';
@@ -192,6 +193,20 @@ export function localReply(q: string, c: CoachContext): CoachReply {
       text: `Today is ${s.title.toLowerCase()} because you are in the ${PHASE_LABEL[s.phase].toLowerCase()} phase: ${PHASE_EXPLAIN[s.phase].toLowerCase()} ${reason} ${s.paceTarget ? `Aim for ${paceRange(s.paceTarget.minSPerKm, s.paceTarget.maxSPerKm, U)}${s.hrZones ? ` and keep heart rate in Z${s.hrZones.join(' to Z')}` : ''}.` : ''} Your status is "${c.readiness.label.toLowerCase()}": ${c.readiness.basedOn[0] ?? ''}.`,
       facts,
     };
+  }
+
+  // HYROX questions are answered from the HYROX facts (prediction, goal, weakest station, run pace), never from the
+  // running race's prediction
+  const hyroxAthlete = (c.profile.athleteType ?? 'runner') !== 'runner' || hyroxSessions(c.profile).length > 0;
+  if (/hyrox|sled|wall ?ball|ski ?erg|roxzone|burpee broad|farmers carry|sandbag/.test(lower) || (hyroxAthlete && /station/.test(lower))) {
+    const h = c.profile.hyrox ?? {};
+    const p = predictHyrox(c.profile, c.paces ? Math.round((c.paces.threshold[0] + c.paces.threshold[1]) / 2) : undefined);
+    if (!p) return { text: 'I do not have enough to go on for HYROX yet. Record a simulation or a station practice (Activity, then HYROX), or a few runs, and I can predict your time and show where you can gain the most.', facts };
+    const days = h.raceDate ? daysUntil(c.today, h.raceDate) : undefined;
+    const vsGoal = p.vsGoalS != null && h.goalS ? ` That is ${p.vsGoalS <= 0 ? `${hxClock(-p.vsGoalS * 1000)} inside` : `${hxClock(p.vsGoalS * 1000)} outside`} your goal of ${hxClock(h.goalS * 1000)}${days != null && days >= 0 ? `, with ${days} day${days === 1 ? '' : 's'} to go` : ''}.` : days != null && days >= 0 ? ` Your race is ${days} day${days === 1 ? '' : 's'} away.` : '';
+    const focus = p.focus ? ` Most time to gain: ${p.focus.name.toLowerCase()}, about ${p.focus.gainS} s against a typical time for your running fitness.` : p.known === 0 ? ' The station times are typical ones until you record yours: a station practice shows where you can gain the most.' : '';
+    const hardest = h.hardest?.length ? ` You said you find ${h.hardest.map((k) => p.stations.find((x) => x.key === k)?.name.toLowerCase() ?? k).join(' and ')} hardest: practise ${h.hardest.length > 1 ? 'them' : 'it'} after a run, as in the race.` : '';
+    return { text: `Your HYROX prediction is ${hxClock(p.totalS * 1000)} (${p.confidence === 'good' ? 'good confidence' : p.confidence === 'medium' ? 'medium confidence' : 'a first estimate'}), based on ${p.basedOn}.${vsGoal} Plan the runs at about ${pace(p.runPaceS, U)}: start the first one slower than feels right.${focus}${hardest} This is an estimate, not a promise.`, facts };
   }
 
   if (/on track|ready|predict|goal|race|finish time|marathon|half|10k|5k/.test(lower)) {
