@@ -168,7 +168,8 @@ export function raceReadiness(race: Race, activities: Activity[], vdot: number, 
   const weekly = last42.reduce((x, a) => x + a.distanceM, 0) / 6;
   const weeksActive = new Set(last42.map(weekKey));
   const runs8 = activities.filter((a) => { const d = daysBetween(new Date(a.startTime), today); return d >= 0 && d < 56; });
-  const consistentWeeks = [...totalsBy(runs8, weekKey).values()].filter((v) => v.n >= 3).length;
+  // A 56-day window can touch 9 calendar weeks: the count is "of 8", so it never shows more than 8
+  const consistentWeeks = Math.min(8, [...totalsBy(runs8, weekKey).values()].filter((v) => v.n >= 3).length);
 
   const longScore = Math.min(1, longest / LONG_NEEDED(race.distanceM));
   const volScore = Math.min(1, weekly / WEEKLY_NEEDED(race.distanceM));

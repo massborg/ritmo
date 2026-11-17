@@ -17,7 +17,7 @@ import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_NAMES, daysBetween, dist, localise, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
 import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -352,7 +352,7 @@ export default function Today() {
           {s.changedFor && s.status === 'planned' && (
             <p className="changed-for"><span className="pill-on-brand">Changed for your {s.changedFor.label}</span> <s className="was-planned">{s.changedFor.title}{s.changedFor.distanceM > 0 ? ` · ${plannedNum(s.changedFor.distanceM, U)} ${U}` : ''}</s></p>
           )}
-          <h2 id="session-title" className="display-lg">{s.title}</h2>
+          <h2 id="session-title" className="display-lg">{localise(s.title, U)}</h2>
           {s.edited && <span className="pill-on-brand edited-tag" style={{ alignSelf: 'flex-start' }}>Your version</span>}
           {s.type !== 'rest' ? (
             <>
@@ -465,7 +465,7 @@ export default function Today() {
               : <div><p className="caption">Effort</p><p className="label">Easy: you can talk in full sentences</p></div>)}
             {s.hrZones && data.activities.some((a) => a.avgHr) && <ZoneTag zones={s.hrZones} />}
           </div>
-          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localise(st.detail, U)}</li>)}</ol>
+          <ol className="ol-steps">{s.steps.map((st, i) => <li key={i}><strong>{localise(st.label, U)}</strong> {localiseStep(st.detail, st.pace, U)}</li>)}</ol>
           {s.second && <p className="caption"><strong style={{ color: 'var(--ink)' }}>{s.second.title}.</strong> {localise(s.second.detail, U)}</p>}
           {s.strength && !s.strengthPlan && <p className="caption"><strong style={{ color: 'var(--ink)' }}>Strength.</strong> {s.strength}</p>}
         </section>

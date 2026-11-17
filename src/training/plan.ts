@@ -194,7 +194,8 @@ export function adaptPlan(opts: {
     const q = nextWeek.find((s) => ['threshold', 'vo2max', 'tempo', 'hills'].includes(s.type));
     if (q && !has(`missedmany:${q.id}`)) {
       toEasy(q, 'Adjusted after a few missed days.');
-      for (const s of nextWeek.filter((x) => x.type === 'long')) s.distanceM = Math.round(s.distanceM * 0.85 / 1000) * 1000;
+      // The time follows the shorter distance, so the pace it shows stays the long-run pace
+      for (const s of nextWeek.filter((x) => x.type === 'long')) { const was = s.distanceM; s.distanceM = Math.round(s.distanceM * 0.85 / 1000) * 1000; if (was > 0) s.durationS = Math.round(s.durationS * s.distanceM / was); }
       log(`missedmany:${q.id}`, 'missed', `You missed ${recentMissed.length} sessions in the past week, so this week eases back in: one quality session becomes easy and the long run is about 15% shorter. Coming back gradually is safer than picking up where you left off.`);
     }
   }

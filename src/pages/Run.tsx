@@ -15,7 +15,7 @@ import { StatusLine } from '../components/ui';
 import { SessionSheet } from '../components/training';
 import { moveTargets } from '../training/plan';
 import { ZONE_NAMES } from '../training/fitness';
-import { DAY_SHORT, dist, duration, durationWords, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
+import { DAY_SHORT, dist, duration, durationWords, localise, MONTHS_LONG, pace as fmtPace, paceRange, parseYmd, weekday, ymd } from '../lib/format';
 import { addFix, addLap, avgPace, clockS, currentPace, gpsLostS, lapSplits, paceGauge, paceGoalStep, setPaused, startTrack, stepLeft, stepsFor, toStreams, type TrackState, type WorkStep } from '../run/tracker';
 import { tapHaptic } from '../native';
 import { primeVoices, type SpeakOptions } from '../run/voice';
@@ -375,14 +375,14 @@ export default function RunPage() {
                 onTouchStart={(e) => { swipe.current = e.touches[0].clientX; }}
                 onTouchEnd={(e) => { const x0 = swipe.current; swipe.current = undefined; if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) setShownIdx((i) => Math.max(0, Math.min(cards.length - 1, i + (dx < 0 ? 1 : -1)))); }}>
                 <div className="row-between"><span className="caption">{dayCaption(shown.date)}</span>{zone(shown) && <span className="zone-chip"><span className={`zone-dot z${zone(shown)}`} aria-hidden="true" />Z{zone(shown)} {ZONE_NAMES[zone(shown)! - 1]}</span>}</div>
-                <h2 className="title">{shown.title}</h2>
+                <h2 className="title">{localise(shown.title, U)}</h2>
                 <div className="run-card-stats">
                   <div><span className="caption">Distance</span><span className="stat">{shown.distanceM > 0 ? <>{plannedNum(shown.distanceM, U)}<small> {U}</small></> : '–'}</span></div>
                   <div><span className="caption">{workStep(shown) ? 'Rep pace' : 'Target pace'}</span><span className="stat">{targetPace(shown)}<small>/{U}</small></span></div>
                   <div><span className="caption">Time</span><span className="stat">{durationWords(shown.durationS)}</span></div>
                 </div>
                 <WorkoutGraph session={shown} height={36} />
-                <p className="caption run-structure">{structureLine(shown)}</p>
+                <p className="caption run-structure">{localise(structureLine(shown), U)}</p>
                 <p className="run-tip"><strong>Coach tip: </strong>{shown.howItHelps || shown.purpose}</p>
               </section>
               {cards.length > 1 && (
@@ -417,7 +417,7 @@ export default function RunPage() {
                 {goal === 'pace' && <span className="caption">Type the digits: 5 0 0 becomes 5:00.</span>}
               </div>
             )}
-            {todays && <button className="link-btn run-switch" onClick={() => { setWhat('planned'); setShownIdx(0); }}><span className="caption">Today's plan: {todays.title}</span><span>Switch to plan <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></span></button>}
+            {todays && <button className="link-btn run-switch" onClick={() => { setWhat('planned'); setShownIdx(0); }}><span className="caption">Today's plan: {localise(todays.title, U)}</span><span>Switch to plan <ChevronRight size={16} strokeWidth={2} aria-hidden="true" /></span></button>}
           </section>
         )}
 
