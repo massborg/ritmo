@@ -1058,13 +1058,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const back = resetEdit(s);
     return { ...d, plan: { ...d.plan, sessions: d.plan.sessions.map((x) => (x.id === sessionId ? back : x)), changes: [...d.plan.changes, { id: `edit-reset:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary: `${back.title} on ${new Date(`${back.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} is back to the plan.` }] } };
   });
-  const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.plan ?? d.plan, sessionId, toDate) } : d));
-  const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.plan ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
+  // Moves and swaps start from the plan as it is stored (adapted, with the body change log), never from the plan as
+  // shown: injury and ease-back changes are a view on top, applied once when shown. Storing the shown plan would
+  // apply them again on every edit (16 km became 11, then 8).
+  const moveSession = (sessionId: string, toDate: string) => setData((d) => (d.plan ? { ...d, plan: movePlanSession(derived.planToStore ?? d.plan, sessionId, toDate) } : d));
+  const swap = (sessionId: string, kind: SwapKind) => setData((d) => (d.plan ? { ...d, plan: swapSession(derived.planToStore ?? d.plan, sessionId, kind, derived.paces ?? trainingPaces(40)) } : d));
   const applyCoachProposal = (messageId: string) => setData((d) => {
     const m = d.coach.find((x) => x.id === messageId);
     const p = m?.proposal;
     if (!p || p.applied || !d.plan) return d;
-    const base = derived.plan ?? d.plan;
+    const base = derived.planToStore ?? d.plan;
     const plan = p.kind === 'move' && p.toDate ? movePlanSession(base, p.sessionId, p.toDate) : p.swap ? swapSession(base, p.sessionId, p.swap, derived.paces ?? trainingPaces(40)) : base;
     return { ...d, plan, coach: d.coach.map((x) => (x.id === messageId ? { ...x, proposal: { ...p, applied: true } } : x)) };
   });
@@ -1146,7 +1149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
     if (!d.plan) return d;
-    const base = derived.plan ?? d.plan;
+    const base = derived.planToStore ?? d.plan;
     const from = base.sessions.find((x) => x.id === sessionId)?.date;
     let moved = toDate ? movePlanSession(base, sessionId, toDate) : base;
     // The session it changes places with lands on the missed day, which is in the past and can no longer be run:

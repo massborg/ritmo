@@ -76,3 +76,22 @@ describe('Body plan changes', () => {
     expect(painRule(c, true).summary).toMatch(/you chose to be more careful/);
   });
 });
+
+describe('Body changes stay a view on the stored plan', () => {
+  it('with ease-back on, two swaps of one session leave every other stored session as it was, and the view eases once', async () => {
+    const { swapSession } = await import('./plan');
+    const { trainingPaces } = await import('./fitness');
+    const body = { checkins: [], easeBack: { from: day(0), until: day(9), noHardUntil: day(3), label: 'left calf' } };
+    const others = (p: Plan) => p.sessions.filter((s) => s.id !== 's3').map((s) => [s.id, s.type, s.distanceM]);
+    const firstView = applyBody(plan, body, today);
+    // What the app does on each edit: change the stored plan, keep only the body change log, show the body view
+    let stored = plan;
+    for (let i = 0; i < 2; i++) {
+      const edited = swapSession(stored, 's3', 'treadmill', trainingPaces(50));
+      stored = { ...edited, changes: applyBody(edited, body, today).changes };
+    }
+    expect(others(stored)).toEqual(others(plan));
+    expect(others(applyBody(stored, body, today))).toEqual(others(firstView));
+    expect(firstView.sessions.find((s) => s.id === 's5')!.distanceM).toBe(7000);
+  });
+});
