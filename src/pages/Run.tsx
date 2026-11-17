@@ -452,7 +452,7 @@ export default function RunPage() {
         pocket={pocketNext} setPocket={setPocketNext} source={settings.voiceSource ?? 'phone'} setSource={(voiceSource) => setSettings((x) => ({ ...x, voiceSource }))} />
       <Sheet open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Run settings">
         <div className="stack">
-          <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: 'Every step and km' }, { value: 'km', label: 'Every km' }, { value: 'off', label: 'Off' }]} />
+          <Chips<Settings['cues']> label="Audio cues" value={settings.cues} onChange={(cues2) => setSettings((x) => ({ ...x, cues: cues2 }))} options={[{ value: 'steps', label: `Every step and ${U === 'km' ? 'km' : 'mile'}` }, { value: 'km', label: `Every ${U === 'km' ? 'km' : 'mile'}` }, { value: 'off', label: 'Off' }]} />
           <Chips<Settings['countdown']> label="Countdown" value={settings.countdown} onChange={(c) => setSettings((x) => ({ ...x, countdown: c }))} options={[3, 5, 10].map((v) => ({ value: v as Settings['countdown'], label: `${v} s` }))} />
           <div id="run-voice-settings"><VoicePicker voiceURI={settings.voiceURI} rate={settings.rate} source={settings.voiceSource ?? 'phone'} onChange={(v) => setSettings((x) => ({ ...x, ...v }))} /></div>
           <label className="row" style={{ gap: 8, minHeight: 44 }}><input type="checkbox" checked={settings.autoPause} onChange={(e) => setSettings((x) => ({ ...x, autoPause: e.target.checked }))} /> Pause automatically when I stop</label>

@@ -6,7 +6,7 @@ import { UndoDeleteToast } from './components/DeleteRun';
 import { HubSync } from './components/HubSync';
 import { PushHints } from './components/PushHints';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { CircleUserRound, MessageCircle, Play, Sun, User, Users } from 'lucide-react';
 import { AppProvider, useApp } from './app/AppContext';
 import { Logo, StatusLine } from './components/ui';
@@ -248,10 +248,9 @@ function PlanProblemSheet() {
 function Shell() {
   const { pathname } = useLocation();
   const { session } = useApp();
-  const on = (t: Tab, isActive: boolean) => isActive || !!t.also?.some((p) => pathname === p || pathname.startsWith(p.endsWith('/') ? p : `${p}/`));
-  // The same test for screen readers: a tab is the current one on every route it covers (NavLink alone only says
-  // so on its own route, so the recorder pages under Activity had no current tab)
-  const current = (t: Tab) => on(t, t.to === '/' ? pathname === '/' : pathname === t.to || pathname.startsWith(`${t.to}/`));
+  // A tab is the current one on its own route and on every route it covers: the same test for the highlight and for
+  // screen readers (aria-current), so the recorder pages under Activity have a current tab too
+  const current = (t: Tab) => (t.to === '/' ? pathname === '/' : pathname === t.to || pathname.startsWith(`${t.to}/`)) || !!t.also?.some((p) => pathname === p || pathname.startsWith(p.endsWith('/') ? p : `${p}/`));
   const bare = BARE.includes(pathname) || !session;
   return (
     <div className={`app${bare ? ' app-bare' : ''}`}>
@@ -260,7 +259,8 @@ function Shell() {
         <aside className="sidebar" aria-label="Main navigation">
           <NavLink to="/" className="sidebar-logo" aria-label="Ritmo, go to Today"><Logo variant="compact" width={112} alt="Ritmo" /></NavLink>
           <nav className="stack-sm" aria-label="Main">
-            {TABS.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} aria-current={current(t) ? 'page' : undefined} className={({ isActive }) => `navlink${on(t, isActive) ? ' active' : ''}`}><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+            {/* Link, not NavLink: NavLink drops aria-current on every route that is not its own (the recorder pages under Activity) */}
+            {TABS.map((t) => <Link key={t.to} to={t.to} aria-current={current(t) ? 'page' : undefined} className={`navlink${current(t) ? ' active' : ''}`}><t.icon size={20} strokeWidth={2} aria-hidden="true" />{t.label}</Link>)}
           </nav>
           <div className="sidebar-foot stack-sm">
             <NavLink to="/profile" className={({ isActive }) => `navlink${isActive || pathname.startsWith('/profile') ? ' active' : ''}`}><CircleUserRound size={20} strokeWidth={2} aria-hidden="true" />Profile</NavLink>
@@ -348,8 +348,8 @@ function Shell() {
       {!bare && (
         <nav className="tabbar" aria-label="Main">
           {TABS.map((t) => t.to === '/record'
-            ? <NavLink key={t.to} to={t.to} aria-current={current(t) ? 'page' : undefined} className={({ isActive }) => `tab tab-run${on(t, isActive) ? ' active' : ''}`} onClick={() => void tapHaptic()}><span className="tab-run-btn" aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>{t.label}</NavLink>
-            : <NavLink key={t.to} to={t.to} end={t.to === '/'} aria-current={current(t) ? 'page' : undefined} className={({ isActive }) => `tab${on(t, isActive) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</NavLink>)}
+            ? <Link key={t.to} to={t.to} aria-current={current(t) ? 'page' : undefined} className={`tab tab-run${current(t) ? ' active' : ''}`} onClick={() => void tapHaptic()}><span className="tab-run-btn" aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>{t.label}</Link>
+            : <Link key={t.to} to={t.to} aria-current={current(t) ? 'page' : undefined} className={`tab${current(t) ? ' active' : ''}`} onClick={() => void tapHaptic()}><t.icon size={24} strokeWidth={2} aria-hidden="true" />{t.label}</Link>)}
         </nav>
       )}
     </div>

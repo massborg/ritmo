@@ -13,7 +13,22 @@ export function Sheet({ open, onClose, title, children, footer }: { open: boolea
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { closeRef.current(); return; }
+      // Tab stays inside the sheet (it is a modal dialog): from the last control back to the first, and the reverse
+      const box = ref.current;
+      if (e.key !== 'Tab' || !box) return;
+      const active = document.activeElement as HTMLElement | null;
+      // A sheet opened on top of this one keeps its own focus
+      const other = active?.closest('.sheet');
+      if (other && other !== box) return;
+      const stops = [...box.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter((el) => el.getClientRects().length > 0);
+      if (!stops.length) return;
+      const first = stops[0], last = stops[stops.length - 1];
+      if (!active || !box.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     const t = setTimeout(() => { if (!ref.current?.contains(document.activeElement)) ref.current?.querySelector<HTMLElement>('[data-autofocus], button, input')?.focus(); }, 30);

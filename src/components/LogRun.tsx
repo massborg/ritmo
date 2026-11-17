@@ -25,12 +25,15 @@ function estimateKm(s: PlannedSession | undefined, durationS: number): number {
 }
 
 export function LogRunSheet({ open, onClose, session }: { open: boolean; onClose: () => void; session?: PlannedSession }) {
-  const { logManualRun } = useApp();
+  const { logManualRun, data } = useApp();
+  // The distance is typed in the runner's unit (kilometres or miles)
+  const U = data.profile.units;
+  const unitM = U === 'km' ? 1000 : 1609.344;
   const nav = useNavigate();
   const [date, setDate] = useState(session?.date ?? ymd(new Date()));
   const [durationS, setDurationS] = useState<number | undefined>(session?.durationS || 30 * 60);
   const [time, setTime] = useState(() => defaultStart(session?.date ?? ymd(new Date()), session?.durationS || 1800));
-  const [km, setKm] = useState<string>(() => String(estimateKm(session, session?.durationS || 1800)));
+  const [km, setKm] = useState<string>(() => String(Math.round((estimateKm(session, session?.durationS || 1800) * 1000 / unitM) * 10) / 10));
   const [feel, setFeel] = useState<SessionFeedback['feel'] | 0>(0);
   const [pain, setPain] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
@@ -40,9 +43,9 @@ export function LogRunSheet({ open, onClose, session }: { open: boolean; onClose
 
   const save = () => {
     if (!durationS || durationS < 60) { setErr('Add how long you were out, at least one minute.'); return; }
-    if (!kmNum || kmNum <= 0 || kmNum > 100) { setErr('Add a rough distance in kilometres. A guess is fine.'); return; }
+    if (!kmNum || kmNum <= 0 || kmNum * unitM > 100000) { setErr(`Add a rough distance in ${U === 'km' ? 'kilometres' : 'miles'}. A guess is fine.`); return; }
     if (!feel) { setErr('Tell us how it felt.'); return; }
-    const id = logManualRun({ date, time: time || undefined, durationS, distanceM: kmNum * 1000, feel, pain: pain.map((area) => ({ area, severity: /chest|dizz/i.test(area) ? 3 : 2 })), notes: notes || undefined, sessionId: session?.id });
+    const id = logManualRun({ date, time: time || undefined, durationS, distanceM: Math.round(kmNum * unitM), feel, pain: pain.map((area) => ({ area, severity: /chest|dizz/i.test(area) ? 3 : 2 })), notes: notes || undefined, sessionId: session?.id });
     onClose();
     nav(`/activity/${id}`);
   };
@@ -54,7 +57,7 @@ export function LogRunSheet({ open, onClose, session }: { open: boolean; onClose
       <StartTimeField id="lr-start" value={time} onChange={setTime} />
       <DurationField id="lr-time" label="How long were you out?" value={durationS} onChange={setDurationS} />
       <div className="field">
-        <label htmlFor="lr-km">Rough distance (km)</label>
+        <label htmlFor="lr-km">Rough distance ({U})</label>
         <input id="lr-km" className="input" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} />
         <p className="caption">A guess is fine{session?.type === 'runwalk' ? '. We estimated it from your intervals.' : '.'}</p>
       </div>
