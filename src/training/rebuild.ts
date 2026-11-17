@@ -5,7 +5,7 @@
 // - A rebuild never triggers the automatic load adjustments for the current week.
 // - The previous plan is kept for 24 hours so the runner can restore it.
 import type { Activity, Plan, PlannedSession } from '../lib/types';
-import { addDays, parseYmd, startOfWeek, weekday, ymd } from '../lib/format';
+import { addDays, parseYmd, startOfWeek, weekday, ymd, runDay } from '../lib/format';
 
 export const RESTORE_HOURS = 24;
 
@@ -37,7 +37,7 @@ export function mergeRebuild(opts: { old?: Plan; fresh: Plan; today: Date; activ
   const { old, fresh, activities } = opts;
   const today = parseYmd(ymd(opts.today));
   const t = ymd(today);
-  const ranToday = activities.some((a) => !a.hidden && a.startTime.slice(0, 10) === t);
+  const ranToday = activities.some((a) => !a.hidden && runDay(a.startTime) === t);
   // Where the new sessions begin
   // "tomorrow": a changed week of the runner's own (update 3, §7) never touches today
   const start = opts.startMode === 'monday' && weekday(today) !== 0 ? ymd(nextMonday(today))

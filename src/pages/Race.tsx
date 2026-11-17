@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine } from '../components/ui';
-import { daysUntil, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd } from '../lib/format';
+import { daysUntil, distanceLabel, duration, longDate, pace, parseYmd, RACE_DISTANCES, uid, ymd, runDay } from '../lib/format';
 import { pacingPlan, raceReadiness, raceResultS, raceRunFor, taperGuidance } from '../training/insights';
 import { effortOf } from '../training/derive';
 import { estimateFitness, predictTime, vdotFromPerformance } from '../training/fitness';
@@ -79,7 +79,7 @@ export default function RacePage() {
 
   // Post-race review: find the race activity on that day
   const result = past ? raceRunFor(race, data.activities) : undefined;
-  const before = past ? estimateFitness(forStats(data.activities).filter((a) => a.startTime.slice(0, 10) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
+  const before = past ? estimateFitness(forStats(data.activities).filter((a) => runDay(a.startTime) < race.date), hr, addDay(parseYmd(race.date), -1)) : undefined;
   const after = past ? estimateFitness(forStats(data.activities), hr, addDay(parseYmd(race.date), 1)) : undefined;
   const predictedBefore = before ? predictTime(before.vdot, race.distanceM) : undefined;
 

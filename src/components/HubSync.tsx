@@ -4,6 +4,7 @@
 import { clock, summarise } from '../hyrox/hyrox';
 import { useEffect, useRef } from 'react';
 import type { LogEntry } from '../lib/types';
+import { ymd } from '../lib/format';
 import { useApp } from '../app/AppContext';
 import * as hub from '../data/hub';
 import { avatarUrl, uploadSmallAvatar } from '../data/avatar';
@@ -106,7 +107,9 @@ export function HubSync() {
     const t = setTimeout(async () => {
       // HYROX sessions too (update 4, task 5), under the same setting
       const recent = (data.profile.log ?? []).filter((e) => (e.kind === 'strength' && e.strength && !e.strength.postId || e.kind === 'hyrox' && e.hyrox && !e.hyrox.postId) && !strengthTried.current.has(e.id)
-        && e.at >= prefs.autoSince! && Date.now() - new Date(e.at).getTime() < 3 * 86400e3);
+        // Only recent sessions, by when they were done (not when they were typed in): logging an old workout or
+        // an old race result never floods the feed
+        && e.at >= prefs.autoSince! && Date.now() - new Date(sessionTime(e)).getTime() < 3 * 86400e3);
       for (const e of recent) {
         strengthTried.current.add(e.id);
         try {
@@ -123,6 +126,12 @@ export function HubSync() {
   }, [joined, uid, data.profile.log, prefs, on]);
 
   return null;
+}
+
+/** When a logged session took place: the recorded start, or noon on its date when it was entered for another day */
+export function sessionTime(e: LogEntry): string {
+  if (e.hyrox?.startedAt) return e.hyrox.startedAt;
+  return e.date && e.date !== ymd(new Date(e.at)) ? new Date(`${e.date}T12:00:00`).toISOString() : e.at;
 }
 
 /** A UUID made from a text (SHA-256), so the same workout always gets the same post id */
@@ -142,7 +151,7 @@ export function buildStrengthPost(e: LogEntry, o: { uid: string; id: string; vis
   const asPlanned = !!st.sessionId;
   return {
     id: o.id, user_id: o.uid, activity_id: null, title: st.title, body: null, visibility: o.visibility, show_map: false, show_hr: false, route: null, city: null,
-    stats: { distanceM: 0, paceS: 0, movingS: (e.minutes ?? 0) * 60, startedAt: e.at, device: st.source === 'ritmo' ? 'Recorded in Ritmo' : undefined,
+    stats: { distanceM: 0, paceS: 0, movingS: (e.minutes ?? 0) * 60, startedAt: sessionTime(e), device: st.source === 'ritmo' ? 'Recorded in Ritmo' : undefined,
       type: 'strength', typeLabel: asPlanned ? 'Strength · as planned' : 'Strength', strength: { exercises: st.exercises.length, sets, top } },
   };
 }

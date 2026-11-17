@@ -3,7 +3,7 @@
 // - For each distance: Ritmo's best (time, date, race name) or a time they enter (shown as self-reported).
 // - Only runs that may be shown to others count: never Strava runs (Strava's rules), never runs left out of stats.
 import type { Activity, Race } from '../lib/types';
-import { addDays, parseYmd, startOfWeek, ymd } from '../lib/format';
+import { addDays, parseYmd, startOfWeek, ymd, runDay } from '../lib/format';
 import { personalBests, type PB } from './insights';
 
 export const PROFILE_PB_DISTANCES: { label: string; m: number }[] = [
@@ -75,7 +75,7 @@ export const validPbTime = (s: number | undefined): number | undefined => (s !==
 /** Weeks in a row (Monday to Sunday) with at least one run, up to this week; this week counts once it has a run */
 /** Weeks in a row with a run (or a strength session: update 3, §5) */
 export function weekStreak(acts: Activity[], today: Date, strengthDates: string[] = []): number {
-  const weeks = new Set([...shareableRuns(acts).map((a) => a.startTime.slice(0, 10)), ...strengthDates].map((d) => ymd(startOfWeek(parseYmd(d)))));
+  const weeks = new Set([...shareableRuns(acts).map((a) => runDay(a.startTime)), ...strengthDates].map((d) => ymd(startOfWeek(parseYmd(d)))));
   let w = startOfWeek(today);
   if (!weeks.has(ymd(w))) w = addDays(w, -7);
   let n = 0;

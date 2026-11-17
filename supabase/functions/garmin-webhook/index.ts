@@ -2,14 +2,29 @@
 // Handles: activities (summaries), activityDetails (samples and laps), deregistrations, userPermissionsChange.
 // Answers 200 straight away for anything it understands; runs are stored in garmin_inbox for the runner's app,
 // which turns them into Ritmo runs with the same merge rules as file uploads.
+//
+// Garmin does not sign its notifications, so the address registered in the Garmin Developer Portal carries a
+// secret: .../functions/v1/garmin-webhook?key=<GARMIN_WEBHOOK_SECRET>. A request without the right key is
+// refused before anything is read or changed, and while the secret is not set the function refuses everything.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { admin } from '../_shared/garmin.ts';
+
+/** Compares without stopping at the first difference, so the time taken says nothing about the secret */
+function sameSecret(a: string, b: string): boolean {
+  const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
+}
 
 const RUN_TYPES = /RUN/i; // RUNNING, TRAIL_RUNNING, TREADMILL_RUNNING, TRACK_RUNNING, INDOOR_RUNNING, VIRTUAL_RUN, ULTRA_RUN...
 type Item = Record<string, unknown> & { userId?: string; summaryId?: string | number; activityType?: string; summary?: { activityType?: string } };
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('ok', { status: 200 });
+  const secret = Deno.env.get('GARMIN_WEBHOOK_SECRET') ?? '';
+  const key = new URL(req.url).searchParams.get('key') ?? '';
+  if (secret.length < 16 || !sameSecret(key, secret)) return new Response('forbidden', { status: 403 });
   let body: Record<string, Item[]>;
   try { body = await req.json(); } catch { return new Response('bad request', { status: 400 }); }
   const db = admin();

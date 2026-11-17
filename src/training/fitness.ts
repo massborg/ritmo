@@ -1,6 +1,6 @@
 // Fitness model: VDOT (Daniels/Gilbert), race predictions, training paces and heart-rate zones.
 import type { Activity, Profile, Race } from '../lib/types';
-import { distanceLabel, duration, shortDate } from '../lib/format';
+import { distanceLabel, duration, shortDate, runDay } from '../lib/format';
 import { effortOf } from './derive';
 
 /** Oxygen cost of running at v metres/minute */
@@ -141,7 +141,7 @@ export function raceEvidence(a: Activity, races: Race[] = []): 'confirmed' | 'na
   if (a.isRace) return 'confirmed';
   if (a.notRace) return undefined;
   if (!raceDistanceOf(a.distanceM) && a.distanceM < 3000) return undefined;
-  const day = a.startTime.slice(0, 10);
+  const day = runDay(a.startTime);
   if (races.some((r) => r.date === day && Math.abs(r.distanceM - a.distanceM) / r.distanceM <= 0.1)) return 'calendar';
   if (RACE_NAME.test(a.name) && raceDistanceOf(a.distanceM)) return 'name';
   return undefined;
@@ -161,7 +161,7 @@ export function likelyRace(a: Activity, hr: HrSetup, races: Race[] = []): boolea
   if (a.notRace) return false;
   const d = raceDistanceOf(a.distanceM);
   if (!d) return false;
-  const day = a.startTime.slice(0, 10);
+  const day = runDay(a.startTime);
   if (races.some((r) => r.date === day && Math.abs(r.distanceM - a.distanceM) / r.distanceM <= 0.08)) return true;
   if (RACE_NAME.test(a.name)) return true;
   // Hard all the way: average heart rate at or above about 85% of heart-rate reserve over a race distance
@@ -217,7 +217,7 @@ export function estimateFitness(activities: Activity[], hr: HrSetup, at = new Da
       const v = c.v * (1 - 0.01 * (Math.max(0, ageDays - 60) / 30));
       // Prefer the all-out result when a training segment of the same run scores higher
       if (!best || v > best.vdot + 0.05) {
-        best = { vdot: v, basedOn: c.label, date: a.startTime.slice(0, 10), confidence: c.allOut ? 'high' : 'medium' };
+        best = { vdot: v, basedOn: c.label, date: runDay(a.startTime), confidence: c.allOut ? 'high' : 'medium' };
       }
     }
   }
@@ -246,7 +246,7 @@ export function recentBest(activities: Activity[], distanceM: number, at = new D
     const times: number[] = [];
     if (Math.abs(a.distanceM - distanceM) / distanceM <= 0.04) times.push(a.movingS * (distanceM / a.distanceM));
     { const e = effortOf(a, distanceM); if (e) times.push(e); }
-    for (const x of times) if (!best || x < best.timeS) best = { timeS: x, date: a.startTime.slice(0, 10) };
+    for (const x of times) if (!best || x < best.timeS) best = { timeS: x, date: runDay(a.startTime) };
   }
   return best;
 }

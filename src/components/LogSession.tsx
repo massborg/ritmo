@@ -10,7 +10,7 @@ import { DurationInput } from './TimeEntry';
 import { Segmented, StatusLine } from './ui';
 import { PAIN_AREAS } from './LogRun';
 import { ScreenshotReader } from './ScreenshotReader';
-import { dist, duration, longDate, pace, paceRange, parseTime, parseYmd } from '../lib/format';
+import { dist, duration, longDate, pace, paceRange, parseTime, parseYmd, runDay } from '../lib/format';
 import type { Activity, PlannedSession, SessionFeedback } from '../lib/types';
 
 type Tab = 'watch' | 'screens' | 'manual';
@@ -47,7 +47,7 @@ export function LogSessionSheet({ session, onClose }: { session: PlannedSession;
   // Runs from the watch on that day (or the day after), closest distance first
   const candidates = useMemo(() => {
     const d0 = session.date, d1 = new Date(parseYmd(session.date).getTime() + 86400000).toISOString().slice(0, 10);
-    return data.activities.filter((a) => a.source !== 'manual' && [d0, d1].includes(a.startTime.slice(0, 10)))
+    return data.activities.filter((a) => a.source !== 'manual' && [d0, d1].includes(runDay(a.startTime)))
       .sort((a, b) => Math.abs(a.distanceM - session.distanceM) - Math.abs(b.distanceM - session.distanceM));
   }, [data.activities, session]);
   const [tab, setTab] = useState<Tab>(candidates.length ? 'watch' : 'manual');

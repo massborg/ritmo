@@ -1,6 +1,6 @@
 // Training load (TRIMP-based), fitness/fatigue/form and readiness.
 import type { Activity, LogEntry, Profile, SessionFeedback } from '../lib/types';
-import { addDays, parseYmd, ymd } from '../lib/format';
+import { addDays, parseYmd, ymd, runDay } from '../lib/format';
 import type { HrSetup } from './fitness';
 
 /** Load for one activity, scaled so one hour at threshold is about 100. */
@@ -46,7 +46,7 @@ export interface LoadDay {
 export function loadSeries(activities: Activity[], hr: HrSetup, thresholdPace: number | undefined, to: Date, days = 365, log: LogEntry[] = []): LoadDay[] {
   const byDay = new Map<string, number>();
   for (const a of activities) {
-    const k = a.startTime.slice(0, 10);
+    const k = runDay(a.startTime);
     byDay.set(k, (byDay.get(k) ?? 0) + activityLoad(a, hr, thresholdPace));
   }
   // A HYROX session made from a run's laps (id "laps-<run id>") is the same effort as that run: the run already

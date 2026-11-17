@@ -41,7 +41,7 @@ export function HyroxLaps({ activity }: { activity: Activity }) {
             <Chips<number> label="What was it?" value={isRace ? 1 : 0} onChange={(v) => setIsRace(v === 1)} options={[{ value: 0, label: 'A simulation' }, { value: 1, label: 'A race' }]} />
             {segs ? (
               <>
-                <p className="caption">{activity.laps!.length > HYROX_LAPS ? `There are more than ${HYROX_LAPS} laps, so Ritmo took the 8 laps closest to 1 km as the runs and the lap after each as its station.` : 'Laps in order: run 1, station 1, run 2, and so on.'} Check that it looks right. Total {clock(total)}.</p>
+                <p className="caption">{activity.laps!.length > HYROX_LAPS ? `There are more than ${HYROX_LAPS} laps, so Ritmo took the 8 laps closest to 1 km as the runs and the longest lap after each as its station. Short laps in between count as Roxzone.` : 'Laps in order: run 1, station 1, run 2, and so on.'} Check that it looks right. Total {clock(total)}.</p>
                 <ul className="list lap-map">{segs.map((s) => <li key={s.i} className="list-item row-between"><span>{s.kind === 'run' ? segmentName(s) : `${s.n} ${segmentName(s)}`}</span><span className="stat">{clock(s.ms)}</span></li>)}</ul>
                 <p className="caption">Transitions are inside the laps, so Roxzone is not shown separately. The run itself stays in your runs as it is.</p>
               </>

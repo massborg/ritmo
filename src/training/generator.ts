@@ -30,6 +30,9 @@ export const HX_VOLUME = 0.7;
 const RATE = { maintain: 0, steady: 0.05, progressive: 0.08, aggressive: 0.12 };
 /** No single run may be more than this share of the week */
 export const MAX_SHARE = 0.35;
+/** A HYROX simulation is about as much station work as running, so in the share-of-the-week rule it counts as
+ *  twice its running distance (a half simulation as 8 km, not 4). */
+const weekShareM = (x: PlannedSession) => (x.hyrox?.kind.startsWith('sim') ? x.distanceM * 2 : x.distanceM) + (x.second?.distanceM ?? 0);
 export const HARD_TYPES: SessionType[] = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race', 'timetrial'];
 
 export interface GenInput {
@@ -133,18 +136,26 @@ export function splitWeek(vol: number, nQ: number, nEasy: number, hasLong: boole
   const eMax = Math.min(caps.easyKm, MAX_SHARE * vol);
   let longKm = hasLong ? Math.min(0.27 * vol, lMax) : 0;
   let qKm = nQ ? Math.min(Math.max(0.16 * vol, Math.min(8, qMax)), qMax) : 0;
-  let rem = vol - longKm - nQ * qKm;
+  const rem = vol - longKm - nQ * qKm;
   let easyKm = nEasy ? rem / nEasy : 0;
   if (nEasy && easyKm < 4) easyKm = Math.min(4, eMax);
-  if (!nEasy || easyKm > eMax) {
-    let over = nEasy ? (easyKm - eMax) * nEasy : rem;
-    if (nEasy) easyKm = eMax;
-    if (nQ && over > 0) { const add = Math.min(over / nQ, qMax - qKm); qKm += add; over -= add * nQ; }
+  // Distance the easy days cannot take goes to the long run first, then to the quality sessions
+  let over = 0;
+  if (!nEasy) over = rem;
+  else if (easyKm > eMax) { over = (easyKm - eMax) * nEasy; easyKm = eMax; }
+  const place = () => {
     if (hasLong && over > 0) { const add = Math.min(over, lMax - longKm); longKm += add; over -= add; }
-    rem = over;
-    return { longKm, qKm, easyKm, fits: rem <= 0.5 };
+    if (nQ && over > 0) { const add = Math.min(over / nQ, qMax - qKm); qKm += add; over -= add * nQ; }
+  };
+  place();
+  // The long run is the longest run of the week: an easy day is never longer than it
+  if (hasLong && nEasy && easyKm > longKm + 0.05) {
+    const even = Math.min(lMax, (longKm + easyKm * nEasy) / (nEasy + 1));
+    over += (easyKm - even) * nEasy - (even - longKm);
+    easyKm = even; longKm = even;
+    place();
   }
-  return { longKm, qKm, easyKm, fits: true };
+  return { longKm, qKm, easyKm, fits: over <= 0.5 };
 }
 
 export interface VolumeFit {
@@ -499,6 +510,8 @@ export function generatePlan(input: GenInput): GenResult {
       const nEasy = counts.nEasy + nDoubles;
       if (nEasy > 0) split.easyKm = Math.max(Math.min(4, split.easyKm), split.easyKm - ((hxQ - split.qKm) * counts.nQ) / nEasy);
     }
+    // A week with no easy day (three running days) still needs an easy distance for taper and race-week runs
+    const easyBase = split.easyKm > 0 ? split.easyKm : Math.max(5, split.qKm * 0.7);
     const k = r.difficulty === 'easier' ? 1.02 : r.difficulty === 'harder' ? 0.99 : 1;
     const qp: TrainingPaces = k === 1 ? paces : { ...paces, threshold: [paces.threshold[0] * k, paces.threshold[1] * k], interval: [paces.interval[0] * k, paces.interval[1] * k], repetition: [paces.repetition[0] * k, paces.repetition[1] * k] };
     const ctx: Ctx = { paces: qp, race, dc: r.dc, vol, hx };
@@ -583,8 +596,8 @@ export function generatePlan(input: GenInput): GenResult {
         // HYROX sessions need room for 6 x 1 km even at a modest weekly volume (still under the 35% rule)
         const qKm = hxQ ?? split.qKm;
         if (dayPhase === 'taper') {
-          s = toRace <= 3 ? easyRun(date, Math.max(5, split.easyKm * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
-            : toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, split.easyKm * taperScale, 'taper', ctx, { strides: true }); // race week has one sharpener (set above)
+          s = toRace <= 3 ? easyRun(date, Math.max(5, easyBase * 0.5), 'taper', ctx, { strides: true, title: 'Openers: easy with strides', why: 'A few strides close to the race wake your legs up without tiring them.' })
+            : toRace > 6 ? racePace(date, qKm * 0.7, 'taper', ctx, true) : easyRun(date, Math.max(3, easyBase * taperScale), 'taper', ctx, { strides: true }); // race week has one sharpener (set above)
         } else if (keepTypes && chosen.hardType[d]) {
           // The runner chose this day's session: Ritmo fills in distance, reps and paces, and keeps the type
           const kind = chosen.hardType[d], v = qVariant;
@@ -606,7 +619,7 @@ export function generatePlan(input: GenInput): GenResult {
       } else {
         // Named from what actually came the day before, not from the template (race week has no long run)
         const afterLong = prevSession?.type === 'long' && prevSession.date === ymd(addDays(dateD, -1));
-        const km = dayPhase === 'taper' ? split.easyKm * taperScale : split.easyKm * (easyWeight.get(d) ?? 1);
+        const km = dayPhase === 'taper' ? Math.max(3, easyBase * taperScale) : split.easyKm * (easyWeight.get(d) ?? 1);
         const mkEasy = (k: number) => easyRun(date, k, dayPhase, ctx, { title: afterLong ? 'Easy run (after the long run)' : undefined });
         s = mkEasy(km);
         rebuild.set(s.id, mkEasy);
@@ -680,14 +693,26 @@ export function generatePlan(input: GenInput): GenResult {
     // No run may be more than 35% of what the week actually adds up to (training weeks with 3+ runs)
     const runsIn = () => weekSessions.filter((x) => x.type !== 'rest');
     // (a first week that starts mid-week only shows part of the week, so it is left alone)
-    if (ws >= start && !weekSessions.some((x) => x.phase === 'taper' || x.type === 'race') && runsIn().length >= 3) {
-      for (let pass = 0; pass < 4; pass++) {
-        const total = runsIn().reduce((x, y) => x + y.distanceM + (y.second?.distanceM ?? 0), 0) / 1000;
-        const big = runsIn().filter((x) => rebuild.has(x.id) && x.distanceM / 1000 > total * MAX_SHARE).sort((a, b) => b.distanceM - a.distanceM)[0];
+    if (ws >= start && !runsIn().some((x) => x.phase === 'taper' || x.type === 'race') && runsIn().length >= 3) {
+      const totalKm = () => runsIn().reduce((x, y) => x + weekShareM(y), 0) / 1000;
+      const tooBig = () => runsIn().filter((x) => !x.hyrox?.kind.startsWith('sim') && x.distanceM / 1000 > totalKm() * MAX_SHARE).sort((a, b) => b.distanceM - a.distanceM);
+      for (let pass = 0; pass < 8; pass++) {
+        const total = totalKm();
+        const big = tooBig().find((x) => rebuild.has(x.id));
         if (!big) break;
         const others = total - big.distanceM / 1000;
         const next = rebuild.get(big.id)!(Math.floor((others * 0.34) / 0.66 * 10) / 10);
         rebuild.set(next.id, rebuild.get(big.id)!);
+        weekSessions[weekSessions.indexOf(big)] = next;
+      }
+      // A session with a fixed minimum (reps plus warm-up) can still be too big for a small week on few days. It
+      // then becomes an easy run of exactly the distance the week allows, so a plan can always be built.
+      for (let pass = 0; pass < 6; pass++) {
+        const big = tooBig()[0];
+        if (!big) break;
+        const others = totalKm() - big.distanceM / 1000;
+        const km = Math.max(2.5, Math.floor((others * 0.34) / 0.66 * 10) / 10);
+        const next = { ...easyRun(big.date, km, big.phase, ctx, { strides: big.type !== 'long', why: 'This week is small, so the planned hard session would have been too large a share of it. An easy run with a few relaxed strides takes its place.' }), strengthPlan: big.strengthPlan };
         weekSessions[weekSessions.indexOf(big)] = next;
       }
     }
@@ -775,7 +800,7 @@ export function validatePlan(plan: Plan, paces: TrainingPaces): string[] {
   }
   for (const [wk, list] of byWeek) {
     const runs = list.filter((s) => s.type !== 'rest');
-    const total = runs.reduce((x, s) => x + s.distanceM + (s.second?.distanceM ?? 0), 0);
+    const total = runs.reduce((x, s) => x + weekShareM(s), 0);
     // The share rule applies to full training weeks: not taper or race weeks (deliberately small),
     // and not a first week that starts part-way through (its earlier days are not in the plan)
     const partialFirst = wk < plan.startDate;

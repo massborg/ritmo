@@ -3,7 +3,7 @@
 import type { Lap, Profile } from '../lib/types';
 import { STATIONS, divisionLabel, loadFor, stationByKey, type Division, type StationKey } from './hyroxDivisions';
 import { clock, records, sessionDay, simulationPlan, summarise, wholeHyrox, type HyroxSession, type Segment } from './hyrox';
-import { RUN_SHARE, ownRunShare } from './plan-goal';
+import { RUN_SHARE, ownRoxShare, ownRunShare, targetsFromGoal } from './plan-goal';
 
 export const hyroxSessions = (profile: Pick<Profile, 'log'>): HyroxSession[] =>
   (profile.log ?? []).filter((e) => e.kind === 'hyrox' && e.hyrox).map((e) => e.hyrox as HyroxSession).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
@@ -95,6 +95,10 @@ export function racePacing(profile: Pick<Profile, 'hyrox' | 'log'>, thresholdS: 
   const goalPace = h.goalS ? (h.goalS * share) / 8 : undefined;
   const base = Math.round(Math.max(goalPace ?? pred?.runPaceS ?? 0, thresholdS ?? 0));
   if (!base) return undefined;
+  // With a goal, runs, stations and transitions are split the same way, so the plan adds up to the goal: the
+  // athlete's own shares when a whole race or simulation is known, else the typical ones
+  const own = ownRunShare(profile as Profile);
+  const goalTargets = h.goalS ? (own ? targetsFromGoal(h.goalS, share, thresholdS, ownRoxShare(profile as Profile) ?? 0.08) : h.targets ?? targetsFromGoal(h.goalS, share, thresholdS)) : h.targets;
   const division: Division = h.division ?? 'men_open';
   const runs = Array.from({ length: 8 }, (_, i) => {
     const n = i + 1;
@@ -105,7 +109,7 @@ export function racePacing(profile: Pick<Profile, 'hyrox' | 'log'>, thresholdS: 
   const stations = simulationPlan('race', division).filter((p) => p.kind === 'station').map((p) => {
     const st = stationByKey.get(p.key as StationKey)!;
     const load = loadFor(division, st.key)?.text;
-    return { key: st.key, name: st.name, work: [st.distanceM ? `${st.distanceM} m` : `${st.reps} reps`, load].filter(Boolean).join(' · '), targetS: h.targets?.[st.key] ?? pred?.stations.find((x) => x.key === st.key)?.s, tip: TIPS[st.key] };
+    return { key: st.key, name: st.name, work: [st.distanceM ? `${st.distanceM} m` : `${st.reps} reps`, load].filter(Boolean).join(' · '), targetS: goalTargets?.[st.key] ?? pred?.stations.find((x) => x.key === st.key)?.s, tip: TIPS[st.key] };
   });
   return { runs, stations, goalS: h.goalS, runPaceS: base };
 }
@@ -122,22 +126,40 @@ export const HYROX_WARMUP: { label: string; detail: string; minutes: number }[] 
 export const HYROX_LAPS = 16;
 /**
  * Laps from a watch as HYROX segments: 16 laps in order are run 1, station 1, run 2 … With more than 16 laps
- * (Roxzone laps, or a lap pressed twice) the 16 are chosen as the 8 laps that look most like 1 km runs and the lap
- * after each. Returns undefined when that cannot be done.
+ * (Roxzone laps, or a lap pressed twice) the runs are the 8 laps that look most like 1 km, and the station after
+ * each run is the longest lap before the next run. Shorter laps in between are the Roxzone (the transition), so
+ * no time is lost and a 40-second walk to the station is never taken for the station itself.
+ * Returns undefined when that cannot be done.
  */
 export function lapsToSegments(laps: Lap[], division: Division): Segment[] | undefined {
   const ls = laps.filter((l) => l.durationS > 5);
   if (ls.length < HYROX_LAPS) return undefined;
-  let pick = ls.slice(0, HYROX_LAPS);
-  if (ls.length > HYROX_LAPS) {
-    // The runs are the laps nearest to 1 km; each is followed by its station
-    const runIdx = ls.map((l, i) => ({ i, d: Math.abs(l.distanceM - 1000) })).filter((x) => x.i < ls.length - 1).sort((a, b) => a.d - b.d).slice(0, 8).map((x) => x.i).sort((a, b) => a - b);
-    if (runIdx.length < 8 || runIdx.some((x, k) => k > 0 && x - runIdx[k - 1] < 2)) return undefined;
-    pick = runIdx.flatMap((i) => [ls[i], ls[i + 1]]);
-  }
   const plan = simulationPlan('race', division);
+  const out: Segment[] = [];
   let at = 0;
-  return pick.map((l, i) => { const ms = Math.round(l.durationS * 1000); const seg: Segment = { ...plan[i], i, startMs: at, endMs: at + ms, ms, gpsM: plan[i].kind === 'run' && l.distanceM > 0 ? Math.round(l.distanceM) : undefined }; at += ms; return seg; });
+  const push = (p: Pick<Segment, 'kind' | 'key' | 'n'> & Partial<Segment>, l: Lap) => {
+    const ms = Math.round(l.durationS * 1000);
+    const last = out[out.length - 1];
+    // Several short laps in a row are one transition
+    if (p.kind === 'roxzone' && last?.kind === 'roxzone') { last.ms += ms; last.endMs += ms; at += ms; return; }
+    out.push({ ...p, i: out.length, startMs: at, endMs: at + ms, ms, gpsM: p.kind === 'run' && l.distanceM > 0 ? Math.round(l.distanceM) : undefined } as Segment);
+    at += ms;
+  };
+  if (ls.length === HYROX_LAPS) { ls.forEach((l, i) => push(plan[i], l)); return out; }
+  const runIdx = ls.map((l, i) => ({ i, d: Math.abs(l.distanceM - 1000) })).filter((x) => x.i < ls.length - 1).sort((a, b) => a.d - b.d).slice(0, 8).map((x) => x.i).sort((a, b) => a - b);
+  if (runIdx.length < 8 || runIdx.some((x, k) => k > 0 && x - runIdx[k - 1] < 2)) return undefined;
+  for (let k = 0; k < 8; k++) {
+    // After the last run only the next two laps are looked at: anything later is a cool-down, not the race
+    const from = runIdx[k] + 1, to = k < 7 ? runIdx[k + 1] : Math.min(ls.length, from + 2);
+    let st = from;
+    for (let j = from; j < to; j++) if (ls[j].durationS > ls[st].durationS) st = j;
+    push(plan[2 * k], ls[runIdx[k]]);
+    for (let j = from; j < to; j++) {
+      if (j === st) push(plan[2 * k + 1], ls[j]);
+      else if (k < 7 || j < st) push({ kind: 'roxzone', key: 'roxzone', n: plan[2 * k + 1].n }, ls[j]);
+    }
+  }
+  return out;
 }
 /** Does this activity look like a HYROX session recorded on a watch? */
 export const looksLikeHyrox = (laps: Lap[] | undefined) => (laps?.filter((l) => l.durationS > 5).length ?? 0) >= HYROX_LAPS;

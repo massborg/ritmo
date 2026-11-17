@@ -3,7 +3,7 @@
 // is kept for the other. Also: the HYROX run pace, the station blocks for compromised runs, and station targets.
 import type { Profile, Race } from '../lib/types';
 import { STATIONS, stationByKey, type StationKey } from './hyroxDivisions';
-import { summarise, type HyroxSession } from './hyrox';
+import { isPartial, summarise, type HyroxSession } from './hyrox';
 import { daysBetween, parseYmd, ymd } from '../lib/format';
 
 export type AthleteType = 'runner' | 'hyrox' | 'both';
@@ -23,12 +23,21 @@ export interface HyroxGoal {
 /** The athlete's own share of race time spent running, from their latest full simulation or race */
 export function ownRunShare(profile: Profile): number | undefined {
   const full = (profile.log ?? []).filter((e) => e.kind === 'hyrox' && e.hyrox && (e.hyrox.mode === 'full' || e.hyrox.isRace)).map((e) => e.hyrox as HyroxSession)
-    .filter((h) => h.segments.filter((x) => x.kind === 'run').length === 8 && h.segments.filter((x) => x.kind === 'station').length === 8).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    .filter((h) => !isPartial(h) && h.segments.filter((x) => x.kind === 'run').length === 8 && h.segments.filter((x) => x.kind === 'station').length === 8).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   if (!full) return undefined;
   const s = summarise(full);
   // Without Roxzone timing the transitions are inside the runs; either way this is the share the runs took
   const share = s.runningMs / full.totalMs;
   return share > 0.3 && share < 0.65 ? share : undefined;
+}
+/** The share of the athlete's own latest whole race or simulation spent in the Roxzone, when it was timed */
+export function ownRoxShare(profile: Profile): number | undefined {
+  const full = (profile.log ?? []).filter((e) => e.kind === 'hyrox' && e.hyrox && (e.hyrox.mode === 'full' || e.hyrox.isRace)).map((e) => e.hyrox as HyroxSession)
+    .filter((h) => !isPartial(h) && h.segments.filter((x) => x.kind === 'run').length === 8 && h.segments.filter((x) => x.kind === 'station').length === 8).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  if (!full) return undefined;
+  const share = summarise(full).roxzoneMs / full.totalMs;
+  // Not timed: the transitions are inside the runs, so nothing is set aside for them
+  return share === 0 ? 0 : share > 0.02 && share < 0.2 ? share : undefined;
 }
 /** What the plan is for. `undefined`: a running plan. `keepHyrox`: a running plan that keeps one HYROX session a week. */
 export function planGoal(profile: Profile, race: Race | undefined, today: Date): { hyrox?: HyroxGoal; keepHyrox?: boolean } {
@@ -76,10 +85,10 @@ export const stationExercises = (hardest: StationKey[], equipment: string[]): st
 /** Typical share of the station time each station takes, to turn a goal into a target per station */
 const STATION_SHARE: Record<StationKey, number> = { skierg: 0.125, sled_push: 0.09, sled_pull: 0.135, burpee_broad_jump: 0.14, row: 0.13, farmers_carry: 0.065, sandbag_lunges: 0.135, wall_balls: 0.18 };
 /** Targets from a goal time: the 1 km run, and each station (seconds). About 8% of the time is transitions. */
-export function targetsFromGoal(goalS: number, runShare = RUN_SHARE, thresholdS = 0): Partial<Record<StationKey | 'run', number>> {
+export function targetsFromGoal(goalS: number, runShare = RUN_SHARE, thresholdS = 0, roxShare = 0.08): Partial<Record<StationKey | 'run', number>> {
   // The run target is never faster than threshold pace, when that is known: the same limit the plan uses
   const out: Partial<Record<StationKey | 'run', number>> = { run: hyroxRunPace(goalS, runShare, thresholdS) };
-  const stations = goalS * (1 - runShare - 0.08);
+  const stations = goalS * (1 - runShare - roxShare);
   for (const s of STATIONS) out[s.key] = Math.round((stations * STATION_SHARE[s.key]) / 5) * 5;
   return out;
 }

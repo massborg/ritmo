@@ -1,7 +1,7 @@
 // Deterministic sample data: about six years of running for one runner, plus a marathon plan in progress.
 // Clearly labelled as sample data in the UI, and delivered through the same integration layer as real sources.
 import type { Activity, Lap, Plan, Profile, Race, SessionFeedback, SessionType, StreamPoint } from '../lib/types';
-import { addDays, parseYmd, ymd, daysBetween, weekday } from '../lib/format';
+import { addDays, parseYmd, ymd, daysBetween, weekday, runDay } from '../lib/format';
 import { predictTime, trainingPaces, type TrainingPaces } from '../training/fitness';
 import { adaptPlan, buildPlan } from '../training/plan';
 
@@ -273,7 +273,7 @@ export function generateSample(): SampleBundle {
   const activities = specs.map((s, i) => makeActivity(s, i, s.date >= streamFrom));
 
   // Feedback the runner logged on some recent runs
-  const recentActs = activities.filter((a) => a.startTime.slice(0, 10) >= '2026-10-01');
+  const recentActs = activities.filter((a) => runDay(a.startTime) >= '2026-10-01');
   const feedback: SessionFeedback[] = [];
   const fb = (date: string, f: Omit<SessionFeedback, 'activityId' | 'loggedAt'>) => {
     const a = recentActs.find((x) => x.startTime.startsWith(date));
@@ -292,9 +292,9 @@ export function generateSample(): SampleBundle {
     const until = ymd(d);
     const before = plan.changes.length;
     plan = adaptPlan({
-      plan, activities: activities.filter((a) => a.startTime.slice(0, 10) < until),
+      plan, activities: activities.filter((a) => runDay(a.startTime) < until),
       feedback: feedback.filter((f) => f.loggedAt.slice(0, 10) < until), profile: SAMPLE_PROFILE, today: d,
-      typeOf: (a) => (tooHard.has(a.startTime.slice(0, 10)) ? 'tempo' : typeOf(a)), paces: trainingPaces(vdotAt(until)),
+      typeOf: (a) => (tooHard.has(runDay(a.startTime)) ? 'tempo' : typeOf(a)), paces: trainingPaces(vdotAt(until)),
     });
     for (let i = before; i < plan.changes.length; i++) plan.changes[i].at = new Date(`${until}T07:00:00`).toISOString();
   }

@@ -212,7 +212,10 @@ function createMock() {
     if (method === 'PATCH') {
       // Like the "accept my followers" rule: the followed runner may update (accept) a request
       if (table === 'follows') { for (const r of rows) if (r.followee_id === u.id && filters.every(([k, v]) => test(r, k, v))) Object.assign(r, body); return { status: 204, body: null }; }
-      for (const r of rows) if (match(r)) Object.assign(r, body, table === 'activities' ? { updated_at: stamp() } : {});
+      const hit = rows.filter(match);
+      for (const r of hit) Object.assign(r, body, table === 'activities' ? { updated_at: stamp() } : {});
+      // With "return=representation" (update(...).select()) the changed rows come back, as in PostgREST
+      if (/return=representation/.test(headers['prefer'] ?? '')) return { status: 200, body: hit.map((r) => project(r, url.searchParams.get('select'))) };
       return { status: 204, body: null };
     }
     if (method === 'DELETE') {

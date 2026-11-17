@@ -4,7 +4,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
-import { clock, deltaTag, records, segmentName, summarise, swapWork, targetMs, type HyroxSession } from '../hyrox/hyrox';
+import { clock, deltaTag, isPartial, records, segmentName, summarise, swapWork, targetMs, type HyroxSession } from '../hyrox/hyrox';
 import { divisionLabel, type StationKey } from '../hyrox/hyroxDivisions';
 import { parseYmd, ymd } from '../lib/format';
 
@@ -30,7 +30,7 @@ export default function HyroxSessionPage() {
   for (const x of stations) { const k = x.key as StationKey; if (!x.swapped && after.stations[k]?.ms === x.ms && before.stations[k] && x.ms < before.stations[k]!.ms) set.push(`Best ${segmentName(x).toLowerCase()}: ${clock(x.ms)} (was ${clock(before.stations[k]!.ms)})`); }
   // The goal is for the whole thing: a session stopped early is not measured against it (4:00 is not "goal met")
   const whole = sum.runs.length === 8 && stations.length === 8;
-  const goal = whole ? s.goalMs : undefined;
+  const goal = whole && !isPartial(s) ? s.goalMs : undefined;
   return (
     <div className="stack-lg hyrox-summary" style={{ maxWidth: 720 }}>
       <AppHeader title="HYROX" back large={false} />
@@ -46,7 +46,8 @@ export default function HyroxSessionPage() {
         <div className="card"><p className="caption">Stations</p><p className="stat">{clock(sum.stationsMs)}</p></div>
         <div className="card"><p className="caption">{sum.restMs && !sum.roxzoneMs ? 'Rest' : 'Roxzone'}</p><p className="stat">{sum.roxzoneMs ? clock(sum.roxzoneMs) : sum.restMs ? clock(sum.restMs) : '–'}</p></div>
       </section>
-      {!sum.roxzoneMs && sum.runs.length > 0 && stations.length > 0 && <p className="caption">Roxzone was not timed, so transitions are part of the runs.</p>}
+      {isPartial(s) ? <p className="caption">Partial result: a split, or the Roxzone and finish time, was not entered. This total is not your finish time, so it is not compared with your goal or counted as a best.</p>
+        : !sum.roxzoneMs && !s.entered && sum.runs.length > 0 && stations.length > 0 && <p className="caption">Roxzone was not timed, so transitions are part of the runs.</p>}
 
       {sum.runs.length > 0 && (
         <section className="card stack-sm" aria-labelledby="hx-runs">

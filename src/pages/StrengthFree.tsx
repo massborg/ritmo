@@ -34,7 +34,12 @@ export default function StrengthFree() {
   const [minutes, setMinutes] = useState<number | undefined>(45);
   const [rpe, setRpe] = useState(6);
 
-  const add = (e: Exercise) => { setList((l) => [...l, { exerciseId: e.id, sets: e.sets, reps: e.seconds ? undefined : e.reps ?? 10, seconds: e.seconds, weightKg: e.equipment === 'none' ? undefined : prefs.last?.[e.id]?.load }]); setMsg(undefined); };
+  // A new row starts from the exercise's progression target (what Ritmo would give next), else from last time
+  const add = (e: Exercise) => {
+    const t = prefs.progress?.[e.id]?.target;
+    setList((l) => [...l, { exerciseId: e.id, sets: e.sets, reps: e.seconds ? undefined : t?.reps ?? e.reps ?? 10, seconds: e.seconds ? t?.seconds ?? e.seconds : undefined, weightKg: e.equipment === 'none' ? t?.load : t?.load ?? prefs.last?.[e.id]?.load }]);
+    setMsg(undefined);
+  };
   const patch = (i: number, p: Partial<TemplateExercise>) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const move = (i: number, d: -1 | 1) => setList((l) => { const n = [...l]; const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   // A row counts when it has sets, and a hold has a time (an emptied Seconds field is not a 0-second hold)

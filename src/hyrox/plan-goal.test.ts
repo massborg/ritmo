@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generatePlan, validatePlan } from '../training/generator';
+import { generatePlan, splitWeek, validatePlan } from '../training/generator';
 import { resolveStrength } from '../training/strength';
 import { trainingPaces } from '../training/fitness';
 import { SAMPLE_PROFILE } from '../data/sample';
@@ -136,5 +136,23 @@ describe('a HYROX plan (update 4, task 6)', () => {
     const a = gen(base, tenK);
     expect(a.sessions.some((s) => s.hyrox)).toBe(false);
     expect(a.sessions.some((s) => s.strengthPlan)).toBe(false);
+  });
+});
+
+describe('plans on few days a week (QA sweep 2)', () => {
+  it('a HYROX athlete on 3 or 4 days always gets a plan, with no empty runs', () => {
+    for (const days of [[1, 3, 5], [0, 2, 4, 5]]) for (const km of [20, 30, 45]) for (const vdot of [35, 45, 52]) for (const toRace of [20, 45, 82, undefined]) {
+      const profile: Profile = { ...hyrox({ raceDate: toRace ? ymd(addDays(TODAY, toRace)) : undefined, goalS: 5400 }), daysAvailable: days };
+      const r = generatePlan({ today: addDays(TODAY, 3), profile, paces: trainingPaces(vdot), recentWeeklyKm: km, longestRecentKm: 10 });
+      expect(r.ok, `${days} ${km} km vdot ${vdot} race in ${toRace}: ${r.ok ? '' : JSON.stringify(r.problem).slice(0, 200)}`).toBe(true);
+      if (r.ok) expect(r.plan.sessions.filter((s) => s.type !== 'rest' && s.distanceM < 2000)).toEqual([]);
+    }
+  });
+  it('the long run is never shorter than an easy run in the same week', () => {
+    // 56 km on four days: the single easy day used to get 19.6 km next to a 15 km long run
+    const s = splitWeek(56, 2, 1, true, { longKm: 22, qualityKm: 18, easyKm: 20 });
+    expect(s.longKm).toBeGreaterThanOrEqual(s.easyKm - 0.1);
+    expect(s.fits).toBe(true);
+    expect(s.longKm + s.easyKm + 2 * s.qKm).toBeCloseTo(56, 0);
   });
 });

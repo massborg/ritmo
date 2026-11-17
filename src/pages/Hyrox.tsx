@@ -46,6 +46,7 @@ export default function Hyrox() {
   const [runs, setRuns] = useState<(number | undefined)[]>(Array(8).fill(undefined));
   const [stn, setStn] = useState<(number | undefined)[]>(Array(8).fill(undefined));
   const [roxS, setRoxS] = useState<number>();
+  const [finishS, setFinishS] = useState<number>();
   const [badSplits, setBadSplits] = useState<string[]>([]);
   // A session left on this device: unfinished (the app closed or the page reloaded), or finished but not saved yet
   const key = liveKey(session?.user.id);
@@ -62,7 +63,8 @@ export default function Hyrox() {
     // A session still kept on this device (unfinished, or finished and not saved) is never replaced without asking
     const kept = await loadLive(key);
     if (kept && !window.confirm(`${kept.title} is still on this device and not saved. Start a new session and discard it?`)) { setUnfinished(kept); return; }
-    setHyroxPrefs({ division, goalS });
+    // The goal typed here is for this session only: the race goal lives in Profile, HYROX, and is never overwritten
+    setHyroxPrefs({ division });
     const live = startLive({ id: uid(), title, mode, division, plan, roxzone, indoor, goalMs: (mode === 'full' || mode === 'race') && goalS ? goalS * 1000 : undefined, templateId: tId }, Date.now());
     await saveLive(key, live);
     nav('/hyrox/live');
@@ -91,8 +93,9 @@ export default function Hyrox() {
   // drop out of the total and the records without a word.
   const splitErr = (id: string) => (e: 'seconds' | 'minutes' | undefined) => setBadSplits((b) => (!!e === b.includes(id) ? b : e ? [...b, id] : b.filter((x) => x !== id)));
   const raceOk = runs.filter(Boolean).length + stn.filter(Boolean).length >= 1 && !badSplits.length;
+  const racePartial = runs.filter(Boolean).length + stn.filter(Boolean).length < 16 || (!roxS && !finishS);
   const saveRace = () => {
-    const h = enteredRace({ id: uid(), date: raceDate, division, runs, stations: stn, roxzoneS: roxS, goalMs: goalS ? goalS * 1000 : undefined });
+    const h = enteredRace({ id: uid(), date: raceDate, division, runs, stations: stn, roxzoneS: roxS, finishS, goalMs: goalS ? goalS * 1000 : undefined });
     saveHyrox(h);
     nav(`/hyrox/session/${h.id}`);
   };
@@ -192,8 +195,12 @@ export default function Hyrox() {
                 <label className="race-split"><span className="caption">{s.name}</span><DurationInput small id={`hx-st-${s.n}`} label={`${s.name} time`} value={stn[i]} onError={splitErr(`st-${i}`)} onChange={(v) => setStn((a) => a.map((x, j) => (j === i ? v : x)))} /></label>
               </div>
             ))}
-            <label className="race-split"><span className="caption">Roxzone, total</span><DurationInput small id="hx-rox" label="Roxzone total time" value={roxS} onError={splitErr('rox')} onChange={setRoxS} /></label>
+            <div className="race-split-row">
+              <label className="race-split"><span className="caption">Roxzone, total</span><DurationInput small id="hx-rox" label="Roxzone total time" value={roxS} onError={splitErr('rox')} onChange={setRoxS} /></label>
+              <label className="race-split"><span className="caption">Finish time</span><DurationInput small id="hx-finish" label="Official finish time" value={finishS} onError={splitErr('finish')} onChange={setFinishS} /></label>
+            </div>
           </div>
+          {raceOk && racePartial && <p className="caption">Without every split and the Roxzone total or finish time, this is saved as a partial result: it is not compared with your goal or counted as your best race.</p>}
           {badSplits.length > 0 && <p className="caption" role="alert" style={{ color: 'var(--danger)' }}>Fix the times marked in red: seconds and minutes must be under 60.</p>}
           <button type="button" className="btn btn-block" disabled={!raceOk} onClick={saveRace}>Save race result</button>
         </section>
@@ -204,7 +211,7 @@ export default function Hyrox() {
         <button type="button" className="hx-row" role="switch" aria-checked={indoor} onClick={() => setHyroxPrefs({ indoor: !indoor })}><span>Runs</span><strong>{indoor ? 'Treadmill or indoor: time only' : 'GPS distance'}</strong></button>
         <button type="button" className="hx-row" onClick={() => setSheet('swaps')}><span>Missing equipment?</span><strong>{swapCount ? `${swapCount} swap${swapCount > 1 ? 's' : ''}` : 'No swaps'}</strong></button>
         <button type="button" className="hx-row" role="switch" aria-checked={roxzone} onClick={() => setHyroxPrefs({ roxzone: !roxzone })}><span>Roxzone timing</span><strong>{roxzone ? 'On' : 'Off'}</strong></button>
-        {tab !== 'practice' && <div className="hx-row"><label htmlFor="hx-goal">Goal time (optional)</label><DurationInput small id="hx-goal" label="Goal time" value={goalS} onChange={setGoalS} /></div>}
+        {(tab === 'race' || (tab !== 'practice' && sim === 'full')) && <div className="hx-row"><label htmlFor="hx-goal">Goal for this session (optional)</label><DurationInput small id="hx-goal" label="Goal time" value={goalS} onChange={setGoalS} /></div>}
       </section>
       <p className="caption">Station loads follow your division. Swapped stations are marked, so they don't count toward records. {roxzone ? 'Roxzone timing: tap when you arrive at a station, then again when you start it.' : 'With Roxzone timing off, transitions count as part of the run.'}</p>
 

@@ -10,7 +10,7 @@ import { AppHeader, SampleChip, ZONE_OF } from '../components/app';
 import { Empty, Segmented } from '../components/ui';
 import { Sheet } from '../components/inputs';
 import { QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_SHORT, distanceLabel, duration, MONTHS, MONTHS_LONG, pace, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
+import { addDays, DAY_SHORT, distanceLabel, duration, MONTHS, MONTHS_LONG, pace, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, weekday, ymd, runDay } from '../lib/format';
 import { PB_BASIS_LABEL, personalBests, raceReadiness } from '../training/insights';
 import { predictRace } from '../training/fitness';
 import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
@@ -24,7 +24,7 @@ import { useRunLongPress } from '../components/DeleteRun';
 type P = 'W' | 'M' | 'Y' | 'A';
 interface Bar { key: string; label: string; m: number; title: string; today: boolean }
 
-const dayOf = (a: Activity) => a.startTime.slice(0, 10);
+const dayOf = (a: Activity) => runDay(a.startTime);
 
 /** The bars, title and range for a period starting at `anchor` */
 function periodView(p: P, anchor: Date, acts: Activity[], today: Date): { title: string; from: string; to: string; bars: Bar[]; unitWord: string } {

@@ -261,6 +261,17 @@ export function nextAfter(done: { reps?: number; load?: number; seconds?: number
   return 'up';
 }
 /** The target for the next session of an exercise, from its last result (or the plan's dose) */
+/** A progression note in the runner's current unit. Notes are stored as written when the session was saved, so
+ *  a weight in them can be in the other unit after kg/lb is changed: "at 25 kg" becomes "at 55 lb". */
+export function noteInUnit(note: string | undefined, unit: 'kg' | 'lb'): string | undefined {
+  if (!note) return note;
+  const LB = 2.2046226218;
+  return note.replace(/(\d+(?:\.\d+)?) (kg|lb)\b/g, (m, n: string, u: string) => {
+    if (u === unit) return m;
+    const kg = u === 'lb' ? Number(n) / LB : Number(n);
+    return unit === 'lb' ? `${Math.round(kg * LB * 2) / 2} lb` : `${Math.round(kg * 100) / 100} kg`;
+  });
+}
 export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: BlockWeek, unit: 'kg' | 'lb' = 'kg'): StrengthItem & { load?: number; note?: string } {
   // Loads in the notes are in the runner's unit (lb to the nearest 0.5, as everywhere else)
   const w = (kg: number) => (unit === 'lb' ? `${Math.round(kg * 2.2046226218 * 2) / 2} lb` : `${kg} kg`);
@@ -275,7 +286,7 @@ export function targetFor(x: StrengthItem, pr: ExProgress | undefined, week: Blo
   if (pr.target && k >= 0) {
     if (pr.target.load != null) base.load = pr.target.load;
     if (pr.target.seconds && base.seconds) base.seconds = pr.target.seconds; else if (pr.target.reps && base.reps) base.reps = pr.target.reps;
-    base.note = pr.target.note;
+    base.note = noteInUnit(pr.target.note, unit);
     if (lighter) { base.sets = Math.max(2, x.sets - 1); base.note = `${base.note}, lighter week`; }
     return base;
   }

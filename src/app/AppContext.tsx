@@ -3,17 +3,19 @@ import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Lap, LogEntry, StrengthLog, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
-import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
+import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd, runDay } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunExtrasInCloud, deleteRunsInCloud, emptyData, friendlyError,
   actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushActivities, pushToCloud, saveUserCache,
+  pullProfile, profileVersion, ProfileConflict, type CacheBase,
 } from '../data/store';
+import { merge3 } from '../data/merge';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge, mergeWithRemoved } from '../data/integration';
 import { type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, smallAvatarPath, uploadAvatar, uploadSmallAvatar } from '../data/avatar';
-import { forgetPhoto, setHubPhoto } from '../data/hub';
+import { deletePost as hubDeletePost, forgetPhoto, setHubPhoto } from '../data/hub';
 import { disablePush, refreshPush } from '../data/push';
 import { healthKind, isNative, requestHealthAccess, syncHealth } from '../data/health';
 import { disconnectGarmin, finishGarminConnect, garminConnected, pullGarminInbox, startGarminConnect } from '../data/garmin';
@@ -262,10 +264,21 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
   const fb = new Map(cloud.feedback.map((f) => [f.activityId, f]));
   for (const f of device.feedback) { const c = fb.get(f.activityId); if (!c || f.loggedAt > c.loggedAt) fb.set(f.activityId, f); }
   out.feedback = [...fb.values()];
-  out.races = [...cloud.races, ...device.races.filter((r) => !cloud.races.some((x) => x.id === r.id))];
+  // Races: ones only on this device are kept; an edit made here to a race the account has not changed since is kept too
+  const base = device.base;
+  const baseRaces = new Map<string, Race>(base?.racesJson ? (JSON.parse(base.racesJson) as Race[]).map((r) => [r.id, r]) : []);
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  out.races = [...cloud.races.map((c) => { const d = device.races.find((x) => x.id === c.id), b = baseRaces.get(c.id); return d && b && same(b, c) && !same(b, d) ? d : c; }),
+    ...device.races.filter((r) => !cloud.races.some((x) => x.id === r.id))];
   out.coach = [...cloud.coach, ...device.coach.filter((m) => !cloud.coach.some((x) => x.id === m.id))].sort((a, b) => a.at.localeCompare(b.at));
   if (device.plan && (!cloud.plan || (device.plan.id === cloud.plan.id ? device.plan.changes.length > cloud.plan.changes.length : device.plan.createdAt > cloud.plan.createdAt))) out.plan = device.plan;
-  if (JSON.stringify(device.profile) !== JSON.stringify(cloud.profile) && device.profile.onboarded && !cloud.profile.onboarded) out.profile = device.profile;
+  // A plan edited here (a move, a swap) that the account has not changed since
+  if (device.plan && cloud.plan && base?.planJson && same(JSON.parse(base.planJson), cloud.plan) && !same(JSON.parse(base.planJson), device.plan)) out.plan = device.plan;
+  if (base?.profileJson) {
+    // Profile changes made here that never reached the account (the app closed, or was offline) are kept, merged
+    // with anything changed elsewhere since
+    out.profile = merge3((JSON.parse(base.profileJson) as { profile?: Profile }).profile, device.profile, cloud.profile);
+  } else if (!same(device.profile, cloud.profile) && device.profile.onboarded && !cloud.profile.onboarded) out.profile = device.profile;
   return out;
 }
 
@@ -331,7 +344,7 @@ function computeDerived(data: AppData): Derived {
   const readiness = asReadiness(readinessToday);
   const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
   const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
-  const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
+  const thisWeek = acts.filter((a) => { const d = runDay(a.startTime); return d >= wkKey && d <= tKey; });
   const due = (plan?.sessions ?? []).filter((x) => x.type !== 'rest' && x.date <= tKey);
   const athlete: AthleteState = {
     runCount: acts.length,
@@ -359,7 +372,7 @@ function computeDerived(data: AppData): Derived {
     const base = TYPE_LABEL[typeOf(a)];
     if (s?.status === 'swapped') return `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}`;
     // A run on a day whose planned session another run completed counts as extra ("Easy · extra")
-    const day = plannedOn.get(a.startTime.slice(0, 10));
+    const day = plannedOn.get(runDay(a.startTime));
     if (!s && day?.completedActivityId) return `${base} · extra`;
     return base;
   };
@@ -435,6 +448,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       const cached = await loadUserCache(userId);
       if (stale()) return;
+      cacheBase.current = cached?.base;
       if (cached) { setData(cached); setReady(true); }
       try {
         const cloud = await pullFromCloud(cached);
@@ -458,6 +472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Record what the account already holds, so anything only on this device is saved next
         markPulled(pushState.current, cloud.found && cloud.data ? ({ ...emptyData(), ...cloud.data } as AppData) : next);
         if (!cloud.found) pushState.current = newPushState();
+        else pushState.current.profileAt = cloud.profileAt;
         cloudLoaded.current = true;
         setCloudReady(true);
         // Always a new object, so the save effect runs even when the device copy is reused unchanged
@@ -474,11 +489,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, reloadKey]);
 
+  /** What the device cache records about the account: which runs it holds, and the last state known to be saved there */
+  const cacheBase = useRef<CacheBase | undefined>(undefined);
+  const cacheArgs = (): [((a: Activity) => boolean) | undefined, CacheBase | undefined] => {
+    const ps = pushState.current;
+    if (!cloudLoaded.current) return [undefined, cacheBase.current];
+    cacheBase.current = { profileJson: ps.profileJson, racesJson: ps.racesJson, planJson: ps.planJson };
+    return [(a) => ps.activities.get(a.id) === actPrint(a), cacheBase.current];
+  };
+
   // ---- Save: device cache immediately, cloud shortly after (only what changed) ----
   useEffect(() => {
     if (!userId || !ready) return;
-    const ps = pushState.current;
-    void saveUserCache(userId, data, cloudLoaded.current ? (a) => ps.activities.get(a.id) === actPrint(a) : undefined);
+    void saveUserCache(userId, data, ...cacheArgs());
   }, [data, userId, ready]);
 
   // ---- Fill in missing run summaries (best efforts etc.) on the server, from data already in the account ----
@@ -509,33 +532,80 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [userId, ready, data.mode, data.activities]);
 
   const pushTimer = useRef<number | undefined>(undefined);
+  const retryTimer = useRef<number | undefined>(undefined);
+  const retries = useRef(0);
+  const pushing = useRef<Promise<void> | undefined>(undefined);
+  /** The account's profile was changed elsewhere (another tab or device): merge it with this device's changes */
+  const takeRemoteProfile = async (uidNow: string) => {
+    const remote = await pullProfile();
+    if (!remote || currentUid.current !== uidNow) return;
+    const ps = pushState.current;
+    const base = ps.profileJson ? (JSON.parse(ps.profileJson) as { profile?: Profile }).profile : undefined;
+    ps.profileJson = JSON.stringify({ profile: remote.profile, mode: remote.mode, sources: remote.sources });
+    ps.profileAt = remote.at;
+    setData((d) => (d.mode !== remote.mode ? d : { ...d, profile: merge3(base, d.profile, remote.profile) }));
+  };
+  /** Save to the account. One save at a time; a failed save is tried again (with a growing wait, and as soon as
+   *  the connection or the app comes back), so changes kept on the device always reach the account. */
+  const pushNow = (uidNow: string): Promise<void> => {
+    const run = async () => {
+      if (currentUid.current !== uidNow) return;
+      window.clearTimeout(retryTimer.current);
+      try {
+        try { await pushToCloud(uidNow, dataRef.current, pushState.current); }
+        catch (e) {
+          if (!(e instanceof ProfileConflict)) throw e;
+          await takeRemoteProfile(uidNow); // the merged profile is saved by the next run of the save effect
+        }
+        retries.current = 0;
+        setSyncError(undefined);
+        void saveUserCache(uidNow, dataRef.current, ...cacheArgs());
+      } catch (e) {
+        if (currentUid.current !== uidNow) return;
+        setSyncError(`Your latest changes are saved on this device but not yet in your account. Ritmo will keep trying. ${friendlyError(e)}`);
+        retries.current += 1;
+        retryTimer.current = window.setTimeout(() => void pushNow(uidNow), Math.min(60000, 3000 * 2 ** (retries.current - 1)));
+      }
+    };
+    const p = (pushing.current ?? Promise.resolve()).then(run, run);
+    pushing.current = p;
+    return p;
+  };
   useEffect(() => {
     if (!userId || !ready || !cloudLoaded.current) return;
     window.clearTimeout(pushTimer.current);
-    pushTimer.current = window.setTimeout(async () => {
-      if (currentUid.current !== userId) return;
-      try {
-        await pushToCloud(userId, dataRef.current, pushState.current);
-        setSyncError(undefined);
-      } catch (e) {
-        setSyncError(`Your latest changes are saved on this device but not yet in your account. ${friendlyError(e)}`);
-      }
-    }, 1200);
+    pushTimer.current = window.setTimeout(() => void pushNow(userId), 1200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, userId, ready]);
+  useEffect(() => () => { window.clearTimeout(retryTimer.current); window.clearTimeout(pushTimer.current); retries.current = 0; }, [userId]);
 
-  // Save straight away when the app is hidden or closed, rather than waiting for the timer
+  // Save straight away when the app is hidden or closed, rather than waiting for the timer. When it comes back
+  // (or the connection does): finish a save that failed, and pick up profile changes made in another tab or device.
+  const lastCheck = useRef(0);
   useEffect(() => {
     if (!userId) return;
     const flush = () => {
       if (!ready || !cloudLoaded.current || currentUid.current !== userId) return;
       window.clearTimeout(pushTimer.current);
       setClosing(true);
-      void pushToCloud(userId, dataRef.current, pushState.current).catch(() => {}).finally(() => setClosing(false));
+      void pushNow(userId).finally(() => setClosing(false));
     };
-    const onVis = () => { if (document.visibilityState === 'hidden') flush(); };
+    const back = () => {
+      if (!ready || currentUid.current !== userId) return;
+      // The account could not be read when the app opened (offline): load it now, keeping what was changed here
+      if (!cloudLoaded.current) { if (navigator.onLine !== false) setReloadKey((k) => k + 1); return; }
+      if (retries.current) { void pushNow(userId); return; }
+      if (Date.now() - lastCheck.current < 15000) return;
+      lastCheck.current = Date.now();
+      profileVersion().then((at) => { if (at && at !== pushState.current.profileAt && currentUid.current === userId) return (pushing.current ?? Promise.resolve()).then(() => (at !== pushState.current.profileAt ? takeRemoteProfile(userId) : undefined)); }).catch(() => {});
+    };
+    const onVis = () => { if (document.visibilityState === 'hidden') flush(); else back(); };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('pagehide', flush);
-    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); };
+    window.addEventListener('online', back);
+    window.addEventListener('focus', back);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); window.removeEventListener('online', back); window.removeEventListener('focus', back); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, ready]);
 
   // ---- Derived training state ----
@@ -1151,7 +1221,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const sessions = d.plan.sessions.map((x) => (x.id !== sessionId || !x.strengthPlan ? x : patch === null ? { ...x, strengthPlan: undefined, strength: undefined } : { ...x, strengthPlan: { ...x.strengthPlan, ...patch } }));
     return { ...d, plan: { ...d.plan, sessions, changes: [...d.plan.changes, { id: `strength:${sessionId}:${Date.now()}`, at: new Date().toISOString(), reason: 'edited', summary }] } };
   });
-  const removeLog = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
+  const removeLog = (id: string) => {
+    // Its Hub post goes with it (a deleted session should not stay up for followers)
+    const e = (dataRef.current.profile.log ?? []).find((x) => x.id === id);
+    const postId = e?.strength?.postId ?? e?.hyrox?.postId;
+    if (postId) void hubDeletePost(postId).catch(() => {});
+    setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== id) } }));
+  };
   /** A missed key session: move it to a safe day this week, or let it go */
   const handleMissed = (sessionId: string, toDate?: string) => setData((d) => {
     if (!d.plan) return d;

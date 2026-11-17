@@ -76,7 +76,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   const first = await page.locator('.pace-card').first().innerText(), second = await page.locator('.pace-card').nth(1).innerText();
   check(/Run 1 · 1 km\s*4:\d\d\s*\/km/.test(first) && /Hold back/.test(first) && /SkiErg/.test(first), 'run 1 has its pace and "hold back", then the SkiErg');
   check(/Sled push/.test(second) && /50 m · 102 kg/.test(second), "each station shows its work and the division's load");
-  check(/Wall balls\s*6:30/.test(await page.locator('.pace-card').nth(7).innerText()), 'station targets come from the goal (wall balls 6:30)');
+  check(/Wall balls\s*\d:\d\d/.test(await page.locator('.pace-card').nth(7).innerText()), 'station targets come from the goal, split the way this athlete races');
   check(/Warm-up/.test(text) && await page.locator('.hrd-warm li').count() === 5, 'a warm-up in 5 steps');
   check(await noOverflow(), 'no sideways scroll at 390 px (race day)');
   await shot('02-race-day');
