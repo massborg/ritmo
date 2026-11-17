@@ -126,7 +126,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
   await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'));
   await page.goto(`${APP}/record`); await page.waitForTimeout(2500);
   const today = page.locator('[aria-label="Today\'s planned session"]');
-  check(/HYROX half simulation/.test(await today.innerText()) && (await today.getByRole('link', { name: 'Start session' }).getAttribute('href')) === '/hyrox', 'a planned simulation starts in the HYROX recorder');
+  check(/HYROX half simulation/.test(await today.innerText()) && (await today.getByRole('link', { name: 'Start session' }).getAttribute('href')) === '/hyrox?sim=half', 'a planned half simulation starts in the HYROX recorder with the half selected');
 
   // ---- Profile → HYROX (with some recorded runs: a plan is rebuilt from running fitness)
   mock.state.tables.activities.push(...ryanRows(uid, new Date()).activities);
