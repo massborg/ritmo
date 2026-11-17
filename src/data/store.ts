@@ -50,21 +50,24 @@ const userKey = (uid: string) => `ritmo:user:${uid}`;
 export const LEGACY_KEY = 'ritmo:data:v1';
 
 /** What the device keeps: the data, plus which runs the account is known to hold. */
-export interface CachedData extends AppData { cloudIds?: string[] }
+/** `base` is what the account was last known to hold (as JSON), so changes made on this device since then can be
+ *  told apart from changes made elsewhere and are never thrown away on the next load. */
+export interface CacheBase { profileJson?: string; racesJson?: string; planJson?: string }
+export interface CachedData extends AppData { cloudIds?: string[]; base?: CacheBase }
 
 export async function loadUserCache(uid: string): Promise<CachedData | undefined> {
   try { return (await get(userKey(uid))) as CachedData | undefined; } catch { return undefined; }
 }
 /** Save on the device. Detailed data (streams, laps) of runs already in the account is left out: it is
  *  fetched again only when a run is opened. Runs not yet saved to the account keep their detail. */
-export async function saveUserCache(uid: string, data: AppData, inCloud?: (a: Activity) => boolean) {
+export async function saveUserCache(uid: string, data: AppData, inCloud?: (a: Activity) => boolean, base?: CacheBase) {
   try {
     const slim = (list: Activity[]) => (data.mode === 'real' && inCloud
       ? list.map((a) => ((a.streams || a.laps) && inCloud(a) ? { ...a, streams: undefined, laps: undefined } : a))
       : list);
     const removed = data.removed ?? [];
     const cloudIds = inCloud ? [...data.activities, ...removed].filter(inCloud).map((a) => a.id) : undefined;
-    await set(userKey(uid), { ...data, activities: slim(data.activities), removed: slim(removed), cloudIds } satisfies CachedData);
+    await set(userKey(uid), { ...data, activities: slim(data.activities), removed: slim(removed), cloudIds, base } satisfies CachedData);
   } catch (e) { console.warn('Could not save on this device', e); }
 }
 export async function clearUserCache(uid: string) {
@@ -214,14 +217,15 @@ export function friendlyError(e: unknown): string {
   return msg;
 }
 
-export interface CloudSnapshot { found: boolean; data?: Partial<AppData> }
+export interface CloudSnapshot { found: boolean; data?: Partial<AppData>; /** The profile row's version (its updated_at) */ profileAt?: string }
 
 /** Load everything for the signed-in user. Row-level security returns only their rows. */
 export async function pullFromCloud(cache?: CachedData): Promise<CloudSnapshot> {
   if (!supabase) return { found: false };
-  const p = await supabase.from('profiles').select('data').maybeSingle();
+  const p = await supabase.from('profiles').select('data, updated_at').maybeSingle();
   if (p.error) throw p.error;
   if (!p.data) return { found: false };
+  const profileAt = (p.data.updated_at as string | null) ?? undefined;
   const stored = p.data.data as { profile?: Profile; mode?: AppData['mode']; sources?: SourceStatus[] } & Partial<Profile>;
   const profile = (stored.profile ?? stored) as Profile;
   const mode = stored.mode ?? 'real';
@@ -232,7 +236,7 @@ export async function pullFromCloud(cache?: CachedData): Promise<CloudSnapshot> 
   if (coach.error) throw coach.error;
   const base: Partial<AppData> = { profile, mode, sources: stored.sources ?? [], coach: (coach.data ?? []).map((x) => x.data as CoachMessage),
     flags: flags.error ? [] : (flags.data ?? []).map((x) => x.flag as string) };
-  if (mode !== 'real') return { found: true, data: base };
+  if (mode !== 'real') return { found: true, data: base, profileAt };
   const [a, r, pl, f] = await Promise.all([
     pullActivities(cache),
     supabase.from('races').select('data'),
@@ -242,6 +246,7 @@ export async function pullFromCloud(cache?: CachedData): Promise<CloudSnapshot> 
   for (const res of [r, pl, f]) if (res.error) throw res.error;
   return {
     found: true,
+    profileAt,
     data: {
       ...base,
       activities: a.activities.filter((x) => !x.deletedAt),
@@ -259,6 +264,8 @@ export interface PushState {
   activities: Map<string, string>; // id -> fingerprint of what was saved
   coach: Set<string>;
   profileJson?: string;
+  /** The version (updated_at) of the profile row this device last read or wrote */
+  profileAt?: string;
   racesJson?: string;
   planJson?: string;
   feedbackJson?: string;
@@ -300,12 +307,43 @@ export async function pushActivities(uid: string, acts: Activity[], ps: PushStat
   }
 }
 
+/** The account's profile changed since this device last read it */
+export class ProfileConflict extends Error { constructor() { super('The profile changed on another device'); this.name = 'ProfileConflict'; } }
+
+/** The account's profile as it is now, with its version */
+export async function pullProfile(): Promise<{ profile: Profile; mode: AppData['mode']; sources: SourceStatus[]; at?: string } | undefined> {
+  if (!supabase) return undefined;
+  const p = await supabase.from('profiles').select('data, updated_at').maybeSingle();
+  if (p.error) throw p.error;
+  if (!p.data) return undefined;
+  const stored = p.data.data as { profile?: Profile; mode?: AppData['mode']; sources?: SourceStatus[] } & Partial<Profile>;
+  return { profile: (stored.profile ?? stored) as Profile, mode: stored.mode ?? 'real', sources: stored.sources ?? [], at: (p.data.updated_at as string | null) ?? undefined };
+}
+/** Only the profile row's version: a cheap check for changes made elsewhere */
+export async function profileVersion(): Promise<string | undefined> {
+  if (!supabase) return undefined;
+  const p = await supabase.from('profiles').select('updated_at').maybeSingle();
+  if (p.error) throw p.error;
+  return (p.data?.updated_at as string | null) ?? undefined;
+}
+
 export async function pushToCloud(uid: string, d: AppData, ps: PushState): Promise<void> {
   if (!supabase || d.mode === 'empty' && !d.profile.onboarded && !d.profile.healthConsentAt && !d.profile.consents && !d.profile.setupStep) return;
   const profileJson = JSON.stringify({ profile: d.profile, mode: d.mode, sources: d.sources });
   if (profileJson !== ps.profileJson) {
-    const r = await supabase.from('profiles').upsert({ user_id: uid, data: JSON.parse(profileJson), updated_at: new Date().toISOString() });
-    if (r.error) throw r.error;
+    const at = new Date().toISOString();
+    const row = { data: JSON.parse(profileJson), updated_at: at };
+    if (ps.profileAt) {
+      // Only when the account still holds the version this device knows: a change made in another tab or on another
+      // device since then must be merged first, never overwritten
+      const r = await supabase.from('profiles').update(row).eq('user_id', uid).eq('updated_at', ps.profileAt).select('updated_at');
+      if (r.error) throw r.error;
+      if (!r.data?.length) throw new ProfileConflict();
+    } else {
+      const r = await supabase.from('profiles').upsert({ user_id: uid, ...row });
+      if (r.error) throw r.error;
+    }
+    ps.profileAt = at;
     ps.profileJson = profileJson;
   }
   const newMsgs = d.coach.filter((m) => !ps.coach.has(m.id));

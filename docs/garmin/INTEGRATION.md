@@ -24,13 +24,15 @@ below are done, and then only for accounts with the `garmin` feature flag.
 1. **Database:** apply `supabase/migrations/20261107120000_garmin_connect.sql`.
 2. **Functions:** deploy `garmin-auth` (normal) and `garmin-webhook` **with JWT verification off**
    (`supabase functions deploy garmin-webhook --no-verify-jwt`), and redeploy `delete-account`.
-3. **Secrets** (Supabase → Edge Functions → Secrets): `GARMIN_CLIENT_ID`, `GARMIN_CLIENT_SECRET`.
+3. **Secrets** (Supabase → Edge Functions → Secrets): `GARMIN_CLIENT_ID`, `GARMIN_CLIENT_SECRET`, and
+   `GARMIN_WEBHOOK_SECRET` (a long random string, 32 characters or more; the webhook refuses every request
+   until it is set).
    Optional: `GARMIN_REDIRECT_URI` (default `https://app.ritmorunning.run/garmin/callback`) and the endpoint
    overrides in `supabase/functions/_shared/garmin.ts` if the Developer Portal lists different addresses.
 4. **Garmin Developer Portal** (evaluation app first):
    - Redirect URL: `https://app.ritmorunning.run/garmin/callback`
    - Push endpoints for Activities, Activity Details, Deregistrations and User Permissions:
-     `https://gujuzacfqxbwfpprkgrx.supabase.co/functions/v1/garmin-webhook`
+     `https://gujuzacfqxbwfpprkgrx.supabase.co/functions/v1/garmin-webhook?key=<GARMIN_WEBHOOK_SECRET>`
 5. **Flag:** add `garmin` for the test accounts, for example
    `insert into public.feature_flags (user_id, flag) values ('<user id>', 'garmin');`
 6. Connect a test account, record a run, and check it appears in Ritmo with the device name.
@@ -39,8 +41,9 @@ below are done, and then only for accounts with the `garmin` feature flag.
 ## Notes
 
 - Starter access has no historical data. Past years still come from the Garmin export upload.
-- The webhook trusts Garmin's user ids, which are opaque; notifications for unknown users are ignored.
-  If Garmin offers a signature or IP allowlist after approval, add it in `garmin-webhook`.
+- Garmin does not sign its notifications, so the webhook accepts only requests that carry the secret key in
+  the address (above). Notifications for unknown users are ignored. If Garmin offers a signature or IP
+  allowlist after approval, add it in `garmin-webhook` as well.
 - Training API (sending planned sessions to the watch) is the next step and is not built yet.
 
 ## Before approval: your own runs with a Personal API key

@@ -28,6 +28,9 @@ Strava sync is built and switched on per account with the `strava` feature flag.
    - `STRAVA_CLIENT_ID`
    - `STRAVA_CLIENT_SECRET`
    - `STRAVA_VERIFY_TOKEN`: any long random string
+   - `STRAVA_SUBSCRIPTION_ID` (after step 5): the `id` Strava returns when the subscription is created.
+     Strava does not sign its events, so with this set the webhook drops events from any other source early.
+     Even without it, a "deleted" or "access removed" event is acted on only after Strava confirms it.
 3. **Apply the migration** `supabase/migrations/20261108000000_strava_connect.sql`.
 4. **Deploy the functions:**
    - `strava-auth`, with JWT verification on
