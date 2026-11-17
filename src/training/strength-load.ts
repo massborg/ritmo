@@ -131,6 +131,9 @@ export function lastSets(log: Logged[] | undefined, exerciseId: string, before?:
   const e = hits[0];
   return e ? { date: e.date, sets: e.strength!.exercises.find((x) => x.id === exerciseId)!.sets } : undefined;
 }
+/** Is there already a logged session of this exercise on a later day? Then a back-dated log is history only. */
+export const newerLogged = (log: Logged[] | undefined, exerciseId: string, date: string): boolean =>
+  (log ?? []).some((e) => e.kind === 'strength' && e.date > date && !!e.strength?.exercises.some((x) => x.id === exerciseId && x.sets.length));
 /** "3 × 8 at 10 kg" */
 export function lastLine(sets: SetLog[], unit: WeightUnit = 'kg'): string {
   const f = sets[0] ?? {};

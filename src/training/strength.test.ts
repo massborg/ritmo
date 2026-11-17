@@ -107,3 +107,23 @@ describe('how strength counts', () => {
     expect(adapted.sessions.find((s) => s.id === tue.id)!.status).toBe('done');
   });
 });
+
+describe('"Always use this instead" holds through later blocks', () => {
+  const ids = (prefs: Parameters<typeof resolveStrength>[1], routine: 'A' | 'B', block: number) => resolveStrength({ routine, intensity: 'heavy', why: '' }, prefs, { block, week: 1 }).items.map((x) => x.id);
+  it('an exercise swapped away for good is not brought back by a new block', () => {
+    const none = { equipment: 'none' as const, swaps: { 'reverse-lunge': 'split-squat' } };
+    expect(ids(none, 'A', 1)).toContain('split-squat');
+    for (const b of [2, 3]) expect(ids(none, 'A', b)).not.toContain('reverse-lunge');
+    const gym = { equipment: 'gym' as const, swaps: { 'trap-deadlift': 'db-rdl' } };
+    expect(ids(gym, 'B', 1)).toContain('db-rdl');
+    for (const b of [2, 3]) { expect(ids(gym, 'B', b)).not.toContain('trap-deadlift'); expect(ids(gym, 'B', b)).toContain('db-rdl'); }
+  });
+  it('a day edited by the runner keeps its own sets and reps, with the weight from the last session', () => {
+    const progress = { 'goblet-squat': { reps: 10, load: 20, next: 'up' as const, at: '', target: { reps: 11, load: 20, note: '+1 rep: 11 reps at 20 kg for all sets' } } };
+    const r = resolveStrength({ routine: 'A', intensity: 'heavy', why: '', custom: [{ id: 'goblet-squat', sets: 3, reps: 11 }, { id: 'plank', sets: 2, seconds: 30 }] }, { equipment: 'light', progress }, { block: 1, week: 1 });
+    expect(r.items[0]).toMatchObject({ id: 'goblet-squat', sets: 3, reps: 11, load: 20, note: '+1 rep: 11 reps at 20 kg for all sets' });
+    const other = resolveStrength({ routine: 'A', intensity: 'heavy', why: '', custom: [{ id: 'goblet-squat', sets: 4, reps: 8 }] }, { equipment: 'light', progress }, { block: 1, week: 1 });
+    expect(other.items[0]).toMatchObject({ sets: 4, reps: 8, load: 20 });
+    expect(other.items[0].note).toBeUndefined();
+  });
+});

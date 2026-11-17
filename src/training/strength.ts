@@ -175,7 +175,13 @@ export function resolveStrength(sp: StrengthPlan, p: StrengthPrefs = {}, at?: { 
   const back = (at?.skips ?? 0) >= 2;
   const full = items.map((x) => {
     const pr = prog[x.id];
-    const t = at && !sp.custom ? targetFor(x, back && pr ? { ...pr, next: 'back' } : pr, at.week) : { ...x };
+    if (at && sp.custom) {
+      // The runner's own version of the day keeps its sets and reps; the weight still comes from the last session,
+      // and the "Today" note is shown when it says the same reps
+      const own = targetFor(x, pr, at.week);
+      return { ...x, load: own.load, ...(own.note && own.reps === x.reps && own.seconds === x.seconds ? { note: own.note } : {}), ex: exById.get(x.id)! };
+    }
+    const t = at ? targetFor(x, back && pr ? { ...pr, next: 'back' } : pr, at.week) : { ...x };
     return { ...t, ex: exById.get(x.id)! };
   }).filter((x) => x.ex);
   // About 45 s a set plus the rest between sets
@@ -210,9 +216,11 @@ export function levelFor(id: string, block: number, p: StrengthPrefs = {}): stri
   if (!ladder || block <= 1) return id;
   const eq = p.equipment ?? 'none', never = p.never ?? [];
   let at = ladder.indexOf(id);
+  // Exercises the runner swapped away for good ("Always use this instead") are never brought back by a new block
+  const away = new Set(Object.entries(p.swaps ?? {}).filter(([, to]) => !!to).map(([from]) => from));
   // One rung per block; a rung the runner can't do (equipment) or doesn't want is skipped for the next one that fits
   for (let k = 1; k < block; k++) {
-    const nx = ladder.findIndex((id, i) => i > at && !!exById.get(id) && EQ_RANK[exById.get(id)!.equipment] <= EQ_RANK[eq] && !excluded(exById.get(id)!, never));
+    const nx = ladder.findIndex((id, i) => i > at && !!exById.get(id) && EQ_RANK[exById.get(id)!.equipment] <= EQ_RANK[eq] && !excluded(exById.get(id)!, never) && !away.has(id));
     if (nx < 0) break;
     at = nx;
   }

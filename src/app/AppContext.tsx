@@ -28,7 +28,7 @@ import { fitPlan, plannedNum, weekTarget, type WeekTarget } from '../training/se
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { exById, nextAfter, type StrengthPlan } from '../training/strength';
 import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
-import { doubleProgression, freeName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
+import { doubleProgression, freeName, newerLogged, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, correctDetails, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
@@ -1089,6 +1089,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const at = new Date().toISOString();
       const unit = d.profile.strength?.units ?? 'kg';
       for (const x of e.strength.exercises) {
+        // A session logged for an earlier day than the newest one of this exercise is history only: "last time" and
+        // the next target stay those of the newest session
+        if (newerLogged(d.profile.log, x.id, e.date)) continue;
         const s0 = x.sets[x.sets.length - 1];
         if (s0) last[x.id] = { reps: s0.reps, load: s0.load, seconds: s0.seconds };
         // Session to session: double progression (update 4, task 4b). All sets at effort 7 or less: more reps up to

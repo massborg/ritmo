@@ -110,5 +110,8 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
 /** A free workout on its way from the builder to the recorder. Kept for the tab, so a reload does not lose it. */
 export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[] }
 const KEY = 'ritmo:strength:free';
-export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); } catch { /* */ } };
+/** Where the recorder keeps a workout in progress for the tab (sets done, notes), so a stray Back or a reload does not lose it */
+export const liveWorkoutKey = (id: string) => `ritmo:strength:live:${id}`;
+// A workout started afresh from the builder replaces whatever was in progress
+export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); sessionStorage.removeItem(liveWorkoutKey('free:w')); } catch { /* */ } };
 export const stashedWorkout = (): FreeWorkout | undefined => { try { const v = sessionStorage.getItem(KEY); return v ? JSON.parse(v) : undefined; } catch { return undefined; } };

@@ -12,7 +12,7 @@ import { AppHeader } from '../components/app';
 import { Sheet } from '../components/inputs';
 import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
-import { ExerciseLibrary, NumInput, stashedWorkout } from '../components/StrengthBits';
+import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout } from '../components/StrengthBits';
 import { exById, resolveStrength, type Exercise, type Routine } from '../training/strength';
 import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
@@ -21,6 +21,16 @@ import { duration, ymd } from '../lib/format';
 interface SetRow { reps?: number; load?: number; seconds?: number; effort?: number; done: boolean }
 interface Item { id: string; ex: Exercise; sets: number; reps?: number; seconds?: number; load?: number; note?: string }
 interface Meta { loadType: LoadType; band?: Band }
+/** A workout in progress, kept for the tab: a stray Back, a tab tap or a reload does not lose the sets done */
+interface Kept { startedAt: number; idx: number; items: Omit<Item, 'ex'>[]; sets: SetRow[][]; meta: Meta[]; notes: string }
+const KEEP_MS = 12 * 3600 * 1000;
+function readKept(key: string): (Omit<Kept, 'items'> & { items: Item[] }) | undefined {
+  try {
+    const k = JSON.parse(sessionStorage.getItem(key) ?? 'null') as Kept | null;
+    if (!k || Date.now() - k.startedAt > KEEP_MS || !k.items.length || k.items.length !== k.sets.length || k.items.length !== k.meta.length || k.items.some((x) => !exById.has(x.id))) return undefined;
+    return { ...k, idx: Math.min(Math.max(0, k.idx), k.items.length - 1), items: k.items.map((x) => ({ ...x, ex: exById.get(x.id)! })) };
+  } catch { return undefined; }
+}
 
 export default function StrengthPlayer() {
   const { id } = useParams();
@@ -46,14 +56,17 @@ export default function StrengthPlayer() {
     }
     return sp ? resolveStrength(sp, prefs, at) : undefined;
   }, [free, sp?.routine, sp?.intensity, sp?.custom, at.block, at.week, at.skips]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [startedAt] = useState(() => Date.now());
+  const keepKey = liveWorkoutKey(free ? 'free:w' : id === 'free' ? `free:${params.get('routine') ?? 'A'}` : id ?? '');
+  const [kept, setKept] = useState(() => readKept(keepKey));
+  const [startedAt, setStartedAt] = useState(() => kept?.startedAt ?? Date.now());
   const [now, setNow] = useState(Date.now());
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(kept?.idx ?? 0);
   // Pre-filled from the progression target (from the last session), otherwise with what was done last time
   const rowsFor = (x: Item): SetRow[] => {
     const last = prefs?.last?.[x.id];
     const hasTarget = !!prefs?.progress?.[x.id] || !!free;
-    return Array.from({ length: x.sets }, (): SetRow => ({ reps: x.seconds ? undefined : hasTarget ? x.reps : last?.reps ?? x.reps, seconds: x.seconds ? (hasTarget ? x.seconds : last?.seconds ?? x.seconds) : undefined, load: hasTarget ? x.load ?? (free ? last?.load : undefined) : last?.load, done: false }));
+    // The weight: today's target, else the stored target, else what was lifted last time. Never blank when a weight is known
+    return Array.from({ length: x.sets }, (): SetRow => ({ reps: x.seconds ? undefined : hasTarget ? x.reps : last?.reps ?? x.reps, seconds: x.seconds ? (hasTarget ? x.seconds : last?.seconds ?? x.seconds) : undefined, load: hasTarget ? x.load ?? prefs?.progress?.[x.id]?.target?.load ?? last?.load : last?.load, done: false }));
   };
   const metaFor = (x: Item, rows: SetRow[]): Meta => {
     const was = lastSets(log, x.id)?.sets[0];
@@ -61,9 +74,9 @@ export default function StrengthPlayer() {
     const loaded = rows.some((r) => r.load);
     return { loadType: x.ex.equipment === 'none' ? (loaded ? 'bodyweight_plus' : 'bodyweight') : loaded || defaultLoadType(x.ex) === 'added' ? 'added' : 'bodyweight' };
   };
-  const [items, setItems] = useState<Item[]>(() => workout?.items ?? []);
-  const [sets, setSets] = useState<SetRow[][]>(() => (workout?.items ?? []).map(rowsFor));
-  const [meta, setMeta] = useState<Meta[]>(() => (workout?.items ?? []).map((x) => metaFor(x, rowsFor(x))));
+  const [items, setItems] = useState<Item[]>(() => kept?.items ?? workout?.items ?? []);
+  const [sets, setSets] = useState<SetRow[][]>(() => kept?.sets ?? (workout?.items ?? []).map(rowsFor));
+  const [meta, setMeta] = useState<Meta[]>(() => kept?.meta ?? (workout?.items ?? []).map((x) => metaFor(x, rowsFor(x))));
   // The plan may still be loading on the first render: fill the sets in once the workout is there
   useEffect(() => { if (workout && !items.length && workout.items.length) { setItems(workout.items); setSets(workout.items.map(rowsFor)); setMeta(workout.items.map((x) => metaFor(x, rowsFor(x)))); } }, [workout]); // eslint-disable-line react-hooks/exhaustive-deps
   const [restLen, setRestLen] = useState(prefs?.rest ?? 60);
@@ -72,11 +85,18 @@ export default function StrengthPlayer() {
   const [rpe, setRpe] = useState<number>();
   const [picker, setPicker] = useState<'swap' | 'add'>();
   const [notesOpen, setNotesOpen] = useState(false);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(kept?.notes ?? '');
   const [saveName, setSaveName] = useState('');
   const [savedAs, setSavedAs] = useState<string>();
   const beep = useRef(false);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  // Kept for the tab once a set is done (nothing to keep before that)
+  useEffect(() => {
+    try {
+      if (!sets.some((s) => s.some((x) => x.done))) { sessionStorage.removeItem(keepKey); return; }
+      sessionStorage.setItem(keepKey, JSON.stringify({ startedAt, idx, items: items.map(({ ex: _ex, ...x }) => x), sets, meta, notes } satisfies Kept)); // eslint-disable-line @typescript-eslint/no-unused-vars
+    } catch { /* storage may be off: the workout is then only on screen */ }
+  }, [keepKey, startedAt, idx, items, sets, meta, notes]);
   useEffect(() => {
     if (restLeft == null) return;
     if (restLeft <= 0) { setRestLeft(undefined); if (!beep.current) { beep.current = true; try { navigator.vibrate?.(200); } catch { /* */ } } return; }
@@ -109,8 +129,11 @@ export default function StrengthPlayer() {
     setRow(nowSet, { done: true });
     beep.current = false;
     const lastOfEx = nowSet === curSets.length - 1;
-    if (lastOfEx && idx === items.length - 1) { setFinished(true); setRestLeft(undefined); return; }
-    if (lastOfEx) setIdx(idx + 1);
+    // After an exercise's last set: on to the next one that still has sets to do (those after it first, then any
+    // skipped earlier). The workout only ends by itself when nothing is left anywhere.
+    const open = lastOfEx ? [...items.keys()].filter((i) => i !== idx && sets[i]?.some((x) => !x.done)) : [];
+    if (lastOfEx && !open.length) { setFinished(true); setRestLeft(undefined); return; }
+    if (lastOfEx) setIdx(open.find((i) => i > idx) ?? open[0]);
     setRestLeft(restLen);
   };
   const pick = (ex: Exercise) => {
@@ -123,6 +146,7 @@ export default function StrengthPlayer() {
   const logged = items.map((x, i) => ({ id: x.id, name: x.ex.name, planned: sets[i].length, sets: sets[i].filter((y) => y.done).map((y) => asLog(y, meta[i], x.ex)) })).filter((x) => x.sets.length);
   const save = () => {
     setStrengthPrefs({ rest: restLen });
+    try { sessionStorage.removeItem(keepKey); } catch { /* */ }
     saveStrength({ date: ymd(new Date(startedAt)), minutes: Math.max(1, Math.round(elapsed / 60)), rpe, strength: { title: workout.title, source: free ? 'free' : 'ritmo', sessionId: session?.id, templateId: free?.templateId, exercises: logged, notes: notes.trim() || undefined } });
     nav(session ? `/session/${session.id}` : '/');
   };
@@ -173,6 +197,10 @@ export default function StrengthPlayer() {
   return (
     <div className="stack strength-player">
       <AppHeader title={workout.title} back large={false} />
+      {kept && (
+        <p className="row-between caption" role="status"><span>Carried on from where you left it.</span>
+          <button type="button" className="btn btn-ghost btn-small" onClick={() => { const fresh = workout.items; setItems(fresh); setSets(fresh.map(rowsFor)); setMeta(fresh.map((x) => metaFor(x, rowsFor(x)))); setIdx(0); setNotes(''); setStartedAt(Date.now()); setKept(undefined); }}>Start again</button></p>
+      )}
       <p className="row-between strength-head"><span className="stat" aria-label="Elapsed time">{duration(elapsed)}</span><span className="caption">{doneSets} of {totalSets} sets</span></p>
       <div className="progress" role="progressbar" aria-label="Workout progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((doneSets / Math.max(1, totalSets)) * 100)}><span style={{ width: `${(doneSets / Math.max(1, totalSets)) * 100}%` }} /></div>
       <section className="card stack-sm strength-now" aria-label="Current exercise">
@@ -255,12 +283,14 @@ export default function StrengthPlayer() {
           {[30, 45, 60, 90, 120].map((s) => <option key={s} value={s}>{s} s</option>)}
         </select>
       </label>
-      {items.length > idx + 1 && (
+      {items.length > 1 && (
         <section className="stack-sm" aria-label="Up next">
           <span className="label">Up next</span>
-          <ul className="list">{items.slice(idx + 1).map((x, k) => (
-            <li key={`${x.id}-${k}`}><button className="list-item row-between" style={{ width: '100%' }} onClick={() => setIdx(idx + 1 + k)}><span>{x.ex.name}</span><span className="row caption" style={{ gap: 4 }}>{(sets[idx + 1 + k]?.length ?? x.sets) === 1 ? '1 set' : `${sets[idx + 1 + k]?.length ?? x.sets} sets`}<ChevronRight size={16} aria-hidden="true" /></span></button></li>
-          ))}</ul>
+          {/* Every other exercise, those after this one first: an earlier one that was skipped can be opened again */}
+          <ul className="list">{[...items.keys()].filter((i) => i > idx).concat([...items.keys()].filter((i) => i < idx)).map((i) => {
+            const x = items[i], total = sets[i]?.length ?? x.sets, done = sets[i]?.filter((y) => y.done).length ?? 0;
+            return <li key={`${x.id}-${i}`}><button className="list-item row-between" style={{ width: '100%' }} onClick={() => setIdx(i)}><span>{x.ex.name}</span><span className="row caption" style={{ gap: 4 }}>{done ? `${done} of ${total} sets done` : total === 1 ? '1 set' : `${total} sets`}<ChevronRight size={16} aria-hidden="true" /></span></button></li>;
+          })}</ul>
         </section>
       )}
       <button className="btn btn-ghost" onClick={() => setFinished(true)}>Finish workout</button>

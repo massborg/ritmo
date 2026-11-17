@@ -83,3 +83,14 @@ describe('saved workouts', () => {
     expect(groupsOf(exById.get('pogo')!)).toContain('plyo');
   });
 });
+
+describe('a back-dated log', () => {
+  it('is history only when a later session of the same exercise is already logged', async () => {
+    const { newerLogged } = await import('./strength-load');
+    const log = [{ date: '2026-11-17', kind: 'strength', strength: { exercises: [{ id: 'goblet-squat', name: 'Goblet squat', sets: [{ reps: 10, load: 20 }] }] } }];
+    expect(newerLogged(log, 'goblet-squat', '2026-11-07')).toBe(true);
+    expect(newerLogged(log, 'goblet-squat', '2026-11-17')).toBe(false);
+    expect(newerLogged(log, 'goblet-squat', '2026-11-18')).toBe(false);
+    expect(newerLogged(log, 'plank', '2026-11-07')).toBe(false);
+  });
+});
