@@ -19,7 +19,7 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
   const [name, setName] = useState(race?.name ?? '');
   const [date, setDate] = useState(race?.date ?? '');
   const [dm, setDm] = useState(race ? (known ? String(race.distanceM) : 'custom') : '10000');
-  const [customKm, setCustomKm] = useState<number | undefined>(race && !known ? Math.round(race.distanceM / 1000) : 15);
+  const [customKm, setCustomKm] = useState<number | undefined>(race && !known ? Math.round(race.distanceM / 100) / 10 : 15);
   const [course, setCourse] = useState<CourseType>(race?.courseType ?? 'road');
   const [goalS, setGoalS] = useState<number | undefined>(race?.goalS);
   const [prio, setPrio] = useState<RacePriority>(race?.priority ?? 'A');
@@ -27,7 +27,7 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
   return (
     <form className="stack-lg" noValidate onSubmit={(e) => {
       e.preventDefault();
-      const distanceM = dm === 'custom' ? (customKm ?? 0) * 1000 : Number(dm);
+      const distanceM = dm === 'custom' ? Math.round((customKm ?? 0) * 10) * 100 : Number(dm);
       if (!name.trim()) { setErr('Give the race a name.'); return; }
       if (!date) { setErr('Choose the race date.'); return; }
       if (!distanceM) { setErr('Choose a distance.'); return; }
@@ -39,7 +39,7 @@ function RaceForm({ race, onSave }: { race?: Race; onSave: (r: Race) => void }) 
       </section>
       <section className="card stack">
         <Chips label="Distance" value={dm} onChange={setDm} options={DIST_OPTS} />
-        {dm === 'custom' && <Stepper id="rkm" label="Distance" unit="km" value={customKm} onChange={setCustomKm} min={1} max={250} />}
+        {dm === 'custom' && <Stepper id="rkm" label="Distance" unit="km" decimal value={customKm} onChange={setCustomKm} min={1} max={250} />}
         <Chips<CourseType> label="Course" value={course} onChange={setCourse} options={[{ value: 'road', label: 'Road' }, { value: 'trail', label: 'Trail' }, { value: 'track', label: 'Track' }, { value: 'cross-country', label: 'Cross-country' }]} />
       </section>
       <section className="card stack">
@@ -89,7 +89,7 @@ export default function RacePage() {
       <div className="stack-sm">
         <p className="caption">{longDate(parseYmd(race.date))} · {distanceLabel(race.distanceM)} · {race.courseType}</p>
         <h1 className="display-lg">{race.name}</h1>
-        <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days} days to go</span>}</div>
+        <div className="row wrap"><span className={`tag ${race.priority === 'A' ? 'tag-accent' : ''}`}>{race.priority} race</span>{!past && <span className="label">{days === 0 ? 'Race day' : `${days} ${days === 1 ? 'day' : 'days'} to go`}</span>}</div>
       </div>
       {race.priority === 'A' && (!past || daysUntil(today, race.date) >= -30) && (
         <Link to={`/race/${race.id}/day`} className="btn btn-primary race-day-link" style={{ alignSelf: 'flex-start' }}>

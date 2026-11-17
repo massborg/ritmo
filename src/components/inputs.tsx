@@ -103,9 +103,10 @@ export function DateField({ label, value, onChange, min, id }: { label: string; 
   );
 }
 
-export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, unit, id, placeholder }: { label: string; value?: number; onChange: (v: number | undefined) => void; min?: number; max?: number; step?: number; unit?: string; id: string; placeholder?: string }) {
+/** `decimal`: one decimal can be typed ("7.5") while the buttons still move by `step` */
+export function Stepper({ label, value, onChange, min = 0, max = 999, step = 1, unit, id, placeholder, decimal }: { label: string; value?: number; onChange: (v: number | undefined) => void; min?: number; max?: number; step?: number; unit?: string; id: string; placeholder?: string; decimal?: boolean }) {
   const v = value ?? undefined;
-  const dec = step % 1 !== 0;
+  const dec = !!decimal || step % 1 !== 0;
   // While typing a decimal ("8."), keep the text as typed
   const [typed, setTyped] = useState<string>();
   const set = (n: number) => onChange(Math.min(max, Math.max(min, dec ? Math.round(n * 10) / 10 : n)));

@@ -296,7 +296,8 @@ export default function RunPage() {
       {st && (
         <section className={`card stack-sm run-step${gauge ? ` gauge-${gauge}` : ''}`} aria-label="Current step">
           <span className="label">{st.label}{st.pace ? ` @ ${paceRange(st.pace[0], st.pace[1], U)}` : ''}</span>
-          <span className="stat" style={{ fontSize: 28 }}>{left?.leftM != null ? `${Math.round(left.leftM)} m left` : left?.leftS != null ? `${duration(Math.round(left.leftS))} left` : 'Press Lap when done'}</span>
+          {/* "Press Lap when done" only when Lap moves on to a next step: a pace goal on a free run has none */}
+          {(left?.leftM != null || left?.leftS != null || steps[stepIdx + 1]) && <span className="stat" style={{ fontSize: 28 }}>{left?.leftM != null ? `${Math.round(left.leftM)} m left` : left?.leftS != null ? `${duration(Math.round(left.leftS))} left` : 'Press Lap when done'}</span>}
           {gauge && <span className="label">{gauge === 'ok' ? 'On target' : gauge === 'fast' ? 'Too fast: ease off' : 'Too slow: pick it up'}</span>}
           {steps[stepIdx + 1] && <span className="caption">Next: {steps[stepIdx + 1].label}</span>}
         </section>

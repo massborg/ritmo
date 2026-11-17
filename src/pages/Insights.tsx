@@ -117,12 +117,37 @@ export default function Insights() {
     return { labels, five, ten, half, mar, tpace, eff };
   }, [acts, today, hr, data.races, U, typeOf]);
 
+  // The HYROX prediction card: also shown under "No runs yet", because one full simulation is enough for it
+  const hxCard = hxShow && (
+    <section className="card stack" aria-labelledby="hx-pred">
+      <h2 id="hx-pred" className="title">HYROX prediction</h2>
+      {hx ? (
+        <>
+          <p className="row-between" style={{ margin: 0, alignItems: 'baseline' }}><span className="stat-xl" data-testid="hx-pred-total">{hxClock(hx.totalS * 1000)}</span><span className="caption">{hx.confidence === 'good' ? 'Good confidence' : hx.confidence === 'medium' ? 'Medium confidence' : 'A first estimate'}</span></p>
+          <p className="caption">Based on {hx.basedOn}.{hx.vsGoalS != null ? ` ${hx.vsGoalS <= 0 ? `${hxClock(-hx.vsGoalS * 1000)} inside` : `${hxClock(hx.vsGoalS * 1000)} outside`} your goal of ${hxClock((data.profile.hyrox?.goalS ?? 0) * 1000)}.` : ''}</p>
+          <div className="grid-3">
+            <Kpi label="Running" value={hxClock(hx.runningS * 1000)} sub={`${pace(hx.runPaceS, U)} each run`} />
+            <Kpi label="Stations" value={hxClock(hx.stationsS * 1000)} sub={`${hx.known} of 8 from your times`} />
+            <Kpi label="Roxzone" value={hxClock(hx.roxzoneS * 1000)} sub="transitions, on top of the runs" />
+          </div>
+          <ul className="list hx-pred-stations">
+            {hx.stations.map((x) => <li key={x.key} className="list-item row-between"><span>{x.name}</span><span className="row" style={{ gap: 8 }}><span className="stat">{hxClock(x.s * 1000)}</span><span className="caption" style={{ minWidth: 64, textAlign: 'right' }}>{x.from === 'race' ? 'yours' : x.from === 'practice' ? 'practice' : 'typical'}</span></span></li>)}
+          </ul>
+          {hx.focus && <p>Most time to gain: <strong>{hx.focus.name.toLowerCase()}</strong>, about {hx.focus.gainS} s against a typical time for your running fitness.</p>}
+          <p className="caption">"Yours" is your best in a full simulation or race. "Practice" is your best on its own, made 8% slower for race fatigue. "Typical" is an average time scaled to your running fitness, until you record that station. An estimate, not a promise.</p>
+          <div className="row wrap" style={{ gap: 8 }}><Link to="/hyrox" className="btn btn-small">Record a session</Link><Link to="/hyrox/race-day" className="btn btn-small">Race-day plan</Link></div>
+        </>
+      ) : <p className="muted">Ritmo needs a few recorded runs, or one full simulation, to predict your HYROX time. <Link to="/hyrox">Record a simulation</Link>.</p>}
+    </section>
+  );
+
   if (!acts.length) return (
     <div className="stack-lg">
       <AppHeader title="Insights" back right={<SampleChip />} />
       <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/">Log a run on Today</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
         Your distance, streaks and personal bests appear here after your first run. Log one by hand, or upload files from a watch.
       </Empty>
+      {hxCard}
     </div>
   );
   const Locked = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -196,28 +221,7 @@ export default function Insights() {
       </section>
       ) : <Locked title="Training load">Fitness, fatigue and form need a few weeks of runs and a known fitness level. Until then they would only be guesses, so Ritmo keeps them hidden.</Locked>}
 
-      {hxShow && (
-        <section className="card stack" aria-labelledby="hx-pred">
-          <h2 id="hx-pred" className="title">HYROX prediction</h2>
-          {hx ? (
-            <>
-              <p className="row-between" style={{ margin: 0, alignItems: 'baseline' }}><span className="stat-xl" data-testid="hx-pred-total">{hxClock(hx.totalS * 1000)}</span><span className="caption">{hx.confidence === 'good' ? 'Good confidence' : hx.confidence === 'medium' ? 'Medium confidence' : 'A first estimate'}</span></p>
-              <p className="caption">Based on {hx.basedOn}.{hx.vsGoalS != null ? ` ${hx.vsGoalS <= 0 ? `${hxClock(-hx.vsGoalS * 1000)} inside` : `${hxClock(hx.vsGoalS * 1000)} outside`} your goal of ${hxClock((data.profile.hyrox?.goalS ?? 0) * 1000)}.` : ''}</p>
-              <div className="grid-3">
-                <Kpi label="Running" value={hxClock(hx.runningS * 1000)} sub={`${pace(hx.runPaceS, U)} each run`} />
-                <Kpi label="Stations" value={hxClock(hx.stationsS * 1000)} sub={`${hx.known} of 8 from your times`} />
-                <Kpi label="Roxzone" value={hxClock(hx.roxzoneS * 1000)} sub="transitions, on top of the runs" />
-              </div>
-              <ul className="list hx-pred-stations">
-                {hx.stations.map((x) => <li key={x.key} className="list-item row-between"><span>{x.name}</span><span className="row" style={{ gap: 8 }}><span className="stat">{hxClock(x.s * 1000)}</span><span className="caption" style={{ minWidth: 64, textAlign: 'right' }}>{x.from === 'race' ? 'yours' : x.from === 'practice' ? 'practice' : 'typical'}</span></span></li>)}
-              </ul>
-              {hx.focus && <p>Most time to gain: <strong>{hx.focus.name.toLowerCase()}</strong>, about {hx.focus.gainS} s against a typical time for your running fitness.</p>}
-              <p className="caption">"Yours" is your best in a full simulation or race. "Practice" is your best on its own, made 8% slower for race fatigue. "Typical" is an average time scaled to your running fitness, until you record that station. An estimate, not a promise.</p>
-              <div className="row wrap" style={{ gap: 8 }}><Link to="/hyrox" className="btn btn-small">Record a session</Link><Link to="/hyrox/race-day" className="btn btn-small">Race-day plan</Link></div>
-            </>
-          ) : <p className="muted">Ritmo needs a few recorded runs, or one full simulation, to predict your HYROX time. <Link to="/hyrox">Record a simulation</Link>.</p>}
-        </section>
-      )}
+      {hxCard}
 
       <div className="grid-2">
 {stage.predictions ? (
