@@ -1,6 +1,7 @@
 // Shoes assigned to runs automatically by session type (fast shoes for intervals and races, long-run shoes for long
 // runs, everyday trainers for the rest), unless the runner picked one for a run. Distance per shoe and retirement
 // alerts follow from that.
+import { runDay } from '../lib/format';
 import type { Activity, SessionType, Shoe, ShoeUse } from '../lib/types';
 
 export const SHOE_USE: Record<ShoeUse, string> = { everyday: 'Everyday', fast: 'Fast sessions and races', long: 'Long runs', trail: 'Trail' };
@@ -14,7 +15,7 @@ const inUse = (shoes: Shoe[], day: string) => shoes.filter((s) => s.startDate <=
 /** The shoe a run counts for: the runner's choice, else the newest shoe in use whose type suits the session. */
 export function shoeForRun(a: Pick<Activity, 'startTime' | 'shoeId'>, type: SessionType, shoes: Shoe[]): Shoe | undefined {
   if (a.shoeId) { const s = shoes.find((x) => x.id === a.shoeId); if (s) return s; }
-  const day = a.startTime.slice(0, 10);
+  const day = runDay(a.startTime);
   const avail = inUse(shoes, day).filter((s) => (s.use ?? 'everyday') !== 'trail').sort((x, y) => y.startDate.localeCompare(x.startDate));
   if (!avail.length) return undefined;
   const want: ShoeUse[] = FAST.includes(type) ? ['fast', 'everyday'] : type === 'long' ? ['long', 'everyday'] : ['everyday'];

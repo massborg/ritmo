@@ -9,7 +9,7 @@ import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { StatusLine } from './ui';
 import { ZONE_OF } from './app';
-import { addDays, DAY_NAMES, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, weekday, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, DAY_SHORT, dist, distanceLabel, duration, localise, longDate, MONTHS_LONG, parseYmd, shortDate, startOfWeek, toUnit, weekday, ymd, runDay } from '../lib/format';
 import { moveClash, moveTargets, PHASE_EXPLAIN, PHASE_LABEL } from '../training/plan';
 import { useDragMove } from '../lib/useDragMove';
 import { keptPlanToday, type ReadinessScore } from '../training/readiness';
@@ -201,7 +201,7 @@ export function SessionSheet({ date, onClose }: { date?: string; onClose: () => 
   const U = data.profile.units;
   if (!date) return ui;
   const s = plan?.sessions.find((x) => x.date === date);
-  const runs = data.activities.filter((a) => a.startTime.slice(0, 10) === date);
+  const runs = data.activities.filter((a) => runDay(a.startTime) === date);
   const race = data.races.find((r) => r.date === date);
   const targets = s ? moveTargets(s, today) : [];
   const phase = plan?.phases.find((p) => p.start <= date && p.end >= date);
@@ -280,7 +280,7 @@ export function RestOfWeek({ from }: { from: string }) {
       <ul className="group rest-week" onClickCapture={swallowClick}>
         {days.map((d) => {
           const s = plan.sessions.find((x) => x.date === d);
-          const ran = data.activities.some((a) => a.startTime.slice(0, 10) === d);
+          const ran = data.activities.some((a) => runDay(a.startTime) === d);
           const z = s ? ZONE_OF[s.type] : undefined;
           const canDrag = !!s && s.type !== 'rest' && s.status === 'planned' && !ran && moveTargets(s, today).length > 0;
           return (
@@ -330,7 +330,7 @@ export function MonthPlan({ initial }: { initial?: string }) {
         {cells.map((d) => {
           const k = ymd(d);
           const s = plan?.sessions.find((x) => x.date === k);
-          const ran = data.activities.some((a) => a.startTime.slice(0, 10) === k);
+          const ran = data.activities.some((a) => runDay(a.startTime) === k);
           const race = data.races.find((r) => r.date === k);
           const done = ran || s?.status === 'done' || s?.status === 'swapped';
           const planned = !done && !!s && s.type !== 'rest' && s.status === 'planned';
@@ -445,7 +445,7 @@ export function SyncNote() {
   const st = data.sources.find((x) => x.kind === 'strava' && x.connected);
   const stale = st && (!st.lastSyncAt || today.getTime() - new Date(st.lastSyncAt).getTime() > 24 * 3600e3);
   const weekAgo = ymd(addDays(today, -14));
-  const dup = findDuplicates(data.activities).find(([x]) => x.startTime.slice(0, 10) >= weekAgo);
+  const dup = findDuplicates(data.activities).find(([x]) => runDay(x.startTime) >= weekAgo);
   if (!st?.lastError && !stale && !dup) return null;
   return (
     <div className="stack-sm">

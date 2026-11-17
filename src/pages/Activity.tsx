@@ -10,7 +10,7 @@ import { useRunDetail } from '../app/useRunDetail';
 import { AppHeader } from '../components/app';
 import { Empty, ScoreRing, StatusLine, ZoneBar } from '../components/ui';
 import { LineChart, RouteMap } from '../components/charts';
-import { dist, duration, longDate, pace, type Units, ymd } from '../lib/format';
+import { dist, duration, longDate, pace, type Units, ymd, runDay } from '../lib/format';
 import { EASY_FAMILY, SESSION_SHORT, TYPE_FOCUS, TYPE_LABEL } from '../training/analysis';
 import { buildVerdict } from '../training/verdict';
 import { ReadinessStrip } from '../components/training';
@@ -157,7 +157,7 @@ export default function ActivityPage() {
   // The run's real local start time and where it came from (never the time it was imported)
   const dateline = `${when.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · ${source}`;
   const session = sessionOfRun(a.id);
-  const d0 = a.startTime.slice(0, 10);
+  const d0 = runDay(a.startTime);
   const planTag = session?.status === 'swapped' ? { cls: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
     : session?.status === 'partial' ? { cls: 'muted', icon: null, text: `Part of your planned ${(SESSION_SHORT[session.type] ?? session.title).toLowerCase()} · ${TYPE_LABEL[typeOf(a)]}` }
     : session?.status === 'done' ? { cls: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `Matched plan · ${TYPE_LABEL[typeOf(a)]}` }
@@ -339,7 +339,7 @@ export default function ActivityPage() {
       )}
 
       {/* Today's run: the same readiness as Training and Coach, including this run */}
-      {plan && a.startTime.slice(0, 10) === ymd(today) && <div className="stack-sm"><h2 className="label">Readiness now{nextSession ? <span className="caption"> · next: {nextSession.title}, {new Date(`${nextSession.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</span> : null}</h2><ReadinessStrip r={readinessToday} /></div>}
+      {plan && runDay(a.startTime) === ymd(today) && <div className="stack-sm"><h2 className="label">Readiness now{nextSession ? <span className="caption"> · next: {nextSession.title}, {new Date(`${nextSession.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</span> : null}</h2><ReadinessStrip r={readinessToday} /></div>}
 
       {showHrCheck && (
         <section className="card stack-sm settings-check" aria-labelledby="hr-check">

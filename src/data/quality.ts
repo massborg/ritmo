@@ -1,3 +1,4 @@
+import { runDay } from '../lib/format';
 // Data-quality tools: find duplicate runs the import did not catch (often the same run with its clock an exact hour
 // or two out, from a time-zone mix-up), merge them, correct a run's distance (treadmill calibration), and leave
 // a run out of the stats without deleting it.
@@ -49,8 +50,8 @@ export function findDuplicates(acts: Activity[]): [Activity, Activity][] {
   }
   // A run logged by hand and the same run synced from a watch: same day, distances within 15% (a typed estimate)
   for (const m of sorted.filter((a) => a.source === 'manual' && !used.has(a.id))) {
-    const day = m.startTime.slice(0, 10);
-    const twin = sorted.find((a) => a.source !== 'manual' && a.source !== 'sample' && !used.has(a.id) && a.startTime.slice(0, 10) === day && close(a.distanceM, m.distanceM, 0.15));
+    const day = runDay(m.startTime);
+    const twin = sorted.find((a) => a.source !== 'manual' && a.source !== 'sample' && !used.has(a.id) && runDay(a.startTime) === day && close(a.distanceM, m.distanceM, 0.15));
     if (twin) { out.push(twin.startTime < m.startTime ? [twin, m] : [m, twin]); used.add(m.id); used.add(twin.id); }
   }
   return out.sort((x, y) => x[0].startTime.localeCompare(y[0].startTime)).reverse();

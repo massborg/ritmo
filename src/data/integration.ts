@@ -1,5 +1,6 @@
 // One integration layer for every data source. Each source adapter returns normalised Activities;
 // merge() removes duplicates across sources and keeps the most detailed version.
+import { runDay } from '../lib/format';
 import type { Activity, SourceKind } from '../lib/types';
 
 export interface SourceAdapter {
@@ -67,9 +68,9 @@ export function merge(existing: Activity[], incoming: Activity[]): MergeResult {
     const t = new Date(inc.startTime).getTime();
     // A run logged by hand ("I've done this run") has a rough time and distance: the watch file that arrives
     // later for the same day replaces it instead of adding a duplicate
-    const day = inc.startTime.slice(0, 10);
+    const day = runDay(inc.startTime);
     // …and the other way round: a run logged by hand for a day that already has the synced run joins that run
-    const near = (x: Activity) => x.startTime.slice(0, 10) === day && Math.abs(x.distanceM - inc.distanceM) / Math.max(x.distanceM, inc.distanceM, 1) < 0.15;
+    const near = (x: Activity) => runDay(x.startTime) === day && Math.abs(x.distanceM - inc.distanceM) / Math.max(x.distanceM, inc.distanceM, 1) < 0.15;
     const match = findNear(t).find((i) => isSameRun(list[i], inc))
       ?? (inc.source !== 'manual' ? list.findIndex((x) => x.source === 'manual' && near(x)) : list.findIndex((x) => x.source !== 'manual' && x.source !== 'sample' && near(x)));
     if (match === undefined || match < 0) {

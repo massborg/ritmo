@@ -1,6 +1,7 @@
 // One planned session, one truth (update 3, §1.1). Every screen that shows a planned session (Training, the Run screen,
 // the session page, the Coach, reminders and run feedback) formats it with these helpers, from the same adapted plan, so
 // the distance and the structure line can never disagree.
+import { runDay } from '../lib/format';
 import type { Plan, PlannedSession, SessionStep } from '../lib/types';
 import type { Units } from '../lib/format';
 
@@ -60,7 +61,7 @@ export function fitSteps(s: PlannedSession): PlannedSession {
  */
 export function weekDoneForPlan(acts: { startTime: string; distanceM: number }[], planStart: string | undefined, weekStart: string, today: string): number {
   const from = planStart && planStart > weekStart && planStart <= today ? planStart : weekStart;
-  return acts.reduce((m, a) => { const d = a.startTime.slice(0, 10); return d >= from && d <= today ? m + a.distanceM : m; }, 0);
+  return acts.reduce((m, a) => { const d = runDay(a.startTime); return d >= from && d <= today ? m + a.distanceM : m; }, 0);
 }
 export function fitPlan(p: Plan): Plan {
   const sessions = p.sessions.map(fitSteps);

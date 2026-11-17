@@ -3,7 +3,7 @@
 // never contradicts the run; an AI write-up, when enabled, may only reword it.
 import type { Activity, Plan, PlannedSession, Race, SessionType } from '../lib/types';
 import { isStrideLap } from './intervals';
-import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, toUnit, type Units, ymd } from '../lib/format';
+import { addDays, duration, parseYmd, pace as fmtPace, paceRange, startOfWeek, toUnit, type Units, ymd, runDay } from '../lib/format';
 import type { Analysis } from './analysis';
 import { TYPE_LABEL, STEADY_TYPES, EASY_FAMILY } from './analysis';
 import { predictTime, type TrainingPaces, vdotFromPerformance } from './fitness';
@@ -126,9 +126,9 @@ export function buildReport(o: {
 
   // ---- Tip for the next session ----
   let nextTip: string | undefined;
-  const after = plan?.sessions.filter((s) => s.date > a.startTime.slice(0, 10) && s.type !== 'rest').sort((x, y) => x.date.localeCompare(y.date))[0];
+  const after = plan?.sessions.filter((s) => s.date > runDay(a.startTime) && s.type !== 'rest').sort((x, y) => x.date.localeCompare(y.date))[0];
   if (after) {
-    const when = (() => { const d = Math.round((parseYmd(after.date).getTime() - parseYmd(a.startTime.slice(0, 10)).getTime()) / 86400000); return d === 1 ? 'Tomorrow' : `On ${parseYmd(after.date).toLocaleDateString('en-GB', { weekday: 'long' })}`; })();
+    const when = (() => { const d = Math.round((parseYmd(after.date).getTime() - parseYmd(runDay(a.startTime)).getTime()) / 86400000); return d === 1 ? 'Tomorrow' : `On ${parseYmd(after.date).toLocaleDateString('en-GB', { weekday: 'long' })}`; })();
     const how = after.type === 'easy' || after.type === 'recovery'
       ? `keep it at ${after.paceTarget ? paceRange(after.paceTarget.minSPerKm, after.paceTarget.maxSPerKm, units) : paces ? paceRange(paces.easy[0], paces.easy[1], units) : 'an easy, chatty pace'} even if you feel great`
       : after.type === 'long' ? 'start slower than you think and take on fuel from about 45 minutes'
@@ -165,7 +165,7 @@ export function buildReport(o: {
 export function weekReview(o: { weekStart: string; plan?: Plan; activities: Activity[]; units: Units; /** Today (yyyy-mm-dd): a session planned for today or later is not missed yet */ today?: string }): { title: string; lines: string[] } | undefined {
   const { weekStart, plan, activities, units } = o;
   const end = ymd(addDays(parseYmd(weekStart), 6));
-  const runs = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= weekStart && d <= end; });
+  const runs = activities.filter((a) => { const d = runDay(a.startTime); return d >= weekStart && d <= end; });
   const sessions = (plan?.sessions ?? []).filter((s) => s.date >= weekStart && s.date <= end && s.type !== 'rest');
   if (!runs.length && !sessions.length) return undefined;
   // Distances in the runner's own unit, like the week bar above the card

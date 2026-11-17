@@ -17,7 +17,7 @@ import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
-import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd } from '../lib/format';
+import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd, runDay } from '../lib/format';
 import { SESSION_SHORT, TYPE_LABEL } from '../training/analysis';
 import { PHASE_LABEL } from '../training/plan';
 import { RUNS_FOR_PACES } from '../training/stage';
@@ -219,10 +219,10 @@ export default function Today() {
 
   const ws = startOfWeek(parseYmd(selected));
   const week = Array.from({ length: 7 }, (_, i) => ymd(addDays(ws, i)));
-  const ranOn = (d: string) => data.activities.some((a) => a.startTime.slice(0, 10) === d);
+  const ranOn = (d: string) => data.activities.some((a) => runDay(a.startTime) === d);
   const days = week.map((d) => { const session = plan?.sessions.find((x) => x.date === d); return { date: d, dow: DAY_NAMES[(parseYmd(d).getDay() + 6) % 7], dom: parseYmd(d).getDate(), session, done: ranOn(d), today: d === t, unplanned: ranOn(d) && (!session || session.type === 'rest'), missed: !!session && session.type !== 'rest' && d < t && !ranOn(d) }; });
   const review = parseYmd(selected).getDay() === 0 && selected <= t ? weekReview({ weekStart: ymd(ws), plan, activities: data.activities, units: U, today: t }) : undefined;
-  const runsHere = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const runsHere = data.activities.filter((a) => runDay(a.startTime) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
@@ -238,7 +238,7 @@ export default function Today() {
   const lastAn = last ? analysisFor(last) : undefined;
   const missed = plan ? missedKeySession(plan, today) : undefined;
   const missedTo = plan && missed ? missedMoveOptions(plan, missed.id, today).slice(0, 3) : [];
-  const ranHereKm = data.activities.filter((a) => a.startTime.slice(0, 10) === selected).reduce((x, a) => x + a.distanceM, 0);
+  const ranHereKm = data.activities.filter((a) => runDay(a.startTime) === selected).reduce((x, a) => x + a.distanceM, 0);
   const done = s?.completedActivityId ? data.activities.find((a) => a.id === s.completedActivityId) : undefined;
   const phaseNow = plan?.phases.find((p) => p.start <= t && p.end >= t);
   // "Safi 5K · build phase until 22 Nov": what the plan is for and where it is
@@ -249,7 +249,7 @@ export default function Today() {
   const hxRep = hxPlan ? plan!.sessions.find((x) => x.hyrox?.kind === 'km_repeats' || x.hyrox?.kind === 'compromised') : undefined;
   const hxPaceS = hxRep?.paceTarget ? Math.round((hxRep.paceTarget.minSPerKm + hxRep.paceTarget.maxSPerKm) / 2) : undefined;
   const subtitle = hxPlan ? ['HYROX', hxDate ? parseYmd(hxDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase` : undefined, hxWeeks != null ? `${hxWeeks} week${hxWeeks === 1 ? '' : 's'} to go` : undefined].filter(Boolean).join(' · ') : [aRace?.name, phaseNow ? `${PHASE_LABEL[phaseNow.phase].toLowerCase()} phase until ${shortDate(parseYmd(phaseNow.end))}` : plan ? `plan until ${shortDate(parseYmd(plan.endDate))}` : longDate(today)].filter(Boolean).join(' · ');
-  const ranToday = data.activities.some((a) => a.startTime.slice(0, 10) === t);
+  const ranToday = data.activities.some((a) => runDay(a.startTime) === t);
   const checkedIn = !!data.profile.checkins?.some((c) => c.date === t);
   // A swapped session: what was run, and how it went, in one line
   const swappedNote = done && s?.status === 'swapped' ? (() => {
@@ -311,7 +311,7 @@ export default function Today() {
             // A plan that started part-way through this week: its target covers the remaining days, so the bar counts
             // the runs since it started (like for like), and says so
             const since = plan && plan.startDate > ymd(ws) && plan.startDate <= week[week.length - 1] ? plan.startDate : undefined;
-            return <WeekBar doneM={week.filter((d) => !since || d >= since).reduce((x, d) => x + data.activities.filter((a) => a.startTime.slice(0, 10) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} since={since} />;
+            return <WeekBar doneM={week.filter((d) => !since || d >= since).reduce((x, d) => x + data.activities.filter((a) => runDay(a.startTime) === d).reduce((y, a) => y + a.distanceM, 0), 0)} plannedM={plannedM} thisWeek={ymd(ws) === ymd(startOfWeek(today))} weekStart={ymd(ws)} since={since} />;
           })()}
         </div>
       )}
@@ -338,7 +338,7 @@ export default function Today() {
       {hasFlag('body') && isToday && <CareCard />}
       {hurts && <BodyCheckinSheet onClose={() => { setHurts(false); setFixing(false); }} editing={fixing && !!injuryNow} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
-        <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => a.startTime.slice(0, 10)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
+        <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => runDay(a.startTime)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
       </Sheet>
 

@@ -48,6 +48,15 @@ export function paceRange(a: number, b: number, u: Units) {
 export const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+/** The day a run was done on the runner's own calendar. Start times are stored as moments in time (UTC), so the
+ *  first ten characters are the UTC day: an evening run west of UTC, or an early run east of it, is another day. */
+const dayCache = new Map<string, string>();
+export function runDay(startTime: string): string {
+  let d = dayCache.get(startTime);
+  if (!d) { const t = new Date(startTime); d = Number.isNaN(t.getTime()) ? startTime.slice(0, 10) : ymd(t); if (dayCache.size > 20000) dayCache.clear(); dayCache.set(startTime, d); }
+  return d;
+}
+
 export const parseYmd = (s: string) => {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, m - 1, d);

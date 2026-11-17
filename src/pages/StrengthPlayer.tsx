@@ -13,7 +13,7 @@ import { Sheet } from '../components/inputs';
 import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
 import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout } from '../components/StrengthBits';
-import { exById, resolveStrength, type Exercise, type Routine } from '../training/strength';
+import { exById, noteInUnit, resolveStrength, type Exercise, type Routine } from '../training/strength';
 import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
 import { duration, ymd } from '../lib/format';
@@ -52,7 +52,12 @@ export default function StrengthPlayer() {
         const ex = exById.get(x.exerciseId)!, t = prefs?.progress?.[ex.id]?.target;
         // A hold stays a hold: a saved 0 seconds falls back to the exercise's usual time, never to reps
         const timed = x.seconds != null;
-        return { id: ex.id, ex, sets: x.sets, reps: timed ? undefined : t?.reps ?? x.reps ?? ex.reps, seconds: timed ? t?.seconds ?? (x.seconds || ex.seconds || 30) : undefined, load: t?.load ?? x.weightKg, note: t?.note };
+        // From the builder, what the runner set there is used (the builder shows the progression target to start
+        // from, so a changed value is a choice). A saved workout follows the progression target.
+        const own = !free.templateId;
+        const reps = own ? x.reps ?? t?.reps : t?.reps ?? x.reps, secs = own ? x.seconds || t?.seconds : t?.seconds ?? x.seconds, load = own ? x.weightKg ?? t?.load : t?.load ?? x.weightKg;
+        const asTarget = !own || ((timed ? secs === t?.seconds : reps === t?.reps) && load === t?.load);
+        return { id: ex.id, ex, sets: x.sets, reps: timed ? undefined : reps ?? ex.reps, seconds: timed ? secs || ex.seconds || 30 : undefined, load, note: asTarget ? noteInUnit(t?.note, unit) : undefined };
       });
       return { title: free.name, items };
     }

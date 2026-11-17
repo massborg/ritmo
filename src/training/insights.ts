@@ -1,6 +1,6 @@
 // Aggregations: mileage, personal bests, running story, race readiness, pacing and taper guidance.
 import type { Activity, Race } from '../lib/types';
-import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, type Units, ymd } from '../lib/format';
+import { addDays, daysBetween, daysUntil, distanceLabel, parseYmd, RACE_DISTANCES, startOfWeek, toUnit, type Units, ymd, runDay } from '../lib/format';
 import { officialTimeS, predictRace, raceEvidence, vdotFromPerformance } from './fitness';
 import { effortOf } from './derive';
 
@@ -57,7 +57,7 @@ export function personalBests(activities: Activity[], races: Race[] = []): PB[] 
     let best: PB | undefined;
     for (const a of activities) {
       const x = timeAt(a, d.m, races);
-      if (x && (!best || x.timeS < best.timeS)) best = { label: d.label, m: d.m, timeS: x.timeS, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: x.kind === 'race', kind: x.kind, within: x.within, basis: x.basis };
+      if (x && (!best || x.timeS < best.timeS)) best = { label: d.label, m: d.m, timeS: x.timeS, date: runDay(a.startTime), activityId: a.id, fromRace: x.kind === 'race', kind: x.kind, within: x.within, basis: x.basis };
     }
     if (best) out.push(best);
   }
@@ -73,7 +73,7 @@ export function pbHistory(activities: Activity[], m: number, races: Race[] = [])
     const x = timeAt(a, m, races);
     if (x && x.timeS < best) {
       best = x.timeS;
-      out.push({ m, timeS: x.timeS, date: a.startTime.slice(0, 10), activityId: a.id, fromRace: x.kind === 'race', kind: x.kind, within: x.within, basis: x.basis });
+      out.push({ m, timeS: x.timeS, date: runDay(a.startTime), activityId: a.id, fromRace: x.kind === 'race', kind: x.kind, within: x.within, basis: x.basis });
     }
   }
   return out;
@@ -109,7 +109,7 @@ export function runningStory(activities: Activity[], today: Date): Story {
   const years = [...totalsBy(activities, yearKey).entries()].map(([year, v]) => ({ year, m: v.m, n: v.n })).sort((a, b) => a.year.localeCompare(b.year));
   const months = [...totalsBy(activities, monthKey).entries()].map(([month, v]) => ({ month, m: v.m }));
   const weeks = new Set(activities.map(weekKey));
-  const first = activities[0]?.startTime.slice(0, 10);
+  const first = (activities[0] ? runDay(activities[0].startTime) : undefined);
   let longestStreak = 0, streak = 0, current = 0, totalWeeks = 0;
   if (first) {
     for (let w = startOfWeek(parseYmd(first)); w <= today; w = addDays(w, 7)) {
@@ -152,7 +152,7 @@ export interface RaceReadiness {
  * race distance, then the most detailed. One choice for the race page and the race report.
  */
 export function raceRunFor(race: Pick<Race, 'date' | 'distanceM'>, activities: Activity[]): Activity | undefined {
-  return activities.filter((a) => a.startTime.slice(0, 10) === race.date)
+  return activities.filter((a) => runDay(a.startTime) === race.date)
     .sort((a, b) => Number(!!b.isRace) - Number(!!a.isRace) || Math.abs(a.distanceM - race.distanceM) - Math.abs(b.distanceM - race.distanceM) || (b.detailScore ?? 0) - (a.detailScore ?? 0))[0];
 }
 /** A race result as shown everywhere: the elapsed (official) time, or the moving time when that is all there is */

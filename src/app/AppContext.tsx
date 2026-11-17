@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import type { Activity, CoachMessage, Lap, LogEntry, StrengthLog, StreamPoint, Plan, PlanAdjust, PlannedSession, Profile, Race, SessionFeedback, SessionType, SourceKind } from '../lib/types';
 import { combineRuns, forStats, withDistance } from '../data/quality';
 import { inWeatherWindow, requestWeather } from '../data/weather';
-import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd } from '../lib/format';
+import { addDays, daysBetween, pace as fmtPace, parseYmd, startOfWeek, uid, ymd, runDay } from '../lib/format';
 import {
   type AppData, clearCoachInCloud, clearLegacy, clearUserCache, deleteAccount, deleteOtherPlans, deleteRaceInCloud, deleteRunExtrasInCloud, deleteRunsInCloud, emptyData, friendlyError,
   actPrint, type CachedData, deriveMissing, loadLegacy, loadUserCache, markPulled, newPushState, pullFromCloud, pushActivities, pushToCloud, saveUserCache,
@@ -344,7 +344,7 @@ function computeDerived(data: AppData): Derived {
   const readiness = asReadiness(readinessToday);
   const aRaceReadiness = aRace && fitness && stage.predictions ? raceReadiness(aRace, acts, fitness.vdot, today) : undefined;
   const tKey = ymd(today), wkKey = ymd(startOfWeek(today));
-  const thisWeek = acts.filter((a) => { const d = a.startTime.slice(0, 10); return d >= wkKey && d <= tKey; });
+  const thisWeek = acts.filter((a) => { const d = runDay(a.startTime); return d >= wkKey && d <= tKey; });
   const due = (plan?.sessions ?? []).filter((x) => x.type !== 'rest' && x.date <= tKey);
   const athlete: AthleteState = {
     runCount: acts.length,
@@ -372,7 +372,7 @@ function computeDerived(data: AppData): Derived {
     const base = TYPE_LABEL[typeOf(a)];
     if (s?.status === 'swapped') return `${base} · swapped from ${SESSION_SHORT[s.type] ?? s.title.toLowerCase()}`;
     // A run on a day whose planned session another run completed counts as extra ("Easy · extra")
-    const day = plannedOn.get(a.startTime.slice(0, 10));
+    const day = plannedOn.get(runDay(a.startTime));
     if (!s && day?.completedActivityId) return `${base} · extra`;
     return base;
   };

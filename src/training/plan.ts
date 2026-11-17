@@ -2,7 +2,7 @@
 import { QUALITY_TYPES, SESSION_SHORT, sessionOutcome } from './analysis';
 import { groupIndex, groupRuns, type RunGroup } from './sessions';
 import type { Activity, LogEntry, Phase, Plan, PlanChange, PlannedSession, Profile, SessionFeedback, SessionType } from '../lib/types';
-import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
+import { addDays, daysBetween, DAY_NAMES, longDate, pace, parseYmd, startOfWeek, uid, weekday, ymd, runDay } from '../lib/format';
 
 /** "Wednesday 28 October" for plan-change notes, so a note can never be mistaken for a different week. */
 const dayLabel = (d: string) => longDate(parseYmd(d));
@@ -73,7 +73,7 @@ export function adaptPlan(opts: {
   };
   const byDate = new Map<string, Activity[]>();
   for (const a of activities) {
-    const k = a.startTime.slice(0, 10);
+    const k = runDay(a.startTime);
     byDate.set(k, [...(byDate.get(k) ?? []), a]);
   }
   const used = new Set<string>();
@@ -157,11 +157,11 @@ export function adaptPlan(opts: {
     // A plan that starts part-way through this week has a target for the remaining days only, so runs from
     // before it started are left out: counting them made every mid-week plan look over target at once.
     const from = plan.startDate > wkStart ? plan.startDate : wkStart;
-    const doneKm = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= from && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
+    const doneKm = activities.filter((a) => { const d = runDay(a.startTime); return d >= from && d < t; }).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const todayDone = (byDate.get(t) ?? []).reduce((x, a) => x + a.distanceM, 0) / 1000;
     const rest = plan.sessions.filter((s) => s.date >= t && s.date <= wkEnd && s.status === 'planned' && !(s.date === t && todayDone > 0));
     const over = doneKm + todayDone + rest.reduce((x, s) => x + s.distanceM, 0) / 1000 - target;
-    const unplanned = activities.filter((a) => { const d = a.startTime.slice(0, 10); return d >= from && d < t && !plan.sessions.some((s) => s.date === d && s.type !== 'rest'); });
+    const unplanned = activities.filter((a) => { const d = runDay(a.startTime); return d >= from && d < t && !plan.sessions.some((s) => s.date === d && s.type !== 'rest'); });
     const id = `rebalance:${wkStart}:${unplanned.map((a) => a.id).join(',')}`;
     if (over > 3 && unplanned.length && !has(id)) {
       const easy = rest.filter((s) => s.type === 'easy' || s.type === 'recovery').sort((a, b) => b.distanceM - a.distanceM);
