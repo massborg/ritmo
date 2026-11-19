@@ -215,7 +215,7 @@ export default function StrengthPlayer() {
       <section className="card stack-sm strength-now" aria-label="Current exercise">
         <span className="caption">Exercise {idx + 1} of {items.length}</span>
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          {cur.ex.custom ? <OwnNote ex={cur.ex} /> : <ExerciseDemo pattern={cur.ex.pattern} name={cur.ex.name} muscles={cur.ex.muscles} weights={cur.ex.equipment === 'light' && !!cur.ex.tags?.includes('weights')} size={104} />}
+          {cur.ex.custom ? <OwnNote ex={cur.ex} /> : <ExerciseDemo id={cur.ex.id} pattern={cur.ex.pattern} name={cur.ex.name} muscles={cur.ex.muscles} weights={cur.ex.equipment === 'light' && !!cur.ex.tags?.includes('weights')} size={104} />}
           <div className="stack-sm" style={{ gap: 2 }}>
             <h2 className="title">{cur.ex.name}</h2>
             <p className="caption">{cur.ex.cues[0]}{cur.ex.perSide ? ' · each side' : ''}</p>

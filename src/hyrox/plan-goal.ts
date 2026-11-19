@@ -72,15 +72,18 @@ const BLOCK: Record<StationKey, [string, string]> = {
   skierg: ['250 m SkiErg', '25 band pull-downs'], row: ['250 m row', '20 burpees'], sled_push: ['20 m sled push', '20 m heavy lunges'], sled_pull: ['20 m sled pull', '20 heavy band rows'],
   burpee_broad_jump: ['20 m burpee broad jumps', '20 m burpee broad jumps'], farmers_carry: ['100 m farmers carry', '60 s heavy carry with what you have'], sandbag_lunges: ['50 m sandbag lunges', '50 m walking lunges'], wall_balls: ['25 wall balls', '25 thrusters'],
 };
+/** With no equipment at all (not even a band): bodyweight only */
+const BLOCK_BW: Record<StationKey, string> = { skierg: '20 burpees', row: '20 burpees', sled_push: '20 m walking lunges', sled_pull: '30 air squats', burpee_broad_jump: '20 m burpee broad jumps', farmers_carry: '60 s wall sit', sandbag_lunges: '50 m walking lunges', wall_balls: '30 air squats' };
 export const stationBlocks = (hardest: StationKey[], equipment: string[]): string[] =>
-  hardest.map((k) => BLOCK[k][!HAS[k] || equipment.includes(HAS[k]!) ? 0 : 1]);
+  hardest.map((k) => (!equipment.length ? BLOCK_BW[k] : BLOCK[k][!HAS[k] || equipment.includes(HAS[k]!) ? 0 : 1]));
 /** Strength exercises for the hardest stations, with what is available */
 const EX: Record<StationKey, [string, string]> = {
   skierg: ['band-pulldown', 'band-pulldown'], row: ['db-row', 'db-row'], sled_push: ['sled-push', 'split-squat'], sled_pull: ['sled-pull', 'db-row'], burpee_broad_jump: ['burpee-broad-jump', 'burpee-broad-jump'],
   farmers_carry: ['farmers-carry', 'plank'], sandbag_lunges: ['sandbag-lunge', 'db-lunge'], wall_balls: ['wall-ball', 'goblet-squat'],
 };
+const EX_BW: Record<StationKey, string> = { skierg: 'burpee-broad-jump', row: 'burpee-broad-jump', sled_push: 'split-squat', sled_pull: 'bw-squat', burpee_broad_jump: 'burpee-broad-jump', farmers_carry: 'wall-sit', sandbag_lunges: 'reverse-lunge', wall_balls: 'bw-squat' };
 export const stationExercises = (hardest: StationKey[], equipment: string[]): string[] =>
-  [...new Set(hardest.map((k) => EX[k][!HAS[k] || equipment.includes(HAS[k]!) ? 0 : 1]))];
+  [...new Set(hardest.map((k) => (!equipment.length ? EX_BW[k] : EX[k][!HAS[k] || equipment.includes(HAS[k]!) ? 0 : 1])))];
 
 /** Typical share of the station time each station takes, to turn a goal into a target per station */
 const STATION_SHARE: Record<StationKey, number> = { skierg: 0.125, sled_push: 0.09, sled_pull: 0.135, burpee_broad_jump: 0.14, row: 0.13, farmers_carry: 0.065, sandbag_lunges: 0.135, wall_balls: 0.18 };

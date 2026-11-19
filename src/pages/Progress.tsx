@@ -110,6 +110,8 @@ function RunCard({ a, press }: { a: Activity; press: Record<string, unknown> }) 
   const s = sessionOfRun(a.id);
   const pt = planTagText({ status: s?.status, today: d === t, typeLabel: TYPE_LABEL[typeOf(a)], plannedShort: s ? (SESSION_SHORT[s.type] ?? s.title.toLowerCase()) : undefined, group: groupOf(a.id), runId: a.id, swappedLabel: labelOf(a) });
   const tag = pt ? { kind: pt.kind === 'swapped' ? 'ok' : pt.kind, icon: pt.kind === 'swapped' ? <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" /> : pt.kind === 'ok' ? <Check size={14} strokeWidth={2.5} aria-hidden="true" /> : null, text: pt.text }
+    // A run that was a race (flagged, or named and run like one) is never just an "extra run"
+    : typeOf(a) === 'race' ? { kind: 'muted', icon: null, text: a.isRace ? 'Race' : 'Looks like a race · add it as a race result' }
     : plan && d >= plan.startDate ? { kind: 'muted', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' }
     : { kind: 'muted', icon: null, text: TYPE_LABEL[typeOf(a)] };
   const device = a.device ?? (isStravaRun(a) ? 'From Strava' : garminAttribution(a) ?? (a.source === 'ritmo_gps' ? 'Recorded in Ritmo' : a.source === 'manual' ? 'Logged by hand' : a.source === 'upload' ? 'File upload' : undefined));

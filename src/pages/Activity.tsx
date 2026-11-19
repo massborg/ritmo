@@ -161,6 +161,7 @@ export default function ActivityPage() {
   const planTag = session?.status === 'swapped' ? { cls: 'ok', icon: <ArrowLeftRight size={14} strokeWidth={2.5} aria-hidden="true" />, text: labelOf(a) }
     : session?.status === 'partial' ? { cls: 'muted', icon: null, text: `Part of your planned ${(SESSION_SHORT[session.type] ?? session.title).toLowerCase()} · ${TYPE_LABEL[typeOf(a)]}` }
     : session?.status === 'done' ? { cls: 'ok', icon: <Check size={14} strokeWidth={2.5} aria-hidden="true" />, text: `Matched plan · ${TYPE_LABEL[typeOf(a)]}` }
+    : typeOf(a) === 'race' ? { cls: 'muted', icon: null, text: a.isRace ? 'Race' : 'Looks like a race · add it as a race result below' }
     : plan && d0 >= plan.startDate ? { cls: 'extra', icon: <Plus size={14} strokeWidth={2.5} aria-hidden="true" />, text: 'Extra run · not on your plan' } : undefined;
   const nextSession = plan?.sessions.find((x) => x.date > ymd(today) && x.type !== 'rest' && x.status === 'planned');
   const weatherChip = a.weather ? `${Math.round(a.weather.t)}°C · wind ${Math.round(a.weather.ws)} km/h` : undefined;

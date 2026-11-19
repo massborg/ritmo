@@ -412,6 +412,8 @@ export interface Plan {
   raceId?: string;
   /** Built for HYROX (update 4, task 6), not for a running race */
   goal?: 'hyrox';
+  /** A second block after the first race (update 5): a "Both" athlete's other race, from this date */
+  next?: { startDate: string; goal?: 'hyrox'; raceId?: string };
   createdAt: string;
   startDate: string;
   endDate: string;
