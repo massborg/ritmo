@@ -109,10 +109,10 @@ const ymd = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(
   await page.getByText(/Exercise 1 of \d+/).waitFor();
   check(await page.locator('svg.exercise-demo').count() >= 1, 'a demo of the exercise');
   check(await page.locator('.set-row.now').count() === 1 && /Now/.test(await page.locator('.set-row.now').innerText()), 'the sets list shows the set to do now');
-  check(await page.locator('[role=progressbar][aria-label="Workout progress"]').count() === 1 && /\d+:\d\d\s*0 of \d+ sets/.test(await page.locator('.strength-head').innerText()), 'a header with elapsed time and progress');
+  check(await page.locator('[role=progressbar][aria-label="Workout progress"]').count() === 1 && /\d+:\d\d[\s\S]*0 of \d+ sets/.test(await page.locator('.strength-head').innerText()), 'a header with elapsed time and progress');
   await page.getByLabel('Set 1 reps').fill('13'); // update 4: reps are typed in the set table
   await page.getByRole('button', { name: 'Set done' }).click();
-  check(await page.locator('.rest-timer').isVisible() && /Rest\s*\d+ s/.test(await page.locator('.rest-timer').innerText()), 'a rest timer starts after the set');
+  check(await page.locator('.rest-timer').isVisible() && /Rest\s*\d+:\d\d/.test(await page.locator('.rest-timer').innerText()), 'a rest timer starts after the set');
   check(await page.locator('.set-row.done').count() === 1, 'the set is marked done');
   check(/Up next/.test(await page.locator('main').innerText()), 'an Up next list');
   await page.screenshot({ path: path.join(OUT, 'player.png'), fullPage: true });
