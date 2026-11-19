@@ -12,7 +12,7 @@ import {
 import { merge3 } from '../data/merge';
 import { generateSample, SAMPLE_PROFILE, SAMPLE_TODAY } from '../data/sample';
 import { detailScore, merge, mergeWithRemoved } from '../data/integration';
-import { type ParsedFile, parseFiles } from '../data/parsers';
+import { type CrossImport, type ParsedFile, parseFiles } from '../data/parsers';
 import { setClosing, supabase } from '../data/supabase';
 import { avatarDataUrl, avatarUrl, removeAvatar, smallAvatarPath, uploadAvatar, uploadSmallAvatar } from '../data/avatar';
 import { deletePost as hubDeletePost, forgetPhoto, setHubPhoto } from '../data/hub';
@@ -47,7 +47,7 @@ export interface ImportState {
   done: number;
   total: number;
   label: string;
-  result?: { found: number; added: number; replaced: number; duplicates: number; skipped: ParsedFile['skipped'] };
+  result?: { found: number; added: number; replaced: number; duplicates: number; skipped: ParsedFile['skipped']; /** Other sports saved as cross-training */ cross?: number };
   error?: string;
 }
 
@@ -201,7 +201,12 @@ interface Ctx extends Derived {
   swap: (sessionId: string, kind: SwapKind) => void;
   applyCoachProposal: (messageId: string) => void;
   setAdjust: (kind: PlanAdjust['kind'] | null, days?: number) => void;
-  addLog: (e: Omit<LogEntry, 'id' | 'at'>) => void;
+  /** Adds a log entry and returns its id. Cross-training and notes show a "saved" message with Undo. */
+  addLog: (e: Omit<LogEntry, 'id' | 'at'>) => string;
+  /** The entry just saved, for the "saved · Undo" message */
+  logSaved?: { id: string; text: string };
+  undoLog: () => void;
+  dismissLogSaved: () => void;
   removeLog: (id: string) => void;
   reportIllness: (days: number) => void;
   clearIllness: () => void;
@@ -279,6 +284,20 @@ function mergeDeviceChanges(cloud: AppData, device: CachedData): AppData {
     // with anything changed elsewhere since
     out.profile = merge3((JSON.parse(base.profileJson) as { profile?: Profile }).profile, device.profile, cloud.profile);
   } else if (!same(device.profile, cloud.profile) && device.profile.onboarded && !cloud.profile.onboarded) out.profile = device.profile;
+  return out;
+}
+
+/** Other sports from files or a sync, as cross-training log entries. One already in the log (the same import, or
+ *  the same sport starting in the same minute) is not added again. Effort starts at 4 (steady) and can be edited. */
+export function crossToLog(list: CrossImport[], log: LogEntry[]): LogEntry[] {
+  const have = new Set(log.filter((e) => e.kind === 'cross').flatMap((e) => [e.importId, e.startedAt ? `${e.startedAt.slice(0, 16)}|${e.sport}` : undefined]).filter(Boolean));
+  const out: LogEntry[] = [];
+  for (const c of list) {
+    const k = `${c.startTime.slice(0, 16)}|${c.sport}`;
+    if (have.has(c.importId) || have.has(k)) continue;
+    have.add(c.importId); have.add(k);
+    out.push({ id: uid(), kind: 'cross', date: runDay(c.startTime), at: new Date().toISOString(), sport: c.sport, minutes: Math.max(1, Math.round(c.durationS / 60)), durationS: c.durationS, distanceM: c.distanceM, avgHr: c.avgHr, startedAt: c.startTime, rpe: 4, importId: c.importId, text: c.name && !/^(activity|workout)$/i.test(c.name) ? c.name : undefined });
+  }
   return out;
 }
 
@@ -700,18 +719,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setImportState({ running: true, done: 0, total: files.length, label: 'Reading files' });
     try {
       const parsed = await parseFiles(files, (done, total, label) => setImportState((s) => ({ ...s, done, total, label })));
+      // Rides, swims, walks and gym sessions in the files become cross-training (never running distance)
+      const newCross = crossToLog(parsed.cross, dataRef.current.profile.log ?? []);
       if (!parsed.activities.length) {
-        setImportState({ running: false, done: 0, total: 0, label: '', error: parsed.skipped.length ? `No runs were found in ${parsed.skipped.length === 1 ? 'that file' : `those ${parsed.skipped.length} files`}. Check that they are FIT, GPX or TCX running files, or a Garmin export ZIP.` : 'No files were chosen.', result: { found: 0, added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped } });
+        if (newCross.length || parsed.cross.length) {
+          setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), ...crossToLog(parsed.cross, d.profile.log ?? [])] } }));
+          setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { found: 0, added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped, cross: newCross.length } });
+          return;
+        }
+        setImportState({ running: false, done: 0, total: 0, label: '', error: parsed.skipped.length ? `No runs were found in ${parsed.skipped.length === 1 ? 'that file' : `those ${parsed.skipped.length} files`}. Check that they are FIT, GPX or TCX files, or a Garmin export ZIP.` : 'No files were chosen.', result: { found: 0, added: 0, replaced: 0, duplicates: 0, skipped: parsed.skipped } });
         return;
       }
       setData((d) => {
         const base = d.mode === 'sample' ? { ...emptyData(), mode: 'real' as const, profile: { ...emptyData().profile, ...pickPrefs(d.profile) } } : d;
         // A file chosen again for a run that was deleted brings that run back
         const m = mergeWithRemoved(base.activities, base.removed, parsed.activities, true);
-        setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { found: parsed.activities.length, added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped } });
+        setImportState({ running: false, done: 1, total: 1, label: 'Done', result: { found: parsed.activities.length, added: m.added, replaced: m.replaced, duplicates: m.duplicates, skipped: parsed.skipped, cross: newCross.length || undefined } });
         const sources = base.sources.filter((s) => s.kind !== 'upload' && s.kind !== 'sample');
         sources.push({ kind: 'upload', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.source === 'upload').length, lastError: parsed.skipped.some((x) => x.category === 'unreadable') ? `${parsed.skipped.filter((x) => x.category === 'unreadable').length} file(s) could not be read` : undefined });
-        return { ...base, mode: 'real', activities: m.activities, removed: m.removed, sources };
+        return { ...base, mode: 'real', activities: m.activities, removed: m.removed, sources, profile: { ...base.profile, log: [...(base.profile.log ?? []), ...crossToLog(parsed.cross, base.profile.log ?? [])] } };
       });
     } catch (e) {
       setImportState({ running: false, done: 0, total: 0, label: '', error: `The upload failed: ${friendlyError(e)}` });
@@ -1150,7 +1176,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const from = ymd(derived.today);
     updateProfile({ adjust: { kind, from, until: ymd(addDays(derived.today, days - 1)), at: new Date().toISOString() } });
   };
-  const addLog = (e: Omit<LogEntry, 'id' | 'at'>) => setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), { ...e, id: uid(), at: new Date().toISOString() }] } }));
+  const [logSaved, setLogSaved] = useState<{ id: string; text: string }>();
+  const logSavedTimer = useRef<number | undefined>(undefined);
+  const addLog = (e: Omit<LogEntry, 'id' | 'at'>): string => {
+    const id = uid();
+    setData((d) => ({ ...d, profile: { ...d.profile, log: [...(d.profile.log ?? []), { ...e, id, at: new Date().toISOString() }] } }));
+    // Saving used to give no sign at all, so people thought it had not worked
+    if (e.kind === 'cross' || e.kind === 'note') {
+      const mins = e.minutes ?? (e.durationS ? Math.max(1, Math.round(e.durationS / 60)) : undefined);
+      setLogSaved({ id, text: e.kind === 'note' ? 'Note saved' : `${e.sport ?? 'Cross-training'} saved${mins ? ` · ${mins} min` : ''}` });
+      window.clearTimeout(logSavedTimer.current);
+      logSavedTimer.current = window.setTimeout(() => setLogSaved(undefined), 8000);
+    }
+    return id;
+  };
+  const dismissLogSaved = () => { window.clearTimeout(logSavedTimer.current); setLogSaved(undefined); };
+  const undoLog = () => { if (logSaved) setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).filter((x) => x.id !== logSaved.id) } })); dismissLogSaved(); };
   const updateLog = (id: string, patch: Partial<LogEntry>) => setData((d) => ({ ...d, profile: { ...d.profile, log: (d.profile.log ?? []).map((x) => (x.id === id ? { ...x, ...patch, strength: patch.strength ?? x.strength, hyrox: patch.hyrox ?? x.hyrox } : x)) } }));
   /** A strength workout recorded in Ritmo or logged by hand (update 3, §5): saved with its sets, and the reps and load
    *  of each exercise remembered for next time. Returns the log entry's id. */
@@ -1432,7 +1473,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (askStrava || !last || Date.now() - new Date(last).getTime() > 3600e3) {
         try { await requestStravaSync(); } catch (e) { if (askStrava) throw e; }
       }
-      const { runs, deleted, clear } = await pullStravaInbox();
+      const { runs, cross, deleted, clear } = await pullStravaInbox();
       // Saved to the account before the inbox is cleared, so a run can never be lost in between
       // Runs the runner deleted in Ritmo are matched too, so a sync never brings them back
       if (runs.length) { const m = mergeWithRemoved(dataRef.current.activities, dataRef.current.removed, runs); await pushActivities(userId, [...m.activities, ...m.removed], pushState.current); }
@@ -1445,7 +1486,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const m = runs.length ? mergeWithRemoved(kept, keptRemoved, runs) : { activities: kept, removed: keptRemoved };
         const sources = d.sources.filter((x) => x.kind !== 'strava');
         sources.push({ kind: 'strava', connected: true, lastSyncAt: new Date().toISOString(), activityCount: m.activities.filter((a) => a.sourceIds.strava).length, lastError: undefined });
-        return { ...d, activities: m.activities, removed: m.removed, sources };
+        // Rides, swims and gym sessions from Strava are cross-training; one deleted in Strava goes from the log too
+        const log = (d.profile.log ?? []).filter((e) => !(e.importId?.startsWith('strava-') && gone.has(e.importId.slice(7))));
+        const added = crossToLog(cross, log);
+        const profile = added.length || log.length !== (d.profile.log ?? []).length ? { ...d.profile, log: [...log, ...added] } : d.profile;
+        return { ...d, activities: m.activities, removed: m.removed, sources, profile };
       });
       await clear();
     } catch (e) {
@@ -1571,7 +1616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     injuryCheckIn, healInjury, reopenInjury, markSegment,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog, logSaved, undoLog, dismissLogSaved,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

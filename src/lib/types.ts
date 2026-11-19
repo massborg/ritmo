@@ -281,6 +281,9 @@ export interface PlanAdjust { kind: 'easier' | 'nopace' | 'travel'; from: string
 /** Things logged that are not runs */
 export interface LogEntry {
   id: string; date: string; kind: 'cross' | 'note' | 'strength' | 'hyrox'; sport?: string; minutes?: number; rpe?: number; text?: string; at: string;
+  /** Another sport recorded live or imported from a watch (update 5, U1): exact time, distance when there is one,
+   *  average heart rate, when it started, and where it came from. `importId` stops the same file being added twice. */
+  durationS?: number; distanceM?: number; avgHr?: number; startedAt?: string; recorded?: boolean; importId?: string;
   /** Strength (update 3, §5): what was done, recorded in Ritmo or logged by hand */
   strength?: StrengthLog;
   /** A HYROX simulation, station practice or race (update 4, task 5) */

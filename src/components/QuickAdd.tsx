@@ -5,6 +5,7 @@ import { Bandage, Bike, Dumbbell, Flag, Footprints, HeartPulse, StickyNote } fro
 import { BodyCheckinSheet } from './BodyCheckin';
 import { useApp } from '../app/AppContext';
 import { Chips, DateField, Sheet, Stepper } from './inputs';
+import { CrossFields } from './LogBits';
 import { StatusLine } from './ui';
 import { LogRunSheet } from './LogRun';
 import { longDate, parseYmd, ymd } from '../lib/format';
@@ -56,9 +57,7 @@ function LogOther({ kind, onClose }: { kind: 'cross' | 'note'; onClose: () => vo
       <div className="stack">
         <DateField id="lo-date" label="Date" value={date} onChange={setDate} />
         {kind === 'cross' && <>
-          <Chips label="What" value={sport} onChange={setSport} options={['Bike', 'Swim', 'Gym', 'Elliptical', 'Walk', 'Other'].map((x) => ({ value: x, label: x }))} />
-          <Stepper id="lo-min" label="Minutes" value={minutes} onChange={setMinutes} min={5} max={600} step={5} unit="min" />
-          <Chips label="How hard (1 easy, 10 all out)" value={rpe} onChange={setRpe} options={[2, 4, 6, 8, 10].map((x) => ({ value: x, label: String(x) }))} />
+          <CrossFields idPrefix="lo" sport={sport} setSport={setSport} minutes={minutes} setMinutes={setMinutes} rpe={rpe} setRpe={setRpe} />
           <p className="caption">Cross-training counts toward your fitness and fatigue, scaled by how hard it was and how much it carries over to running. It does not count as running distance.</p>
         </>}
         <div className="field"><label htmlFor="lo-text">{kind === 'note' ? 'Note' : 'Note (optional)'}</label><textarea id="lo-text" className="input" rows={3} value={text} onChange={(e) => setText(e.target.value)} /></div>

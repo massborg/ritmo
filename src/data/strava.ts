@@ -5,6 +5,7 @@
 // AI coach and Body chat are told.
 import type { Activity, Lap, StreamPoint } from '../lib/types';
 import { detailScore } from './integration';
+import { crossSport, type CrossImport } from './parsers';
 import { supabase as client } from './supabase';
 
 const supabase = () => {
@@ -38,6 +39,15 @@ type Stream<T> = { data?: T[] } | undefined;
 export interface StravaStreams { time?: Stream<number>; distance?: Stream<number>; latlng?: Stream<[number, number]>; heartrate?: Stream<number>; altitude?: Stream<number>; cadence?: Stream<number> }
 
 export const isStravaSportRun = (a: StravaActivity) => /^(Run|TrailRun|VirtualRun)$/.test(a.sport_type ?? a.type ?? '');
+
+/** A Strava activity that is not a run (a ride, a swim, a walk, a gym session), kept as cross-training */
+export function stravaToCross(a: StravaActivity): CrossImport | null {
+  if (a.id == null || isStravaSportRun(a) || !a.start_date) return null;
+  const s = a.moving_time ?? a.elapsed_time ?? 0;
+  if (s < 60) return null;
+  const type = `${a.trainer ? 'indoor ' : ''}${a.sport_type ?? a.type ?? ''}`.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return { importId: `strava-${a.id}`, sport: crossSport(type), startTime: new Date(a.start_date).toISOString(), durationS: Math.round(s), distanceM: a.distance ? Math.round(a.distance) : undefined, avgHr: a.average_heartrate ? Math.round(a.average_heartrate) : undefined, name: a.name?.trim() || undefined };
+}
 
 /** A Ritmo run from a Strava activity and its streams; null for anything that is not a run. */
 export function stravaToActivity(a: StravaActivity, s: StravaStreams = {}): Activity | null {
@@ -120,17 +130,18 @@ export async function stravaConnected(): Promise<boolean> {
 }
 
 /** Runs (and deletions) Strava has sent since the last sync, plus a function to clear them once applied. */
-export async function pullStravaInbox(): Promise<{ runs: Activity[]; deleted: string[]; clear: () => Promise<void> }> {
+export async function pullStravaInbox(): Promise<{ runs: Activity[]; cross: CrossImport[]; deleted: string[]; clear: () => Promise<void> }> {
   const { data, error } = await supabase().from('strava_inbox').select('id,activity_id,payload').order('received_at').limit(500);
   if (error) throw new Error(error.message);
   const rows = data ?? [];
-  const runs: Activity[] = [], deleted: string[] = [];
+  const runs: Activity[] = [], deleted: string[] = [], cross: CrossImport[] = [];
   for (const r of rows) {
     const p = r.payload as { deleted?: boolean; activity?: StravaActivity; streams?: StravaStreams };
     if (p?.deleted) { deleted.push(String(r.activity_id)); continue; }
     const a = p?.activity ? stravaToActivity(p.activity, p.streams) : null;
     if (a) runs.push(a);
+    else { const c = p?.activity ? stravaToCross(p.activity) : null; if (c) cross.push(c); }
   }
   const ids = rows.map((r) => r.id as number);
-  return { runs, deleted, clear: async () => { if (ids.length) await supabase().from('strava_inbox').delete().in('id', ids); } };
+  return { runs, cross, deleted, clear: async () => { if (ids.length) await supabase().from('strava_inbox').delete().in('id', ids); } };
 }

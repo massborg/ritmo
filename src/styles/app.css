@@ -1396,3 +1396,27 @@ div.hx-row { cursor: default; }
 
 /* QA sweep: a chip that cannot be chosen (the limit is reached) looks it */
 .chip:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- Update 5, U1: every kind of activity in one list, and the other-sport recorder ---- */
+.feed-list { padding: 0 12px; }
+.feed-list > li + li { border-top: 1px solid var(--line); }
+.feed-row { gap: 12px; color: inherit; }
+.feed-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-mark { width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; flex: none; font: 800 13px/1 var(--font-display); background: var(--surface-sunken); color: var(--ink); }
+.feed-mark.feed-run { background: var(--brand); color: var(--on-brand); }
+.feed-mark.feed-strength { background: var(--accent); color: #171412; }
+.feed-mark.feed-hyrox { background: var(--graphite); color: #fff; }
+.feed-mark.feed-cross { background: #dfeadf; color: #1d3b23; }
+.feed-tag { flex: none; border-radius: var(--r-pill); padding: 2px 8px; font: 700 11px/16px var(--font-body); background: var(--surface-sunken); color: var(--ink-soft, var(--ink)); white-space: nowrap; }
+.record-icon.other { background: #dfeadf; color: #1d3b23; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+.stat-row > div { min-width: 72px; }
+.stat-row dd { margin: 0; }
+.other-live { background: var(--graphite); color: #fff; border-radius: var(--r-card); padding: 20px 16px; text-align: center; }
+.other-live.idle { opacity: 0.92; }
+.other-eyebrow { font: 700 12px/16px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+.other-clock { font: 500 56px/1.05 var(--font-mono, monospace); letter-spacing: -0.02em; margin: 0; font-variant-numeric: tabular-nums; }
+.other-stats { display: flex; justify-content: center; gap: 32px; margin: 12px 0 0; }
+.other-stats dt { font: 500 12px/16px var(--font-body); opacity: 0.7; }
+.other-stats dd { margin: 0; font: 600 17px/24px var(--font-mono, monospace); }
+.other-finish { min-height: 56px; font-size: 17px; }

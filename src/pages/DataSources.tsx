@@ -226,7 +226,7 @@ function ImportReport({ result: r }: { result: ImportResult }) {
   const download = () => {
     const lines = [
       `Ritmo import log, ${new Date().toISOString()}`,
-      `Runs found: ${r.found}`, `New runs saved: ${r.added}`, `Runs upgraded with more detail: ${r.replaced}`, `Duplicates merged: ${r.duplicates}`,
+      `Runs found: ${r.found}`, `Other sports saved as cross-training: ${r.cross ?? 0}`, `New runs saved: ${r.added}`, `Runs upgraded with more detail: ${r.replaced}`, `Duplicates merged: ${r.duplicates}`,
       `Files skipped: ${r.skipped.length}`, ...order.filter((c) => byCat.get(c)).map((c) => `  ${SKIP_LABEL[c]}: ${byCat.get(c)}`), '',
       'Skipped files:', ...r.skipped.map((x) => `${x.category}\t${x.file}\t${x.reason}`),
     ];
@@ -237,7 +237,7 @@ function ImportReport({ result: r }: { result: ImportResult }) {
   };
   return (
     <div className="card stack-sm">
-      <StatusLine kind={unreadable ? 'warning' : 'success'}>Imported {fmt(r.added)} new run{r.added === 1 ? '' : 's'}{r.replaced ? `, upgraded ${fmt(r.replaced)} with more detail` : ''}.</StatusLine>
+      <StatusLine kind={unreadable ? 'warning' : 'success'}>Imported {fmt(r.added)} new run{r.added === 1 ? '' : 's'}{r.replaced ? `, upgraded ${fmt(r.replaced)} with more detail` : ''}{r.cross ? `, and ${fmt(r.cross)} other session${r.cross === 1 ? '' : 's'} (rides, swims, gym) as cross-training` : ''}.</StatusLine>
       <dl className="report-grid">
         <div><dt className="caption">Runs found</dt><dd className="stat">{fmt(r.found)}</dd></div>
         <div><dt className="caption">Saved as new</dt><dd className="stat">{fmt(r.added)}</dd></div>

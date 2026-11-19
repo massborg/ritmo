@@ -15,6 +15,8 @@ import { LogRunSheet } from '../components/LogRun';
 import { GearQuestion } from '../components/GearQuestion';
 import { LogSessionSheet } from '../components/LogSession';
 import { MonthCalendar, Sheet } from '../components/inputs';
+import { FeedRow } from '../components/LogBits';
+import { dayLog } from '../training/feed';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd, runDay } from '../lib/format';
@@ -225,6 +227,8 @@ export default function Today() {
   const runsHere = data.activities.filter((a) => runDay(a.startTime) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
+  // A planned strength workout already shows as done on its session, so it is not listed twice
+  const logHere = dayLog(data.profile, selected).filter((it) => !(it.type === 'strength' && (data.profile.log ?? []).find((e) => e.id === it.id)?.strength?.sessionId));
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
   const doneM = athlete.weekM;
   // The "This week" tile is always the current week, whichever week is selected above: done and planned together
@@ -338,7 +342,7 @@ export default function Today() {
       {hasFlag('body') && isToday && <CareCard />}
       {hurts && <BodyCheckinSheet onClose={() => { setHurts(false); setFixing(false); }} editing={fixing && !!injuryNow} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
-        <MonthCalendar value={selected} marks={new Set(data.activities.map((a) => runDay(a.startTime)))} onChange={(d) => { setSelected(d); setPicking(false); }} />
+        <MonthCalendar value={selected} marks={new Set([...data.activities.map((a) => runDay(a.startTime)), ...(data.profile.log ?? []).filter((e) => e.kind !== 'note').map((e) => e.date)])} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
       </Sheet>
 
@@ -434,6 +438,14 @@ export default function Today() {
         <section className="card stack-sm" aria-labelledby="ran-here">
           <h2 id="ran-here" className="label">{isToday ? 'Your runs today' : `Your runs on ${longDate(parseYmd(selected))}`}: {dist(runsHere.reduce((x, a) => x + a.distanceM, 0), U)}</h2>
           <DayRuns runs={runsHere} unplanned={!s || s.type === 'rest'} session={s} />
+        </section>
+      )}
+
+      {/* Everything else done that day: other sports, strength, HYROX and notes (they used to be saved and shown nowhere) */}
+      {logHere.length > 0 && (
+        <section className="stack-sm" aria-labelledby="log-here">
+          <h2 id="log-here" className="record-eyebrow dim">{isToday ? 'Also today' : 'Also that day'}</h2>
+          <ul className="list card feed-list">{logHere.map((it) => <FeedRow key={it.id} item={it} when={it.type === 'cross' && it.load ? `adds load ${it.load} · not running km` : undefined} />)}</ul>
         </section>
       )}
 

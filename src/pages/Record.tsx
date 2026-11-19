@@ -2,7 +2,7 @@
 // and Details; then a free run, your own strength workout, or log something already done.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Dumbbell, Play, Plus } from 'lucide-react';
+import { Bike, ChevronRight, Dumbbell, Play, Plus } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { QuickAdd } from '../components/QuickAdd';
@@ -39,7 +39,7 @@ export default function Record() {
   };
   return (
     <div className="stack-lg record-page" style={{ maxWidth: 720 }}>
-      <AppHeader title="Activity" right={<Link to="/you" className="btn btn-small btn-outline">History</Link>} />
+      <AppHeader title="Activity" right={<Link to="/history" className="btn btn-small btn-outline">History</Link>} />
       {s ? (
         <section className="record-today" aria-label="Today's planned session">
           <p className="record-eyebrow">Ritmo plan · today</p>
@@ -61,6 +61,7 @@ export default function Record() {
         <Card to="/run?free=1" tone="brand" icon={<Play size={20} fill="currentColor" />} title="Free run" sub="Just run, or set a distance, time or pace." />
         <Card to="/strength" tone="accent" icon={<Dumbbell size={20} strokeWidth={2.2} />} title="Strength" sub="Pick your exercises or start a saved workout." isNew />
         <Card to="/hyrox" tone="dark" icon={<span className="hx-mark">HX</span>} title="HYROX" sub="Full or half simulation, custom stations, or race day." isNew />
+        <Card to="/other" tone="other" icon={<Bike size={20} strokeWidth={2.2} />} title="Other sport" sub="Bike, swim, elliptical, row, walk or a class: record it or log it." isNew />
         <Card onClick={() => setAdding(true)} tone="plain" icon={<Plus size={20} strokeWidth={2.4} />} title="Log something done" sub="Add a run, strength or cross-training after the fact." />
       </section>
       <QuickAdd open={adding} onClose={() => setAdding(false)} />
