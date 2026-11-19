@@ -62,7 +62,7 @@ export default function StrengthFree() {
     const planned = plan?.sessions.find((s) => s.date === date && s.strengthPlan && !(data.profile.log ?? []).some((e) => e.kind === 'strength' && e.strength?.sessionId === s.id));
     saveStrength({ date, minutes: minutes ?? 30, rpe, strength: { title: name.trim() || 'Strength session', source: 'manual', sessionId: planned?.id, exercises: valid.map((x) => {
       const ex = exById.get(x.exerciseId)!;
-      return { id: ex.id, name: ex.name, planned: x.sets, sets: Array.from({ length: x.sets }, () => ({ reps: x.reps, seconds: x.seconds, load: x.weightKg || undefined, loadType: x.weightKg ? (ex.equipment === 'none' ? 'bodyweight_plus' as const : 'added' as const) : defaultLoadType(ex), perSide: ex.perSide || undefined })) };
+      return { id: ex.id, name: ex.name, planned: x.sets, sets: Array.from({ length: x.sets }, () => ({ reps: x.reps, unit: ex.unit, seconds: x.seconds, load: x.weightKg || undefined, loadType: x.weightKg ? (ex.equipment === 'none' ? 'bodyweight_plus' as const : 'added' as const) : defaultLoadType(ex), perSide: ex.perSide || undefined })) };
     }) } });
     nav('/');
   };
@@ -111,7 +111,7 @@ export default function StrengthFree() {
               return (
                 <li key={`${x.exerciseId}-${i}`} className="build-row">
                   <div className="row-between" style={{ gap: 8 }}>
-                    <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{i + 1}. {ex.name}</span>{(ex.perSide || note) && <span className="caption">{[ex.perSide ? 'each side' : '', note ?? ''].filter(Boolean).join(' · ')}</span>}</span>
+                    <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{i + 1}. {ex.name}{ex.custom && <span className="mine-tag">Mine</span>}</span>{(ex.perSide || note) && <span className="caption">{[ex.perSide ? 'each side' : '', note ?? ''].filter(Boolean).join(' · ')}</span>}</span>
                     <span className="row" style={{ gap: 0 }}>
                       <button type="button" className="icon-btn" aria-label={`Move ${ex.name} up`} disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={18} /></button>
                       <button type="button" className="icon-btn" aria-label={`Move ${ex.name} down`} disabled={i === list.length - 1} onClick={() => move(i, 1)}><ArrowDown size={18} /></button>
@@ -123,7 +123,7 @@ export default function StrengthFree() {
                     <span className="build-x" aria-hidden="true">×</span>
                     {x.seconds != null
                       ? <label><span className="caption">Seconds</span><NumInput label={`Seconds of ${ex.name}`} value={x.seconds} max={600} onChange={(v) => patch(i, { seconds: v ?? 0 })} /></label>
-                      : <label><span className="caption">Reps</span><NumInput label={`Reps of ${ex.name}`} value={x.reps} max={100} onChange={(v) => patch(i, { reps: v })} /></label>}
+                      : <label><span className="caption">{ex.unit === 'm' ? 'Metres' : 'Reps'}</span><NumInput label={`${ex.unit === 'm' ? 'Metres' : 'Reps'} of ${ex.name}`} value={x.reps} max={ex.unit === 'm' ? 2000 : 100} onChange={(v) => patch(i, { reps: v })} /></label>}
                     <span className="build-x" aria-hidden="true">×</span>
                     <label><span className="caption">{unit}</span><NumInput decimal label={`Weight for ${ex.name} in ${unit}`} placeholder={ex.equipment === 'none' ? 'none' : '0'} value={x.weightKg ? toUnit(x.weightKg, unit) : undefined} onChange={(v) => patch(i, { weightKg: v ? fromUnit(v, unit) : undefined })} /></label>
                   </div>

@@ -14,6 +14,37 @@ export interface Exercise {
   load?: string; cues: string[]; tags: ExTag[];
   /** Extra filter groups in the free-strength builder (update 4): upper body, HYROX stations */
   groups?: ('upper' | 'hyrox')[];
+  /** The athlete's own exercise (update 5, U2): tagged MINE, never put into a generated plan session */
+  custom?: boolean; archived?: boolean;
+  /** 'm': the amount is a distance in metres (a carry, a sled), kept in the reps field */
+  unit?: 'm';
+  /** How it is loaded, when the athlete said so: overrides the guess from the equipment */
+  loadType?: 'added' | 'bodyweight' | 'band';
+  /** The athlete's own note or a video link */
+  note?: string;
+}
+
+/** An exercise the athlete added themselves, as stored in profile.strength.customExercises */
+export type CustomGroup = 'legs' | 'hamstrings' | 'hips' | 'core' | 'upper' | 'plyo' | 'hyrox';
+export interface CustomExercise {
+  id: string; name: string; group: CustomGroup; measure: 'reps' | 'seconds' | 'distance'; loadType: 'added' | 'bodyweight' | 'band';
+  equipment: Equipment; perSide?: boolean; sets: number; amount: number; note?: string; archived?: boolean; createdAt: string;
+}
+export const CUSTOM_GROUP_LABEL: Record<CustomGroup, string> = { legs: 'Legs', hamstrings: 'Hamstrings', hips: 'Hips', core: 'Core', upper: 'Upper', plyo: 'Plyo', hyrox: 'HYROX' };
+const CUSTOM_SHAPE: Record<CustomGroup, { pattern: Pattern; muscles: string[] }> = {
+  legs: { pattern: 'squat', muscles: ['quads', 'glutes'] }, hamstrings: { pattern: 'hinge', muscles: ['hamstrings'] }, hips: { pattern: 'bridge', muscles: ['hips', 'glutes'] },
+  core: { pattern: 'plank', muscles: ['core'] }, upper: { pattern: 'mobility', muscles: [] }, plyo: { pattern: 'hop', muscles: ['calves'] }, hyrox: { pattern: 'mobility', muscles: [] },
+};
+/** A custom exercise in the library's own shape, so the builder, the recorder, history and progression treat it
+ *  like any other */
+export function toExercise(c: CustomExercise): Exercise {
+  const shape = CUSTOM_SHAPE[c.group] ?? CUSTOM_SHAPE.legs;
+  return {
+    id: c.id, name: c.name, pattern: shape.pattern, muscles: shape.muscles, equipment: c.equipment, sets: c.sets,
+    ...(c.measure === 'seconds' ? { seconds: c.amount } : { reps: c.amount }), unit: c.measure === 'distance' ? 'm' : undefined,
+    perSide: c.perSide || undefined, cues: c.note && !/^https?:\/\//i.test(c.note) ? [c.note] : [], tags: c.group === 'plyo' ? ['jumping'] : [],
+    groups: c.group === 'upper' ? ['upper'] : c.group === 'hyrox' ? ['hyrox'] : undefined, custom: true, archived: c.archived || undefined, loadType: c.loadType, note: c.note,
+  };
 }
 
 export const EXERCISES: Exercise[] = [
@@ -78,6 +109,19 @@ export const EXERCISES: Exercise[] = [
   { id: 'sled-pull', name: 'Sled pull', pattern: 'hinge', muscles: ['back', 'hamstrings', 'arms'], equipment: 'gym', sets: 4, seconds: 30, load: 'a loaded sled and rope', cues: ['Sit back', 'Hand over hand'], tags: ['gym', 'weights'], groups: ['hyrox'] },
 ];
 export const exById = new Map(EXERCISES.map((e) => [e.id, e]));
+
+let customList: Exercise[] = [];
+/** The athlete's own exercises join the library (called whenever the profile changes). Archived ones stay known,
+ *  so old sessions still show their names, but are not offered. */
+export function registerCustom(list: CustomExercise[] | undefined): void {
+  for (const e of customList) exById.delete(e.id);
+  customList = (list ?? []).filter((c) => c.id.startsWith('custom:')).map(toExercise);
+  for (const e of customList) exById.set(e.id, e);
+}
+/** The whole library to choose from: Ritmo's exercises and the athlete's own (not the archived ones) */
+export const library = (): Exercise[] => [...EXERCISES, ...customList.filter((e) => !e.archived)];
+/** A name is taken when a library exercise or another of the athlete's own (archived or not) has it */
+export const nameTaken = (name: string, exceptId?: string): boolean => { const n = name.trim().toLowerCase(); return !!n && [...EXERCISES, ...customList].some((e) => e.id !== exceptId && e.name.toLowerCase() === n); };
 
 /** Why an alternative might suit someone better */
 export function altReason(alt: Exercise, from: Exercise): string {

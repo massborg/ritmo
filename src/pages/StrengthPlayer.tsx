@@ -12,7 +12,7 @@ import { AppHeader } from '../components/app';
 import { Sheet } from '../components/inputs';
 import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
-import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout } from '../components/StrengthBits';
+import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout, OwnNote } from '../components/StrengthBits';
 import { exById, noteInUnit, resolveStrength, type Exercise, type Routine } from '../training/strength';
 import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
@@ -79,6 +79,7 @@ export default function StrengthPlayer() {
     const was = lastSets(log, x.id)?.sets[0];
     if (was?.loadType === 'band') return { loadType: 'band', band: was.band ?? 'medium' };
     const loaded = rows.some((r) => r.load);
+    if (x.ex.loadType === 'band') return { loadType: 'band' };
     return { loadType: x.ex.equipment === 'none' ? (loaded ? 'bodyweight_plus' : 'bodyweight') : loaded || defaultLoadType(x.ex) === 'added' ? 'added' : 'bodyweight' };
   };
   const [items, setItems] = useState<Item[]>(() => kept?.items ?? workout?.items ?? []);
@@ -124,7 +125,7 @@ export default function StrengthPlayer() {
   // What gets saved for a set: its load only when the exercise is loaded with weight
   const asLog = (x: SetRow, m: Meta, ex: Exercise): SetLog => {
     const kg = m.loadType === 'added' || m.loadType === 'bodyweight_plus';
-    return { reps: x.reps, seconds: x.seconds, load: kg && x.load ? x.load : undefined, loadType: kg && !x.load && ex.equipment === 'none' ? 'bodyweight' : m.loadType, band: m.loadType === 'band' ? m.band ?? 'medium' : undefined, perSide: ex.perSide || undefined, effort: x.effort };
+    return { reps: x.reps, unit: ex.unit, seconds: x.seconds, load: kg && x.load ? x.load : undefined, loadType: kg && !x.load && ex.equipment === 'none' ? 'bodyweight' : m.loadType, band: m.loadType === 'band' ? m.band ?? 'medium' : undefined, perSide: ex.perSide || undefined, effort: x.effort };
   };
   const setRow = (j: number, p: Partial<SetRow>) => setSets((all) => all.map((s, i) => (i !== idx ? s : s.map((x, k) => (k === j ? { ...x, ...p } : x)))));
   // A change to the set you're on carries to the sets still to come
@@ -214,7 +215,7 @@ export default function StrengthPlayer() {
       <section className="card stack-sm strength-now" aria-label="Current exercise">
         <span className="caption">Exercise {idx + 1} of {items.length}</span>
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          <ExerciseDemo pattern={cur.ex.pattern} name={cur.ex.name} muscles={cur.ex.muscles} weights={cur.ex.equipment === 'light' && !!cur.ex.tags?.includes('weights')} size={104} />
+          {cur.ex.custom ? <OwnNote ex={cur.ex} /> : <ExerciseDemo pattern={cur.ex.pattern} name={cur.ex.name} muscles={cur.ex.muscles} weights={cur.ex.equipment === 'light' && !!cur.ex.tags?.includes('weights')} size={104} />}
           <div className="stack-sm" style={{ gap: 2 }}>
             <h2 className="title">{cur.ex.name}</h2>
             <p className="caption">{cur.ex.cues[0]}{cur.ex.perSide ? ' · each side' : ''}</p>
@@ -234,7 +235,7 @@ export default function StrengthPlayer() {
           </div>
         )}
         <div className={`set-table${hasKg ? '' : ' no-kg'}`} role="table" aria-label="Sets">
-          <div className="set-head" role="row"><span role="columnheader">Set</span><span role="columnheader">Last time</span>{hasKg && <span role="columnheader">{unit}</span>}<span role="columnheader">{timed ? 'Sec' : 'Reps'}</span><span role="columnheader"><span className="sr-only">Done</span></span></div>
+          <div className="set-head" role="row"><span role="columnheader">Set</span><span role="columnheader">Last time</span>{hasKg && <span role="columnheader">{unit}</span>}<span role="columnheader">{timed ? 'Sec' : cur.ex.unit === 'm' ? 'Metres' : 'Reps'}</span><span role="columnheader"><span className="sr-only">Done</span></span></div>
           {curSets.map((x, j) => {
             const l = was?.sets[j];
             return (

@@ -1,16 +1,19 @@
 // Profile › Strength (update 3, §4–6, §8): the equipment you have, "Never give me…" (exercises or whole categories),
 // the swaps you chose with "Always use this instead", the rest between sets, and posting strength to the Hub.
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
-import { EQUIPMENT_LABEL, EXERCISES, exById, NEVER_CATEGORIES, type Equipment } from '../training/strength';
+import { CUSTOM_GROUP_LABEL, EQUIPMENT_LABEL, EXERCISES, exById, NEVER_CATEGORIES, type CustomExercise, type Equipment } from '../training/strength';
+import { CustomExerciseSheet } from '../components/StrengthBits';
 
 export default function ProfileStrength() {
   const { data, setStrengthPrefs, updateProfile, hasFlag } = useApp();
   const p = data.profile.strength ?? {};
   const never = p.never ?? [];
+  const [own, setOwn] = useState<{ edit?: CustomExercise }>();
   const toggle = (v: string) => setStrengthPrefs({ never: never.includes(v) ? never.filter((x) => x !== v) : [...never, v] });
   const swaps = Object.entries(p.swaps ?? {}).filter(([a, b]) => exById.has(a) && exById.has(b));
   const hub = data.profile.hub ?? {};
@@ -27,6 +30,21 @@ export default function ProfileStrength() {
         <p className="caption">Used for every set you log, and for volume and best sets.</p>
       </section>
       <Link to="/strength" className="card card-link row-between"><span className="label">Your saved workouts</span><span className="caption">Build, start, edit</span></Link>
+      <section className="card stack-sm" aria-labelledby="ps-own">
+        <h2 id="ps-own" className="title">Your own exercises</h2>
+        {(p.customExercises ?? []).length ? (
+          <ul className="list">
+            {(p.customExercises ?? []).map((c) => (
+              <li key={c.id} className="list-item row-between">
+                <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{c.name}{c.archived && <span className="caption"> · archived</span>}</span><span className="caption">{CUSTOM_GROUP_LABEL[c.group]} · {c.sets} × {c.amount}{c.measure === 'seconds' ? ' s' : c.measure === 'distance' ? ' m' : ''}</span></span>
+                <button type="button" className="btn btn-small" onClick={() => setOwn({ edit: c })}>Edit</button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="caption">Anything missing from the library: add it once and use it in any workout. Its weights are tracked like any other exercise.</p>}
+        <button type="button" className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setOwn({})}>Add your own exercise</button>
+      </section>
+      {own && <CustomExerciseSheet edit={own.edit} onClose={() => setOwn(undefined)} />}
 
       <section className="card stack" aria-labelledby="never">
         <h2 id="never" className="title">Never give me…</h2>

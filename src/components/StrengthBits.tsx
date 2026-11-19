@@ -1,11 +1,12 @@
 // Shared pieces for free strength and weight on every set (update 4, tasks 4 and 4b): a number field that takes
 // decimals from the phone keypad, the exercise library with search and filters, and an exercise's history chart.
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Plus, Search } from 'lucide-react';
+import { Check, Pencil, Plus, Search } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { worksLabel } from './figure';
-import { EQUIPMENT_LABEL, EXERCISES, excluded, type Equipment, type Exercise } from '../training/strength';
+import { CUSTOM_GROUP_LABEL, EQUIPMENT_LABEL, excluded, library, nameTaken, toExercise, type CustomExercise, type CustomGroup, type Equipment, type Exercise } from '../training/strength';
+import { Chips } from './inputs';
 import { GROUP_LABEL, groupsOf, historyOf, showLoad, toUnit, type ExGroup, type WeightUnit } from '../training/strength-load';
 import { parseYmd } from '../lib/format';
 
@@ -41,11 +42,13 @@ export function ExerciseLibrary({ onPick, picked = [], group: startGroup, verb =
   const prefs = data.profile.strength ?? {};
   const [q, setQ] = useState('');
   const [group, setGroup] = useState<ExGroup | 'all'>(startGroup ?? 'all');
+  const custom = prefs.customExercises;
+  const [own, setOwn] = useState<{ name?: string; edit?: CustomExercise }>();
   const list = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return EXERCISES.filter((e) => (group === 'all' || groupsOf(e).includes(group)) && words.every((w) => `${e.name} ${e.muscles.join(' ')} ${groupsOf(e).join(' ')}`.toLowerCase().includes(w)))
+    return library().filter((e) => (group === 'all' || groupsOf(e).includes(group)) && words.every((w) => `${e.name} ${e.muscles.join(' ')} ${groupsOf(e).join(' ')}`.toLowerCase().includes(w)))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [q, group]);
+  }, [q, group, custom]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="stack-sm ex-library">
       <label className="search-field"><Search size={18} aria-hidden="true" /><input className="input" type="search" aria-label="Search exercises" placeholder="Search exercises" value={q} onChange={(e) => setQ(e.target.value)} /></label>
@@ -53,6 +56,7 @@ export function ExerciseLibrary({ onPick, picked = [], group: startGroup, verb =
         <button type="button" className="chip" aria-pressed={group === 'all'} onClick={() => setGroup('all')}>All</button>
         {GROUPS.map((g) => <button key={g} type="button" className="chip" aria-pressed={group === g} onClick={() => setGroup(g)}>{GROUP_LABEL[g]}</button>)}
       </div>
+      <button type="button" className="btn btn-small" style={{ alignSelf: 'flex-start' }} onClick={() => setOwn({ name: q.trim() || undefined })}><Plus size={16} aria-hidden="true" />Add your own exercise</button>
       <ul className="list ex-list" aria-label="Exercises">
         {list.map((e) => {
           const note = exclusionNote(e, prefs.never ?? [], prefs.equipment ?? 'none');
@@ -60,16 +64,18 @@ export function ExerciseLibrary({ onPick, picked = [], group: startGroup, verb =
           return (
             <li key={e.id} className={`list-item row-between${note ? ' ex-marked' : ''}`}>
               <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}>
-                <span className="label">{e.name}</span>
+                <span className="label">{e.name}{e.custom && <span className="mine-tag">Mine</span>}</span>
                 <span className="caption">{[e.muscles.length ? worksLabel(e.muscles) : '', EQUIPMENT_LABEL[e.equipment]].filter(Boolean).join(' · ')}</span>
                 {note && <span className="caption ex-note">{note}</span>}
               </span>
+              {e.custom && <button type="button" className="icon-btn" aria-label={`Edit ${e.name}`} onClick={() => setOwn({ edit: (custom ?? []).find((c) => c.id === e.id) })}><Pencil size={16} /></button>}
               <button type="button" className={`btn btn-small${on ? ' btn-ghost' : ''}`} disabled={on} aria-label={on ? `${e.name}: added` : `${verb} ${e.name}`} onClick={() => onPick(e)}>{on ? <><Check size={16} aria-hidden="true" />Added</> : <><Plus size={16} aria-hidden="true" />{verb}</>}</button>
             </li>
           );
         })}
-        {!list.length && <li className="list-item muted">No exercise matches. Try another word or filter.</li>}
+        {!list.length && <li className="list-item stack-sm" style={{ alignItems: 'flex-start' }}><span className="muted">No exercise matches. Try another word or filter{q.trim() ? ', or add it once and use it in any workout.' : '.'}</span>{q.trim() && <button type="button" className="btn btn-small btn-primary" onClick={() => setOwn({ name: q.trim() })}><Plus size={16} aria-hidden="true" />Add "{q.trim()}" as my exercise</button>}</li>}
       </ul>
+      {own && <CustomExerciseSheet name={own.name} edit={own.edit} onClose={() => setOwn(undefined)} onSaved={(e, isNew) => { setOwn(undefined); setQ(''); if (isNew && !picked.includes(e.id)) onPick(e); }} />}
     </div>
   );
 }
@@ -117,3 +123,65 @@ export const liveWorkoutKey = (id: string) => `ritmo:strength:live:${id}`;
 // A workout started afresh from the builder replaces whatever was in progress
 export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); sessionStorage.removeItem(liveWorkoutKey('free:w')); } catch { /* */ } };
 export const stashedWorkout = (): FreeWorkout | undefined => { try { const v = sessionStorage.getItem(KEY); return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
+
+const MEASURES: { value: CustomExercise['measure']; label: string }[] = [{ value: 'reps', label: 'Reps' }, { value: 'seconds', label: 'Time' }, { value: 'distance', label: 'Distance' }];
+const LOADS: { value: CustomExercise['loadType']; label: string }[] = [{ value: 'added', label: 'Added weight' }, { value: 'bodyweight', label: 'Bodyweight' }, { value: 'band', label: 'Band' }];
+
+/** Add or change one of your own exercises (update 5, U2). It joins the library: search, filters, saved workouts,
+ *  logging, "last time" and progression all treat it like any other, tagged MINE. */
+export function CustomExerciseSheet({ name: startName, edit, onClose, onSaved }: { name?: string; edit?: CustomExercise; onClose: () => void; onSaved?: (e: Exercise, isNew: boolean) => void }) {
+  const { saveCustomExercise, archiveCustomExercise } = useApp();
+  const [name, setName] = useState(edit?.name ?? startName ?? '');
+  const [group, setGroup] = useState<CustomGroup>(edit?.group ?? 'legs');
+  const [measure, setMeasure] = useState<CustomExercise['measure']>(edit?.measure ?? 'reps');
+  const [loadType, setLoadType] = useState<CustomExercise['loadType']>(edit?.loadType ?? 'bodyweight');
+  const [equipment, setEquipment] = useState<Equipment>(edit?.equipment ?? 'none');
+  const [perSide, setPerSide] = useState(!!edit?.perSide);
+  const [sets, setSets] = useState<number | undefined>(edit?.sets ?? 3);
+  const [amount, setAmount] = useState<number | undefined>(edit?.amount ?? 10);
+  const [note, setNote] = useState(edit?.note ?? '');
+  const taken = nameTaken(name, edit?.id);
+  const ok = name.trim().length > 1 && !taken && !!sets && !!amount;
+  // Changing how it is measured starts from a sensible amount
+  const pickMeasure = (m: CustomExercise['measure']) => { setMeasure(m); if (m !== measure) setAmount(m === 'reps' ? 10 : m === 'seconds' ? 30 : 20); };
+  const save = () => {
+    const c = { id: edit?.id, name: name.trim(), group, measure, loadType, equipment, perSide: perSide || undefined, sets: sets!, amount: amount!, note: note.trim() || undefined, archived: edit?.archived };
+    const id = saveCustomExercise(c);
+    onSaved?.(toExercise({ ...c, id, createdAt: edit?.createdAt ?? '' }), !edit);
+    if (!onSaved) onClose();
+  };
+  return (
+    <Sheet open onClose={onClose} title={edit ? 'Your exercise' : 'Add your own exercise'}
+      footer={<button type="button" className="btn btn-primary btn-block" disabled={!ok} onClick={save}>Save exercise</button>}>
+      <div className="stack">
+        <div className="field">
+          <label htmlFor="cx-name">Name</label>
+          <input id="cx-name" className="input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} aria-describedby="cx-name-help" />
+          <p id="cx-name-help" className="caption" role={taken ? 'alert' : undefined} style={taken ? { color: 'var(--danger)' } : undefined}>{taken ? 'There is already an exercise with this name.' : 'Not in the library yet? Add it once, use it in any workout.'}</p>
+        </div>
+        <Chips<CustomGroup> label="Muscle group" value={group} onChange={setGroup} options={(Object.keys(CUSTOM_GROUP_LABEL) as CustomGroup[]).map((g) => ({ value: g, label: CUSTOM_GROUP_LABEL[g] }))} />
+        <Chips<CustomExercise['measure']> label="Record it as" value={measure} onChange={pickMeasure} options={MEASURES} />
+        <Chips<CustomExercise['loadType']> label="Weight" value={loadType} onChange={setLoadType} options={LOADS} />
+        <Chips<Equipment> label="Equipment" value={equipment} onChange={setEquipment} options={(['none', 'light', 'gym'] as Equipment[]).map((e) => ({ value: e, label: e === 'none' ? 'None' : EQUIPMENT_LABEL[e] }))} />
+        <button type="button" className="hx-row" role="switch" aria-checked={perSide} onClick={() => setPerSide((v) => !v)}><span>One side at a time</span><strong>{perSide ? 'On' : 'Off'}</strong></button>
+        <div className="field">
+          <span className="label" id="cx-dose">Default sets × {measure === 'reps' ? 'reps' : measure === 'seconds' ? 'seconds' : 'metres'}</span>
+          <div className="build-dose" role="group" aria-labelledby="cx-dose">
+            <label><span className="caption">Sets</span><NumInput label="Sets" value={sets} max={10} onChange={setSets} /></label>
+            <span className="build-x" aria-hidden="true">×</span>
+            <label><span className="caption">{measure === 'reps' ? 'Reps' : measure === 'seconds' ? 'Seconds' : 'Metres'}</span><NumInput label={measure === 'reps' ? 'Reps' : measure === 'seconds' ? 'Seconds' : 'Metres'} value={amount} max={measure === 'distance' ? 2000 : 600} onChange={setAmount} /></label>
+          </div>
+        </div>
+        <div className="field"><label htmlFor="cx-note">How to do it <span className="caption">(optional note or video link)</span></label><input id="cx-note" className="input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} /></div>
+        {edit && <button type="button" className="btn btn-ghost" onClick={() => { archiveCustomExercise(edit.id, !edit.archived); onClose(); }}>{edit.archived ? 'Bring back to the library' : 'Archive (hide from the library, keep its history)'}</button>}
+      </div>
+    </Sheet>
+  );
+}
+
+/** The athlete's note for one of their own exercises: text, or a link to a video */
+export function OwnNote({ ex }: { ex: Exercise }) {
+  if (!ex.custom) return null;
+  const link = ex.note && /^https?:\/\//i.test(ex.note) ? ex.note : undefined;
+  return <div className="own-demo" aria-label="Your own exercise"><span className="mine-tag">Mine</span>{link ? <a href={link} target="_blank" rel="noreferrer" className="caption">Watch how to do it</a> : <span className="caption">Your own exercise</span>}</div>;
+}

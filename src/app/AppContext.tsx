@@ -28,7 +28,7 @@ import { DERIVED_VERSION } from '../training/derive';
 import { groupIndex, groupRuns, type RunGroup } from '../training/sessions';
 import { fitPlan, plannedNum, weekDoneForPlan, weekTarget, type WeekTarget } from '../training/session-view';
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
-import { exById, nextAfter, type StrengthPlan } from '../training/strength';
+import { exById, nextAfter, registerCustom, type CustomExercise, type StrengthPlan } from '../training/strength';
 import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
 import { doubleProgression, freeName, newerLogged, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
@@ -191,6 +191,9 @@ interface Ctx extends Derived {
   saveHyrox: (h: HyroxSession) => void;
   setHyroxPrefs: (patch: Partial<HyroxPrefs>) => void;
   saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[] }) => string;
+  /** The athlete's own exercises (update 5, U2): add or change one (returns its id), archive or bring back */
+  saveCustomExercise: (c: Omit<CustomExercise, 'id' | 'createdAt'> & { id?: string }) => string;
+  archiveCustomExercise: (id: string, archived: boolean) => void;
   deleteTemplate: (id: string) => void;
   duplicateTemplate: (id: string) => void;
   starTemplate: (id: string) => boolean;
@@ -626,6 +629,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', flush); window.removeEventListener('online', back); window.removeEventListener('focus', back); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, ready]);
+
+  // The athlete's own exercises join the library before anything below is drawn
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useMemo(() => registerCustom(data.profile.strength?.customExercises), [data.profile.strength?.customExercises]);
 
   // ---- Derived training state ----
   // Recomputed only when these parts of the data change (not, for example, on every coach message)
@@ -1221,6 +1228,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return id;
   };
+  const saveCustomExercise = (c: Omit<CustomExercise, 'id' | 'createdAt'> & { id?: string }): string => {
+    const id = c.id ?? `custom:${uid()}`;
+    setData((d) => {
+      const list = d.profile.strength?.customExercises ?? [];
+      const was = list.find((x) => x.id === id);
+      const next: CustomExercise = { ...c, id, name: c.name.trim(), createdAt: was?.createdAt ?? new Date().toISOString() };
+      return { ...d, profile: { ...d.profile, strength: { ...(d.profile.strength ?? {}), customExercises: was ? list.map((x) => (x.id === id ? next : x)) : [...list, next] } } };
+    });
+    return id;
+  };
+  // Never deleted: sessions already logged with it keep its name
+  const archiveCustomExercise = (id: string, archived: boolean) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...(d.profile.strength ?? {}), customExercises: (d.profile.strength?.customExercises ?? []).map((x) => (x.id === id ? { ...x, archived: archived || undefined } : x)) } } }));
   /** Saved workouts (update 4, task 4): kept with the runner's strength settings. Save (new or changed), delete,
    *  duplicate, and star up to 2 as favourites. */
   const saveTemplate = (t: { id?: string; name: string; exercises: TemplateExercise[] }): string => {
@@ -1616,7 +1635,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     injuryCheckIn, healInjury, reopenInjury, markSegment,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog, logSaved, undoLog, dismissLogSaved,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, saveCustomExercise, archiveCustomExercise, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog, logSaved, undoLog, dismissLogSaved,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

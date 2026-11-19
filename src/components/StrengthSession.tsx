@@ -9,7 +9,8 @@ import { ArrowDown, ArrowUp, Check, Dumbbell, Play, Plus, Repeat, Trash2 } from 
 import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { ExerciseDemo } from './ExerciseDemo';
-import { alternatives, blockOf, doseText, EQUIPMENT_LABEL, EXERCISES, excluded, exById, resolveStrength, ROUTINE_TITLE, skippedInARow, WEEK_FOCUS, type BlockWeek, type Routine, type StrengthItem } from '../training/strength';
+import { OwnNote } from './StrengthBits';
+import { alternatives, blockOf, doseText, EQUIPMENT_LABEL, excluded, exById, library, resolveStrength, ROUTINE_TITLE, skippedInARow, WEEK_FOCUS, type BlockWeek, type Routine, type StrengthItem } from '../training/strength';
 import { exerciseSummary, type WeightUnit } from '../training/strength-load';
 import type { PlannedSession } from '../lib/types';
 
@@ -147,9 +148,9 @@ export function StrengthEdit({ session, onClose }: { session: PlannedSession; on
       {adding && (
         <Sheet open onClose={() => setAdding(false)} title="Add an exercise">
           <ul className="list">
-            {EXERCISES.filter((e) => !excluded(e, never) && !items.some((x) => x.id === e.id)).map((e) => (
+            {library().filter((e) => !excluded(e, never) && !items.some((x) => x.id === e.id)).map((e) => (
               <li key={e.id}><button className="list-item row-between" style={{ width: '100%' }} onClick={() => { setItems((xs) => [...xs, { id: e.id, sets: e.sets, ...(e.seconds ? { seconds: e.seconds } : { reps: e.reps }) }]); setAdding(false); }}>
-                <span className="stack-sm" style={{ gap: 0, textAlign: 'left' }}><span className="label">{e.name}</span><span className="caption">{e.muscles.join(', ')} · {EQUIPMENT_LABEL[e.equipment]}</span></span><Plus size={18} aria-hidden="true" />
+                <span className="stack-sm" style={{ gap: 0, textAlign: 'left' }}><span className="label">{e.name}{e.custom && <span className="mine-tag">Mine</span>}</span><span className="caption">{[e.muscles.join(', '), EQUIPMENT_LABEL[e.equipment]].filter(Boolean).join(' · ')}</span></span><Plus size={18} aria-hidden="true" />
               </button></li>
             ))}
           </ul>
@@ -169,7 +170,7 @@ export function SwapSheet({ fromId, never, onPick, onClose }: { fromId: string; 
       <ul className="list swap-list">
         {alts.map(({ ex, reason }) => (
           <li key={ex.id}><button className="list-item row" style={{ width: '100%', gap: 12 }} onClick={() => onPick(ex.id, always)}>
-            <ExerciseDemo pattern={ex.pattern} name={ex.name} muscles={ex.muscles} weights={ex.equipment === 'light' && !!ex.tags?.includes('weights')} size={56} />
+            {ex.custom ? <OwnNote ex={ex} /> : <ExerciseDemo pattern={ex.pattern} name={ex.name} muscles={ex.muscles} weights={ex.equipment === 'light' && !!ex.tags?.includes('weights')} size={56} />}
             <span className="stack-sm" style={{ gap: 0, textAlign: 'left' }}><span className="label">{ex.name}</span><span className="caption">{reason}</span></span>
           </button></li>
         ))}
