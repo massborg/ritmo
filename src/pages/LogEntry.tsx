@@ -29,7 +29,7 @@ export default function LogEntryPage() {
   );
   if (e.kind === 'hyrox' && e.hyrox) return <Navigate to={`/hyrox/session/${e.hyrox.id}`} replace />;
   const unit = data.profile.strength?.units ?? 'kg';
-  const del = () => { if (window.confirm(e.kind === 'note' ? 'Delete this note?' : `Delete this ${e.kind === 'strength' ? 'strength session' : (e.sport ?? 'session').toLowerCase()}? It will no longer count toward your load.`)) { removeLog(e.id); nav(-1); } };
+  const del = () => { if (window.confirm(e.kind === 'note' ? 'Delete this note?' : `Delete this ${e.kind === 'strength' ? 'strength session' : (e.sport ?? 'session').toLowerCase()}? It will no longer count toward your load.`)) { removeLog(e.id); nav('/history', { replace: true }); } };
   const editable = e.kind === 'cross' || e.kind === 'note';
   const changed = date !== e.date || text.trim() !== (e.text ?? '') || (e.kind === 'cross' && (sport !== e.sport || minutes !== (e.minutes ?? (e.durationS ? Math.round(e.durationS / 60) : undefined)) || rpe !== (e.rpe ?? 4)));
   const ok = e.kind === 'note' ? text.trim().length > 0 : !!minutes;
