@@ -16,15 +16,16 @@ import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout, OwnNote, typ
 import { exById, noteInUnit, resolveStrength, type Exercise, type Routine } from '../training/strength';
 import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, nextSessionName, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
+import { clockOf, restAfter, secondsLeft, timerDone, tone } from '../training/timers';
 import { asLog, clearActive, currentActive, doneSets as doneSetsOf, loggedOf, minutesOf, saveActive, type ActiveWorkout } from '../training/active-workout';
 import { duration, ymd } from '../lib/format';
 
 interface SetRow { reps?: number; load?: number; seconds?: number; effort?: number; done: boolean }
-interface Item { id: string; ex: Exercise; sets: number; reps?: number; seconds?: number; load?: number; note?: string }
+interface Item { id: string; ex: Exercise; sets: number; reps?: number; seconds?: number; load?: number; note?: string; restS?: number; restAfterS?: number }
 interface Meta { loadType: LoadType; band?: Band }
 /** A workout in progress, kept for the tab: a stray Back, a tab tap or a reload does not lose the sets done */
 interface Kept { startedAt: number; idx: number; items: Omit<Item, 'ex'>[]; sets: SetRow[][]; meta: Meta[]; notes: string }
-function readKept(uid: string, key: string, fromAccount: ActiveWorkout | undefined): (Omit<Kept, 'items'> & { items: Item[]; free?: FreeWorkout; restEndsAt?: number }) | undefined {
+function readKept(uid: string, key: string, fromAccount: ActiveWorkout | undefined): (Omit<Kept, 'items'> & { items: Item[]; free?: FreeWorkout; restEndsAt?: number; restStartedAt?: number; workEndsAt?: number; restTakenMs?: number }) | undefined {
   const k = currentActive(uid, fromAccount);
   if (!k || k.key !== key || k.items.some((x) => !exById.has(x.id))) return undefined;
   return { ...k, idx: Math.min(Math.max(0, k.idx), k.items.length - 1), items: k.items.map((x) => ({ ...x, ex: exById.get(x.id)! })) };
@@ -68,7 +69,7 @@ function StrengthPlayer() {
         const own = !free.templateId;
         const reps = own ? x.reps ?? t?.reps : t?.reps ?? x.reps, secs = own ? x.seconds || t?.seconds : t?.seconds ?? x.seconds, load = own ? x.weightKg ?? t?.load : t?.load ?? x.weightKg;
         const asTarget = !own || ((timed ? secs === t?.seconds : reps === t?.reps) && load === t?.load);
-        return { id: ex.id, ex, sets: x.sets, reps: timed ? undefined : reps ?? ex.reps, seconds: timed ? secs || ex.seconds || 30 : undefined, load, note: asTarget ? noteInUnit(t?.note, unit) : undefined };
+        return { id: ex.id, ex, sets: x.sets, reps: timed ? undefined : reps ?? ex.reps, seconds: timed ? secs || ex.seconds || 30 : undefined, load, restS: x.restS, restAfterS: x.restAfterS, note: asTarget ? noteInUnit(t?.note, unit) : undefined };
       });
       return { title: free.name, items };
     }
@@ -99,7 +100,15 @@ function StrengthPlayer() {
   // The plan may still be loading on the first render: fill the sets in once the workout is there
   useEffect(() => { if (workout && !items.length && workout.items.length) { setItems(workout.items); setSets(workout.items.map(rowsFor)); setMeta(workout.items.map((x) => metaFor(x, rowsFor(x)))); } }, [workout]); // eslint-disable-line react-hooks/exhaustive-deps
   const [restLen, setRestLen] = useState(prefs?.rest ?? 60);
-  const [restLeft, setRestLeft] = useState<number>();
+  // Timers are moments in time (update 5, U7), so they are right after the screen was off or the app was closed
+  const [restEndsAt, setRestEndsAt] = useState<number | undefined>(kept?.restEndsAt);
+  const [restStartedAt, setRestStartedAt] = useState<number | undefined>(kept?.restStartedAt);
+  const [restTakenMs, setRestTakenMs] = useState(kept?.restTakenMs ?? 0);
+  const [workEndsAt, setWorkEndsAt] = useState<number | undefined>(kept?.workEndsAt);
+  const [exStartedAt, setExStartedAt] = useState(Date.now());
+  const restLeft = restEndsAt ? secondsLeft(restEndsAt, now) : undefined;
+  const endRest = () => { if (restStartedAt) setRestTakenMs((x: number) => x + Math.max(0, Math.min(Date.now(), restEndsAt ?? Date.now()) - restStartedAt)); setRestEndsAt(undefined); setRestStartedAt(undefined); };
+  const startRest = (seconds: number) => { if (seconds > 0) { const t = Date.now(); setNow(t); setRestStartedAt(t); setRestEndsAt(t + seconds * 1000); } };
   const [leaving, setLeaving] = useState(false);
   // Another workout is still in progress with sets done: it is never replaced without asking
   const [other, setOther] = useState(() => { const a = currentActive(uid, data.profile.strength?.active); return a && a.key !== keepKey && doneSetsOf(a) > 0 ? a : undefined; });
@@ -110,19 +119,21 @@ function StrengthPlayer() {
   const [notes, setNotes] = useState(kept?.notes ?? '');
   const [saveName, setSaveName] = useState('');
   const [savedAs, setSavedAs] = useState<string>();
-  const beep = useRef(false);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const beeped = useRef(0);
+  // The "Rest between sets" control on this screen was changed: it wins over the workout's saved rests
+  const [restTouched, setRestTouched] = useState(false);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
   // Kept on the device from the moment it starts, on every change (update 5, U6): closing the tab, the phone
   // killing the app or going back never loses it. A copy goes to the account every 30 s and when the app is hidden.
   const active = useRef<ActiveWorkout | undefined>(undefined);
   const gone = useRef(false);
   useEffect(() => {
     if (!workout || !items.length || gone.current || other) return;
-    const a: ActiveWorkout = { key: keepKey, route: `${window.location.pathname}${window.location.search}`, title: workout.title, source: free ? (free.templateId ? 'template' : 'free') : 'plan', sessionId: session?.id, templateId: free?.templateId, free,
+    const a: ActiveWorkout = { restEndsAt, restStartedAt, workEndsAt, restTakenMs, key: keepKey, route: `${window.location.pathname}${window.location.search}`, title: workout.title, source: free ? (free.templateId ? 'template' : 'free') : 'plan', sessionId: session?.id, templateId: free?.templateId, free,
       startedAt, idx, items: items.map(({ ex: _ex, ...x }) => x), sets, meta, notes, updatedAt: Date.now() }; // eslint-disable-line @typescript-eslint/no-unused-vars
     active.current = a;
     saveActive(uid, a);
-  }, [keepKey, startedAt, idx, items, sets, meta, notes, other]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keepKey, startedAt, idx, items, sets, meta, notes, other, restEndsAt, workEndsAt, restTakenMs]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const sync = () => { if (active.current && !gone.current) setStrengthPrefs({ active: active.current }); };
     const t = window.setInterval(sync, 30000);
@@ -132,12 +143,18 @@ function StrengthPlayer() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /** Finished or discarded: off the device and off the account */
   const drop = () => { gone.current = true; active.current = undefined; clearActive(uid); if (data.profile.strength?.active) setStrengthPrefs({ active: undefined }); };
+  // The rest is over: a buzz and a tone (and a notification when the app is not on screen)
+  useEffect(() => { if (restEndsAt && now >= restEndsAt) { timerDone('Rest is over'); endRest(); } }, [now, restEndsAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const vis = () => { if (document.visibilityState === 'visible') setNow(Date.now()); }; document.addEventListener('visibilitychange', vis); return () => document.removeEventListener('visibilitychange', vis); }, []);
+  useEffect(() => { setExStartedAt(Date.now()); }, [idx]);
+  // A timed set: beeps at 3, 2, 1 and ticks itself when the time is up
+  const workDone = useRef<() => void>(() => {});
   useEffect(() => {
-    if (restLeft == null) return;
-    if (restLeft <= 0) { setRestLeft(undefined); if (!beep.current) { beep.current = true; try { navigator.vibrate?.(200); } catch { /* */ } } return; }
-    const t = setTimeout(() => setRestLeft((x) => (x == null ? x : x - 1)), 1000);
-    return () => clearTimeout(t);
-  }, [restLeft]);
+    if (!workEndsAt) return;
+    const left = secondsLeft(workEndsAt, now);
+    if (left <= 0) { timerDone('Set done'); workDone.current(); }
+    else if (left <= 3 && beeped.current !== left) { beeped.current = left; tone(880); }
+  }, [now, workEndsAt]);
 
   if (!workout || !items.length) return (
     <div className="stack-lg"><AppHeader title="Strength" back large={false} /><p className="muted">{id === 'free' && params.get('w') ? 'This workout is no longer open. Start it again from Strength.' : "This strength session isn't in your plan any more."}</p><Link to={id === 'free' ? '/strength' : '/'} className="btn">{id === 'free' ? 'Back to Strength' : 'Back to Training'}</Link></div>
@@ -170,15 +187,17 @@ function StrengthPlayer() {
   const setDone = () => {
     if (nowSet < 0) return;
     setRow(nowSet, { done: true });
-    beep.current = false;
+    setWorkEndsAt(undefined);
     const lastOfEx = nowSet === curSets.length - 1;
     // After an exercise's last set: on to the next one that still has sets to do (those after it first, then any
     // skipped earlier). The workout only ends by itself when nothing is left anywhere.
     const open = lastOfEx ? [...items.keys()].filter((i) => i !== idx && sets[i]?.some((x) => !x.done)) : [];
-    if (lastOfEx && !open.length) { setFinished(true); setRestLeft(undefined); return; }
+    if (lastOfEx && !open.length) { setFinished(true); endRest(); return; }
     if (lastOfEx) setIdx(open.find((i) => i > idx) ?? open[0]);
-    setRestLeft(restLen);
+    // The rest starts by itself: between sets, or the longer one before the next exercise
+    startRest(restAfter({ lastOfExercise: lastOfEx, item: cur, workout: restTouched ? {} : { restBetweenSetsS: free?.restBetweenSetsS, restBetweenExercisesS: free?.restBetweenExercisesS }, usual: restLen }));
   };
+  workDone.current = setDone;
   const pick = (ex: Exercise) => {
     const it: Item = { id: ex.id, ex, sets: picker === 'swap' ? curSets.length : ex.sets, reps: ex.seconds ? undefined : ex.reps ?? 10, seconds: ex.seconds, load: prefs?.last?.[ex.id]?.load };
     const rows = rowsFor(it);
@@ -203,6 +222,7 @@ function StrengthPlayer() {
           <div><p className="caption">Time</p><p className="stat-xl" style={{ fontSize: 36 }}>{duration(elapsed)}</p></div>
           <div><p className="caption">Exercises</p><p className="stat" style={{ fontSize: 28 }}>{logged.length}</p></div>
           <div><p className="caption">Sets</p><p className="stat" style={{ fontSize: 28 }}>{doneSets}</p></div>
+          {restTakenMs >= 1000 && <div><p className="caption">Rest taken</p><p className="stat" style={{ fontSize: 28 }}>{clockOf(Math.round(restTakenMs / 1000))}</p></div>}
           {sum.volumeKg > 0 && <div><p className="caption">Volume</p><p className="stat" style={{ fontSize: 28 }}>{showVolume(logged.flatMap((x) => x.sets), unit)}</p></div>}
         </section>
         {logged.length > 0 && (
@@ -237,6 +257,9 @@ function StrengthPlayer() {
   const next = doneLog.length && doneLog.length === curSets.length ? doubleProgression(cur.ex, doneLog, curSets.length, undefined, unit) : undefined;
   const types: LoadType[] = cur.ex.equipment === 'none' ? ['bodyweight', 'bodyweight_plus', 'band'] : ['added', 'bodyweight', 'band'];
   const timed = curSets.some((x) => x.seconds != null);
+  // A timed exercise (plank, carry, wall sit) counts its set down, beeps at 3-2-1 and ticks the set by itself
+  const timedNow = nowSet >= 0 && curSets[nowSet].seconds != null;
+  const workLeft = workEndsAt && timedNow ? secondsLeft(workEndsAt, now) : undefined;
 
   return (
     <div className="stack strength-player">
@@ -245,7 +268,7 @@ function StrengthPlayer() {
         <p className="row-between caption" role="status"><span>Carried on from where you left it.</span>
           <button type="button" className="btn btn-ghost btn-small" onClick={() => { const fresh = workout.items; setItems(fresh); setSets(fresh.map(rowsFor)); setMeta(fresh.map((x) => metaFor(x, rowsFor(x)))); setIdx(0); setNotes(''); setStartedAt(Date.now()); setKept(undefined); }}>Start again</button></p>
       )}
-      <p className="row-between strength-head"><span className="stat" aria-label="Elapsed time">{duration(elapsed)}</span><span className="caption">{doneSets} of {totalSets} sets</span></p>
+      <p className="row-between strength-head"><span className="stat" aria-label="Elapsed time">{duration(elapsed)}</span><span className="caption">this exercise {clockOf(Math.max(0, Math.round((now - exStartedAt) / 1000)))} · {doneSets} of {totalSets} sets</span></p>
       <div className="progress" role="progressbar" aria-label="Workout progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((doneSets / Math.max(1, totalSets)) * 100)}><span style={{ width: `${(doneSets / Math.max(1, totalSets)) * 100}%` }} /></div>
       <section className="card stack-sm strength-now" aria-label="Current exercise">
         <span className="caption">Exercise {idx + 1} of {items.length}</span>
@@ -307,14 +330,28 @@ function StrengthPlayer() {
         )}
       </section>
       {restLeft != null && (
-        <section className="card row-between rest-timer" role="timer" aria-live="polite" aria-label="Rest">
-          <span className="row" style={{ gap: 8 }}><Timer size={20} strokeWidth={2} aria-hidden="true" /><span className="label">Rest</span><span className="stat" style={{ fontSize: 28 }}>{restLeft} s</span></span>
-          <span className="row" style={{ gap: 6 }}>
-            <button className="btn btn-small" onClick={() => setRestLeft((x) => (x ?? 0) + 15)}>+15 s</button>
-            <button className="btn btn-small btn-ghost" onClick={() => setRestLeft(undefined)}>Skip</button>
-          </span>
+        <section className="card rest-timer" role="timer" aria-live="off" aria-label="Rest">
+          <div className="row-between">
+            <span className="row" style={{ gap: 8 }}><Timer size={20} strokeWidth={2} aria-hidden="true" /><span className="label">Rest</span><span className="stat" style={{ fontSize: 28 }} data-testid="rest-left">{clockOf(restLeft)}</span></span>
+            <span className="row" style={{ gap: 6 }}>
+              <button className="btn btn-small" aria-label="15 seconds less rest" onClick={() => { setNow(Date.now()); setRestEndsAt((x) => (x ? Math.max(Date.now(), x - 15000) : x)); }}>−15 s</button>
+              <button className="btn btn-small" aria-label="15 seconds more rest" onClick={() => { setNow(Date.now()); setRestEndsAt((x) => (x ?? Date.now()) + 15000); }}>+15 s</button>
+              <button className="btn btn-small btn-ghost" onClick={endRest}>Skip</button>
+            </span>
+          </div>
+          <p className="caption">Next: {nowSet >= 0 ? `set ${nowSet + 1} of ${curSets.length}, ${cur.ex.name}` : cur.ex.name}. Keeps counting with the screen off.</p>
         </section>
       )}
+      {workLeft != null && (
+        <section className="work-timer" role="timer" aria-live="off" aria-label="Work">
+          <p className="work-eyebrow">Work · set {nowSet + 1} of {curSets.length}</p>
+          <p className="work-clock" data-testid="work-left">{clockOf(workLeft)}</p>
+          <div className="progress work-progress" aria-hidden="true"><span style={{ width: `${Math.min(100, 100 - (workLeft / Math.max(1, curSets[nowSet]?.seconds ?? 1)) * 100)}%` }} /></div>
+          <p className="caption">of {clockOf(curSets[nowSet]?.seconds ?? 0)} · beeps at 3, 2, 1</p>
+          <button type="button" className="btn btn-primary" onClick={setDone}>Done early</button>
+        </section>
+      )}
+      {timedNow && workLeft == null && restLeft == null && <button type="button" className="btn btn-block" onClick={() => { tone(1); beeped.current = 0; const t = Date.now(); setNow(t); setWorkEndsAt(t + (curSets[nowSet].seconds ?? 30) * 1000); }}><Timer size={18} aria-hidden="true" />Start {clockOf(curSets[nowSet].seconds ?? 30)} timer</button>}
       <button className="btn btn-primary btn-block strength-set-done" onClick={setDone} disabled={nowSet < 0}><Check size={20} strokeWidth={2.2} aria-hidden="true" />Set done</button>
       <div className="row wrap" style={{ gap: 8 }}>
         <button type="button" className="btn btn-small" onClick={() => setPicker('swap')}>Swap</button>
@@ -323,8 +360,8 @@ function StrengthPlayer() {
       </div>
       {notesOpen && <div className="field"><label htmlFor="sp-notes">Notes for this workout</label><textarea id="sp-notes" className="input" rows={3} maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></div>}
       <label className="row caption" style={{ gap: 8 }}>Rest between sets
-        <select className="input" style={{ maxWidth: 110, minHeight: 40 }} value={restLen} onChange={(e) => setRestLen(Number(e.target.value))} aria-label="Rest between sets">
-          {[30, 45, 60, 90, 120].map((s) => <option key={s} value={s}>{s} s</option>)}
+        <select className="input" style={{ maxWidth: 110, minHeight: 40 }} value={restLen} onChange={(e) => { setRestLen(Number(e.target.value)); setRestTouched(true); }} aria-label="Rest between sets">
+          {[...new Set([30, 45, 60, 90, 120, restLen])].sort((a, b) => a - b).map((s) => <option key={s} value={s}>{s} s</option>)}
         </select>
       </label>
       {leaving && (
@@ -332,7 +369,7 @@ function StrengthPlayer() {
           <div className="stack-sm">
             <p className="caption">It keeps running. Come back any time from Activity or Training. Nothing is lost if you close the app.</p>
             <button type="button" className="btn btn-primary btn-block" onClick={() => nav('/record')}>Keep it running and leave</button>
-            <button type="button" className="btn btn-block" disabled={!doneSets} onClick={() => { setLeaving(false); setFinished(true); setRestLeft(undefined); }}>Finish and save</button>
+            <button type="button" className="btn btn-block" disabled={!doneSets} onClick={() => { setLeaving(false); setFinished(true); endRest(); }}>Finish and save</button>
             <button type="button" className="btn btn-ghost btn-danger btn-block" onClick={() => { if (window.confirm('Discard this workout? The sets you did will not be saved.')) { drop(); nav('/record'); } }}>Discard</button>
           </div>
         </Sheet>

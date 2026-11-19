@@ -7,7 +7,7 @@ import { exById } from './strength';
 import type { FreeWorkout } from '../components/StrengthBits';
 
 export interface ActiveSet { reps?: number; load?: number; seconds?: number; effort?: number; done: boolean }
-export interface ActiveItem { id: string; sets: number; reps?: number; seconds?: number; load?: number; note?: string }
+export interface ActiveItem { id: string; sets: number; reps?: number; seconds?: number; load?: number; note?: string; restS?: number; restAfterS?: number }
 export interface ActiveMeta { loadType: LoadType; band?: Band }
 export interface ActiveWorkout {
   /** Which workout: a planned session's id, 'free:w' (your own), or 'free:A' (a routine) */
@@ -19,8 +19,12 @@ export interface ActiveWorkout {
   /** Your own workout as it was started, so it can be reopened after the tab is closed */
   free?: FreeWorkout;
   startedAt: number; idx: number; items: ActiveItem[]; sets: ActiveSet[][]; meta: ActiveMeta[]; notes: string;
-  /** When the rest in progress ends (a moment in time, so it is right after the screen was off) */
-  restEndsAt?: number;
+  /** When the rest in progress ends (a moment in time, so it is right after the screen was off), and what comes next */
+  restEndsAt?: number; restStartedAt?: number;
+  /** When the timed set in progress ends */
+  workEndsAt?: number;
+  /** Rest actually taken so far, for the summary */
+  restTakenMs?: number;
   updatedAt: number;
 }
 

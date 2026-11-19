@@ -96,8 +96,9 @@ export function sessionSummary(exercises: { id: string; name: string; sets: SetL
 
 // ---------------------------------------------------------------- Saved workouts
 
-export interface TemplateExercise { exerciseId: string; sets: number; reps?: number; seconds?: number; weightKg?: number; restS?: number }
-export interface StrengthTemplate { id: string; name: string; exercises: TemplateExercise[]; favourite: boolean; createdAt: string; lastUsedAt?: string }
+/** `restS`: rest between this exercise's sets; `restAfterS`: rest before the next exercise (update 5, U7). Both override the workout's. */
+export interface TemplateExercise { exerciseId: string; sets: number; reps?: number; seconds?: number; weightKg?: number; restS?: number; restAfterS?: number }
+export interface StrengthTemplate { id: string; name: string; exercises: TemplateExercise[]; favourite: boolean; createdAt: string; lastUsedAt?: string; /** Rest between sets and between exercises, saved with the workout (update 5, U7) */ restBetweenSetsS?: number; restBetweenExercisesS?: number }
 export const MAX_FAVOURITES = 2;
 
 /** Favourites first, then the most recently used */

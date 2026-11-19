@@ -1454,3 +1454,17 @@ div.hx-row { cursor: default; }
 .workout-bar-clock { font-family: var(--font-mono, monospace); opacity: 0.85; flex: none; }
 .workout-bar-go { flex: none; background: var(--brand); color: var(--on-brand); border-radius: var(--r-pill); padding: 4px 12px; }
 @media (min-width: 900px) { .workout-bar { bottom: 24px; } }
+
+/* ---- Update 5, U7: timers ---- */
+.rest-defaults { background: var(--surface-sunken); border-radius: var(--r-card); padding: 10px 12px; }
+.rest-label { min-width: 150px; }
+.build-rest { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-top: 8px; }
+.build-rest label { display: flex; flex-direction: column; gap: 2px; }
+.build-rest .num-input { width: 84px; }
+.rest-tag { background: #ffe3d6; color: #8a2a06; border-radius: var(--r-pill); padding: 2px 8px; font: 700 11px/16px var(--font-body); }
+.rest-timer { display: flex; flex-direction: column; gap: 4px; }
+.work-timer { background: var(--graphite); color: #fff; border-radius: var(--r-card); padding: 16px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.work-eyebrow { margin: 0; font: 700 12px/16px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.work-clock { margin: 0; font: 500 64px/1.05 var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+.work-progress { width: 100%; }
+.work-timer .caption { color: #fff; opacity: 0.75; }

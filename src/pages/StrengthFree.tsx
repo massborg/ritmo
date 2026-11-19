@@ -36,6 +36,9 @@ export default function StrengthFree() {
   // In log mode: the saved workout the list came from, so the logged session counts as that workout
   const [fromTemplate, setFromTemplate] = useState<string>();
   const [schedDate, setSchedDate] = useState<string>();
+  // Rest between sets and between exercises, saved with the workout (update 5, U7)
+  const [restSets, setRestSets] = useState<number>(prefs.rest ?? 60);
+  const [restEx, setRestEx] = useState<number>(120);
   // Log-after mode
   const [date, setDate] = useState(ymd(new Date()));
   const [minutes, setMinutes] = useState<number | undefined>(45);
@@ -51,18 +54,18 @@ export default function StrengthFree() {
   const move = (i: number, d: -1 | 1) => setList((l) => { const n = [...l]; const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   // A row counts when it has sets, and a hold has a time (an emptied Seconds field is not a 0-second hold)
   const valid = list.filter((x) => exById.has(x.exerciseId) && x.sets > 0 && !(x.seconds != null && x.seconds <= 0));
-  const start = (w: { name: string; templateId?: string; exercises: TemplateExercise[] }) => { const to = stashWorkout(w); if (!w.templateId) { try { localStorage.removeItem(DRAFT_KEY); } catch { /* */ } } nav(to); };
+  const start = (w: { name: string; templateId?: string; exercises: TemplateExercise[]; restBetweenSetsS?: number; restBetweenExercisesS?: number }) => { const to = stashWorkout(w); if (!w.templateId) { try { localStorage.removeItem(DRAFT_KEY); } catch { /* */ } } nav(to); };
   const use = (t: StrengthTemplate) => {
     if (logMode) { setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setFromTemplate(t.id); setMsg(`"${t.name}" loaded. Change anything that was different, then save.`); return; }
-    start({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)) });
+    start({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)), restBetweenSetsS: t.restBetweenSetsS, restBetweenExercisesS: t.restBetweenExercisesS });
   };
-  const edit = (t: StrengthTemplate) => { setEditing(t); setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setMenu(undefined); setMsg(undefined); window.scrollTo({ top: 0 }); };
+  const edit = (t: StrengthTemplate) => { setRestSets(t.restBetweenSetsS ?? prefs.rest ?? 60); setRestEx(t.restBetweenExercisesS ?? 120); setEditing(t); setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setMenu(undefined); setMsg(undefined); window.scrollTo({ top: 0 }); };
   const saveWorkout = () => {
     // The name as it is stored: a name already taken gets a number ("Core 2"), and the message says so
     const others = (prefs.templates ?? []).filter((x) => x.id !== editing?.id);
     // No name given: "Strength session 1", then 2, 3…
     const stored = name.trim() ? freeName(others, name.trim()) : nextSessionName(others);
-    saveTemplate({ id: editing?.id, name: stored, exercises: valid });
+    saveTemplate({ id: editing?.id, name: stored, exercises: valid, restBetweenSetsS: restSets, restBetweenExercisesS: restEx });
     setMsg(editing ? `"${stored}" updated.` : `Saved as "${stored}". It is in your saved workouts.`);
     setEditing(undefined); setList([]); setName(''); setNaming(false);
   };
@@ -120,6 +123,12 @@ export default function StrengthFree() {
 
       <section className="card stack" aria-labelledby="sf-build">
         <h2 id="sf-build" className="title">{logMode ? 'What you did' : editing ? 'Exercises' : 'Build a workout'}</h2>
+        {!logMode && list.length > 0 && (
+          <div className="rest-defaults stack-sm" role="group" aria-label="Rests for this workout">
+            <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}><span className="caption rest-label">Rest between sets</span>{[45, 60, 90].map((v) => <button key={v} type="button" className="chip chip-sm" aria-pressed={restSets === v} aria-label={`Rest between sets ${v} seconds`} onClick={() => setRestSets(v)}>{v} s</button>)}</div>
+            <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}><span className="caption rest-label">Rest between exercises</span>{[60, 120, 180].map((v) => <button key={v} type="button" className="chip chip-sm" aria-pressed={restEx === v} aria-label={`Rest between exercises ${v / 60} minute${v === 60 ? '' : 's'}`} onClick={() => setRestEx(v)}>{v === 60 ? '60 s' : `${v / 60} min`}</button>)}</div>
+          </div>
+        )}
         {list.length ? (
           <ol className="build-list">
             {list.map((x, i) => {
@@ -144,6 +153,13 @@ export default function StrengthFree() {
                     <span className="build-x" aria-hidden="true">×</span>
                     <label><span className="caption">{unit}</span><NumInput decimal label={`Weight for ${ex.name} in ${unit}`} placeholder={ex.equipment === 'none' ? 'none' : '0'} value={x.weightKg ? toUnit(x.weightKg, unit) : undefined} onChange={(v) => patch(i, { weightKg: v ? fromUnit(v, unit) : undefined })} /></label>
                   </div>
+                  {!logMode && (
+                    <div className="build-rest">
+                      <label><span className="caption">Rest between its sets (s)</span><NumInput label={`Own rest for ${ex.name}, seconds`} placeholder={String(restSets)} value={x.restS} max={600} onChange={(v) => patch(i, { restS: v || undefined })} /></label>
+                      <label><span className="caption">Rest after it (s)</span><NumInput label={`Rest after ${ex.name}, seconds`} placeholder={String(restEx)} value={x.restAfterS} max={900} onChange={(v) => patch(i, { restAfterS: v || undefined })} /></label>
+                      {(x.restS || x.restAfterS) ? <span className="rest-tag">Changed for this exercise</span> : null}
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -168,7 +184,7 @@ export default function StrengthFree() {
           </div>
         ) : (
           <div className="row wrap" style={{ gap: 8 }}>
-            <button type="button" className="btn btn-primary" disabled={!valid.length} onClick={() => start({ name: 'Strength workout', exercises: valid })}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start workout</button>
+            <button type="button" className="btn btn-primary" disabled={!valid.length} onClick={() => start({ name: 'Strength workout', exercises: valid, restBetweenSetsS: restSets, restBetweenExercisesS: restEx })}><Play size={18} strokeWidth={2.2} aria-hidden="true" />Start workout</button>
             <button type="button" className="btn" disabled={!valid.length} onClick={() => setNaming(true)}>Save as a workout</button>
           </div>
         )}

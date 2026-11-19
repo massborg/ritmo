@@ -116,7 +116,7 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
 }
 
 /** A free workout on its way from the builder to the recorder. Kept for the tab, so a reload does not lose it. */
-export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[]; /** Which start this is: each start is its own workout, so a new one never opens with another's sets */ sid?: string }
+export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[]; /** Which start this is: each start is its own workout, so a new one never opens with another's sets */ sid?: string; restBetweenSetsS?: number; restBetweenExercisesS?: number }
 const KEY = 'ritmo:strength:free';
 /** Where the recorder keeps a workout in progress for the tab (sets done, notes), so a stray Back or a reload does not lose it */
 export const liveWorkoutKey = (id: string) => `ritmo:strength:live:${id}`;
@@ -188,5 +188,5 @@ export function OwnNote({ ex }: { ex: Exercise }) {
 
 /** Start a saved workout in the recorder */
 export function startTemplate(t: import('../training/strength-load').StrengthTemplate, nav: (to: string) => void) {
-  nav(stashWorkout({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)) }));
+  nav(stashWorkout({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)), restBetweenSetsS: t.restBetweenSetsS, restBetweenExercisesS: t.restBetweenExercisesS }));
 }
