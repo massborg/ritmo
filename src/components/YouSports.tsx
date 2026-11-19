@@ -85,7 +85,7 @@ export function SportsView({ sport, from, to, title }: { sport: Exclude<Sport, '
         {muscles.length > 0 && (
           <section className="card stack-sm" aria-labelledby="st-mus">
             <h2 id="st-mus" className="label">Muscles worked · {title}</h2>
-            <div className="row wrap" style={{ gap: 6 }}>{muscles.map((m, i) => <span key={m.muscle} className={`muscle-chip${i < 3 ? ' top' : ''}`}>{PART_LABEL[m.muscle as Part] ?? m.muscle} {m.sets} sets</span>)}</div>
+            <div className="row wrap" style={{ gap: 6 }}>{muscles.map((m, i) => <span key={m.muscle} className={`muscle-chip${i < 3 ? ' top' : ''}`}>{PART_LABEL[m.muscle as Part] ?? m.muscle} {m.sets} set{m.sets === 1 ? '' : 's'}</span>)}</div>
           </section>
         )}
         <section className="stack-sm" aria-labelledby="st-list">
