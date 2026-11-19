@@ -20,6 +20,7 @@ import { isStravaRun } from '../data/strava';
 import { garminAttribution } from '../data/garmin';
 import type { Activity } from '../lib/types';
 import { useRunLongPress } from '../components/DeleteRun';
+import { SPORTS, SportsView, type Sport } from '../components/YouSports';
 
 type P = 'W' | 'M' | 'Y' | 'A';
 interface Bar { key: string; label: string; m: number; title: string; today: boolean }
@@ -140,6 +141,11 @@ function ProgressTab() {
   const [anchor, setAnchor] = useState(today);
   const [picking, setPicking] = useState(false);
   const [shown, setShown] = useState(10);
+  // Which kind of training is shown (update 5, U8). Remembered; "All" to start with for anyone who has logged
+  // something other than runs, the running view (unchanged) for everyone else.
+  const hasOther = (data.profile.log ?? []).some((e) => e.kind === 'strength' || e.kind === 'hyrox' || e.kind === 'cross');
+  const [sport, setSportState] = useState<Sport>(() => { try { const v = localStorage.getItem('ritmo:you:sport'); if (SPORTS.some((x) => x.value === v)) return v as Sport; } catch { /* */ } return hasOther ? 'all' : 'run'; });
+  const setSport = (v: Sport) => { setSportState(v); try { localStorage.setItem('ritmo:you:sport', v); } catch { /* */ } };
   // Press and hold a run to delete it (update 2, §8)
   const longPress = useRunLongPress();
   const v = useMemo(() => periodView(p, anchor, acts, today), [p, anchor, acts, today]);
@@ -159,19 +165,24 @@ function ProgressTab() {
     return out;
   }, [p, acts, today]);
 
-  if (!acts.length) return (
+  if (!acts.length && !hasOther) return (
     <Empty title="No runs yet" action={<div className="row wrap"><Link className="btn btn-primary" to="/run">Record a run</Link><Link className="btn" to="/profile/data">Upload my runs</Link></div>}>
       Your distance, personal bests and runs appear here after your first run. Record one, log one by hand, or upload files from a watch.
     </Empty>
   );
   return (
     <div className="stack-lg">
+      <div className="row wrap" role="group" aria-label="Kind of training" style={{ gap: 6 }}>
+        {/* "All training": the period control below also has an "All" (all time), and the two must not share a name */}
+        {SPORTS.map((x) => <button key={x.value} type="button" className="chip" aria-pressed={sport === x.value} aria-label={x.value === 'all' ? 'All training' : undefined} onClick={() => setSport(x.value)}>{x.label}</button>)}
+      </div>
       <div className="stack-sm">
         <Segmented<P> label="Period" value={p} onChange={(x) => { setP(x); setAnchor(today); setShown(10); }} options={[{ value: 'W', label: 'W' }, { value: 'M', label: 'M' }, { value: 'Y', label: 'Y' }, { value: 'A', label: 'All' }]} />
         {p !== 'A'
           ? <button className="period-pick" aria-haspopup="dialog" onClick={() => setPicking(true)}>{v.title}<ChevronDown size={18} strokeWidth={2} aria-hidden="true" /></button>
           : <span className="period-pick">{v.title}</span>}
       </div>
+      {sport !== 'run' ? <SportsView sport={sport} from={v.from} to={v.to} title={v.title} /> : <>
       <section className="stack-sm you-total" aria-label={`${v.title} total`}>
         <span className="you-big">{toUnit(totalM, U).toFixed(totalM / (U === 'km' ? 1000 : 1609.344) >= 1000 ? 0 : 1)}</span>
         <span className="label">{U === 'km' ? 'Kilometres' : 'Miles'}</span>
@@ -209,6 +220,8 @@ function ProgressTab() {
         {longPress.sheet}
         {runs.length > shown && <button className="btn" onClick={() => setShown((n) => n + 20)}>Show more ({runs.length - shown})</button>}
       </section>
+
+      </>}
 
       <Sheet open={picking} onClose={() => setPicking(false)} title={p === 'W' ? 'Choose a week' : p === 'M' ? 'Choose a month' : 'Choose a year'}>
         <ul className="list period-list">{options.map((o) => (
