@@ -428,7 +428,8 @@ async function run(label, deviceOpts) {
     globalThis.__inC = true;
     await signUpAndConfirm(page, mock, C);
     await doSetup(page, { level: 'I run regularly', goal: 'Get faster', name: 'Cara', runsFile: file, photo: PHOTO,
-      expectReport: [/1 wellness and monitoring/, /1 cycling/, /1 swimming/, /Could not be read/, 'Download import log'] });
+      // The ride and the swim in the export are kept as cross-training (update 5), no longer skipped
+      expectReport: [/1 wellness and monitoring/, /2 other sessions \(rides, swims, gym\) as cross-training/, /Could not be read/, 'Download import log'] });
     await see(page, 'Paces measured from your runs');
     await startPlan(page);
     // The photo's private link takes a moment to load after setup
