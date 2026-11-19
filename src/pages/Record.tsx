@@ -9,6 +9,7 @@ import { QuickAdd } from '../components/QuickAdd';
 import { exById, resolveStrength } from '../training/strength';
 import { sortTemplates, templateLine } from '../training/strength-load';
 import { startTemplate } from '../components/StrengthBits';
+import { WorkoutInProgress } from '../components/ActiveWorkoutBits';
 import { sessionAmount, structureLine } from '../training/session-view';
 import { resetVoice, unlockAudio } from '../run/cues';
 import { localise, parseYmd, ymd } from '../lib/format';
@@ -47,6 +48,7 @@ export default function Record() {
   return (
     <div className="stack-lg record-page" style={{ maxWidth: 720 }}>
       <AppHeader title="Activity" right={<Link to="/history" className="btn btn-small btn-outline">History</Link>} />
+      <WorkoutInProgress />
       {s ? (
         <section className="record-today" aria-label="Today's planned session">
           <p className="record-eyebrow">Ritmo plan · today</p>

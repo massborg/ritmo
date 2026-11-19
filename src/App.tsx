@@ -4,6 +4,7 @@ import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UndoDeleteToast } from './components/DeleteRun';
 import { LogSavedToast } from './components/LogBits';
+import { WorkoutBar } from './components/ActiveWorkoutBits';
 import { HubSync } from './components/HubSync';
 import { PushHints } from './components/PushHints';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
@@ -349,6 +350,7 @@ function Shell() {
         <UpdateToast />
         <UndoDeleteToast />
         <LogSavedToast />
+        <WorkoutBar />
         <HubSync />
         <PushHints />
         <ConsentBanner />

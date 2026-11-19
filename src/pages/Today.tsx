@@ -19,6 +19,7 @@ import { FeedRow } from '../components/LogBits';
 import { dayLog } from '../training/feed';
 import { scheduledOn, templateLine } from '../training/strength-load';
 import { startTemplate } from '../components/StrengthBits';
+import { WorkoutInProgress } from '../components/ActiveWorkoutBits';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd, runDay } from '../lib/format';
@@ -287,6 +288,7 @@ export default function Today() {
   return (
     <div className="stack-lg">
       <AppHeader title="Training" eyebrow={subtitle} avatar right={<><SampleChip />{data.mode === 'real' && quickButton}{logButton}</>} />
+      <WorkoutInProgress />
       {hxPlan && hxPaceS && (
         <p className="caption hyrox-pace-note">Your HYROX run pace is {pace(hxPaceS, U)}. {data.profile.hyrox?.goalS ? `It comes from your goal of ${duration(data.profile.hyrox.goalS)} (about ${Math.round((hxPaceS * 8) / 60)} min of running over the 8 runs) and your running fitness: it is never faster than your threshold pace.` : 'It is set a little slower than your threshold pace until you add a goal time in Profile, HYROX.'}{hxDate ? <> <Link to="/hyrox/race-day">Race-day plan</Link></> : null}</p>
       )}

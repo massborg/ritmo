@@ -190,7 +190,7 @@ interface Ctx extends Derived {
   setStrengthPrefs: (patch: Partial<NonNullable<Profile['strength']>>) => void;
   saveHyrox: (h: HyroxSession) => void;
   setHyroxPrefs: (patch: Partial<HyroxPrefs>) => void;
-  saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[] }) => string;
+  saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[]; restBetweenSetsS?: number; restBetweenExercisesS?: number }) => string;
   /** The athlete's own exercises (update 5, U2): add or change one (returns its id), archive or bring back */
   scheduleTemplate: (templateId: string, date: string) => void;
   /** Move a scheduled workout to another day, or (no date) take it off */
@@ -1245,14 +1245,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const archiveCustomExercise = (id: string, archived: boolean) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...(d.profile.strength ?? {}), customExercises: (d.profile.strength?.customExercises ?? []).map((x) => (x.id === id ? { ...x, archived: archived || undefined } : x)) } } }));
   /** Saved workouts (update 4, task 4): kept with the runner's strength settings. Save (new or changed), delete,
    *  duplicate, and star up to 2 as favourites. */
-  const saveTemplate = (t: { id?: string; name: string; exercises: TemplateExercise[] }): string => {
+  const saveTemplate = (t: { id?: string; name: string; exercises: TemplateExercise[]; restBetweenSetsS?: number; restBetweenExercisesS?: number }): string => {
     const id = t.id ?? uid();
     setData((d) => {
       const list = d.profile.strength?.templates ?? [];
       const others = list.filter((x) => x.id !== id);
       const was = list.find((x) => x.id === id);
       const name = t.name.trim() ? freeName(others, t.name.trim()) : nextSessionName(others);
-      const next: StrengthTemplate = { id, name, exercises: t.exercises, favourite: was?.favourite ?? false, createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
+      const next: StrengthTemplate = { id, name, exercises: t.exercises, favourite: was?.favourite ?? false, createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt,
+        // The workout's rests: as given, else as they were (a rename or an exercise edit keeps them)
+        restBetweenSetsS: 'restBetweenSetsS' in t ? t.restBetweenSetsS : was?.restBetweenSetsS, restBetweenExercisesS: 'restBetweenExercisesS' in t ? t.restBetweenExercisesS : was?.restBetweenExercisesS };
       return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: was ? list.map((x) => (x.id === id ? next : x)) : [...list, next] } } };
     });
     return id;

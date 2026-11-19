@@ -116,12 +116,12 @@ export function ExerciseHistory({ exerciseId, name, onClose }: { exerciseId: str
 }
 
 /** A free workout on its way from the builder to the recorder. Kept for the tab, so a reload does not lose it. */
-export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[] }
+export interface FreeWorkout { name: string; templateId?: string; exercises: import('../training/strength-load').TemplateExercise[]; /** Which start this is: each start is its own workout, so a new one never opens with another's sets */ sid?: string; restBetweenSetsS?: number; restBetweenExercisesS?: number }
 const KEY = 'ritmo:strength:free';
 /** Where the recorder keeps a workout in progress for the tab (sets done, notes), so a stray Back or a reload does not lose it */
 export const liveWorkoutKey = (id: string) => `ritmo:strength:live:${id}`;
 // A workout started afresh from the builder replaces whatever was in progress
-export const stashWorkout = (w: FreeWorkout) => { try { sessionStorage.setItem(KEY, JSON.stringify(w)); sessionStorage.removeItem(liveWorkoutKey('free:w')); } catch { /* */ } };
+export const stashWorkout = (w: FreeWorkout): string => { const sid = Date.now().toString(36); try { sessionStorage.setItem(KEY, JSON.stringify({ ...w, sid })); } catch { /* */ } return `/strength/free?w=1&sid=${sid}`; };
 export const stashedWorkout = (): FreeWorkout | undefined => { try { const v = sessionStorage.getItem(KEY); return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
 
 const MEASURES: { value: CustomExercise['measure']; label: string }[] = [{ value: 'reps', label: 'Reps' }, { value: 'seconds', label: 'Time' }, { value: 'distance', label: 'Distance' }];
@@ -188,6 +188,5 @@ export function OwnNote({ ex }: { ex: Exercise }) {
 
 /** Start a saved workout in the recorder */
 export function startTemplate(t: import('../training/strength-load').StrengthTemplate, nav: (to: string) => void) {
-  stashWorkout({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)) });
-  nav('/strength/free?w=1');
+  nav(stashWorkout({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)), restBetweenSetsS: t.restBetweenSetsS, restBetweenExercisesS: t.restBetweenExercisesS }));
 }
