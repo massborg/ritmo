@@ -8,6 +8,7 @@ import { AppHeader } from '../components/app';
 import { Chips } from '../components/inputs';
 import { CUSTOM_GROUP_LABEL, EQUIPMENT_LABEL, EXERCISES, exById, NEVER_CATEGORIES, type CustomExercise, type Equipment } from '../training/strength';
 import { CustomExerciseSheet } from '../components/StrengthBits';
+import { sortTemplates, templateLine } from '../training/strength-load';
 
 export default function ProfileStrength() {
   const { data, setStrengthPrefs, updateProfile, hasFlag } = useApp();
@@ -29,7 +30,19 @@ export default function ProfileStrength() {
         <Chips<'kg' | 'lb'> label="Weights in" value={p.units ?? 'kg'} onChange={(v) => setStrengthPrefs({ units: v })} options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]} />
         <p className="caption">Used for every set you log, and for volume and best sets.</p>
       </section>
-      <Link to="/strength" className="card card-link row-between"><span className="label">Your saved workouts</span><span className="caption">Build, start, edit</span></Link>
+      <section className="card stack-sm" aria-labelledby="ps-workouts">
+        <div className="row-between"><h2 id="ps-workouts" className="title">My workouts</h2><Link to="/strength" className="btn btn-small">Build, edit</Link></div>
+        {(p.templates ?? []).length ? (
+          <ul className="list">
+            {sortTemplates(p.templates ?? []).map((t) => (
+              <li key={t.id} className="list-item row-between">
+                <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="label">{t.name}</span><span className="caption">{templateLine(t)}</span></span>
+                <Link to={`/strength?menu=${t.id}`} className="btn btn-small" aria-label={`Open ${t.name}`}>Open</Link>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="caption">None yet. Build a workout in Activity, Strength and save it: it will be here, on Activity, and in Log strength session.</p>}
+      </section>
       <section className="card stack-sm" aria-labelledby="ps-own">
         <h2 id="ps-own" className="title">Your own exercises</h2>
         {(p.customExercises ?? []).length ? (

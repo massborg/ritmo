@@ -30,7 +30,7 @@ import { fitPlan, plannedNum, weekDoneForPlan, weekTarget, type WeekTarget } fro
 import { applyEdit, resetEdit, type SessionEdit } from '../training/edit-session';
 import { exById, nextAfter, registerCustom, type CustomExercise, type StrengthPlan } from '../training/strength';
 import { sessionMinutes, type HyroxPrefs, type HyroxSession } from '../hyrox/hyrox';
-import { doubleProgression, freeName, newerLogged, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
+import { doubleProgression, freeName, newerLogged, nextSessionName, toggleFavourite, type StrengthTemplate, type TemplateExercise } from '../training/strength-load';
 import { activeNiggle, applyBody, areaLabel, injuryMode, painRule, stepNow, type BodyCheckin, type BodyState, DISCLAIMER, redFlags, stepUnlocked, textRedFlags, WHEN_LABEL } from '../training/body';
 import { STRIDE_RULE } from '../training/intervals';
 import { checkIn as injuryCheck, correctDetails, heal, injuryLabel, reopen, startingStep, type CheckResult, type Injury, type InjuryDay, type RunBehaviour } from '../training/injury';
@@ -192,6 +192,9 @@ interface Ctx extends Derived {
   setHyroxPrefs: (patch: Partial<HyroxPrefs>) => void;
   saveTemplate: (t: { id?: string; name: string; exercises: TemplateExercise[] }) => string;
   /** The athlete's own exercises (update 5, U2): add or change one (returns its id), archive or bring back */
+  scheduleTemplate: (templateId: string, date: string) => void;
+  /** Move a scheduled workout to another day, or (no date) take it off */
+  moveScheduled: (id: string, date: string | undefined) => void;
   saveCustomExercise: (c: Omit<CustomExercise, 'id' | 'createdAt'> & { id?: string }) => string;
   archiveCustomExercise: (id: string, archived: boolean) => void;
   deleteTemplate: (id: string) => void;
@@ -1248,13 +1251,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const list = d.profile.strength?.templates ?? [];
       const others = list.filter((x) => x.id !== id);
       const was = list.find((x) => x.id === id);
-      const name = freeName(others, t.name.trim() || 'My workout');
+      const name = t.name.trim() ? freeName(others, t.name.trim()) : nextSessionName(others);
       const next: StrengthTemplate = { id, name, exercises: t.exercises, favourite: was?.favourite ?? false, createdAt: was?.createdAt ?? new Date().toISOString(), lastUsedAt: was?.lastUsedAt };
       return { ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: was ? list.map((x) => (x.id === id ? next : x)) : [...list, next] } } };
     });
     return id;
   };
-  const deleteTemplate = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: (d.profile.strength?.templates ?? []).filter((x) => x.id !== id) } } }));
+  const deleteTemplate = (id: string) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...d.profile.strength, templates: (d.profile.strength?.templates ?? []).filter((x) => x.id !== id), scheduled: (d.profile.strength?.scheduled ?? []).filter((x) => x.templateId !== id) } } }));
+  /** Put a saved workout on a day (the same workout once per day), move it, or take it off */
+  const scheduleTemplate = (templateId: string, date: string) => setData((d) => {
+    const list = d.profile.strength?.scheduled ?? [];
+    if (list.some((x) => x.templateId === templateId && x.date === date)) return d;
+    return { ...d, profile: { ...d.profile, strength: { ...(d.profile.strength ?? {}), scheduled: [...list, { id: uid(), templateId, date }] } } };
+  });
+  const moveScheduled = (id: string, date: string | undefined) => setData((d) => ({ ...d, profile: { ...d.profile, strength: { ...(d.profile.strength ?? {}), scheduled: (d.profile.strength?.scheduled ?? []).flatMap((x) => (x.id !== id ? [x] : date ? [{ ...x, date }] : [])) } } }));
   const duplicateTemplate = (id: string) => setData((d) => {
     const list = d.profile.strength?.templates ?? [];
     const t = list.find((x) => x.id === id);
@@ -1635,7 +1645,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...derived, authReady, session, recovering, ready, loadError, data, syncError, legacyOffer, importState, coachBusy,
     retryLoad: () => setReloadKey((k) => k + 1), acceptLegacy, dismissLegacy,
     injuryCheckIn, healInjury, reopenInjury, markSegment,
-    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, saveCustomExercise, archiveCustomExercise, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog, logSaved, undoLog, dismissLogSaved,
+    loadSample, startFresh, finishSetup, importFiles, logManualRun, updateProfile, saveRace, deleteRace, logFeedback, buildMyPlan, rebuildMyPlan, restorePreviousPlan, markRebuildSeen, moveSession, setRaceFlag, mergeRuns, setRunHidden, deleteRun, undoableDelete, undoDelete, restoreRun, setRunShoe, answerGear, renameRun, fixRunDistance, resolveGap, editSession, resetSession, updateLog, saveStrength, setStrengthPrefs, saveHyrox, setHyroxPrefs, saveTemplate, scheduleTemplate, moveScheduled, saveCustomExercise, archiveCustomExercise, deleteTemplate, duplicateTemplate, starTemplate, editStrength, fixRunTime, hasFlag, linkRunToSession, skipSession, saveRecordedRun, addBodyCheckin, updateBody, handleMissed, swap, applyCoachProposal, setAdjust, addLog, removeLog, logSaved, undoLog, dismissLogSaved,
     reportIllness, clearIllness, analysisFor, sendCoach, clearCoach, exportData, deleteEverything, disconnectSource, connectHealth, syncHealthNow, healthSyncing, connectGarmin, completeGarminConnect, syncGarminNow, garminSyncing, connectStrava, completeStravaConnect, syncStravaNow, stravaSyncing,
     signOut, finishRecovery: () => setRecovering(false), avatarSrc, saveAvatar, deleteAvatar, planProblem, applyPlanOption, dismissPlanProblem: () => setPlanProblem(undefined),
   };

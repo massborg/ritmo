@@ -5,7 +5,7 @@ import { Check, Pencil, Plus, Search } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from './inputs';
 import { worksLabel } from './figure';
-import { CUSTOM_GROUP_LABEL, EQUIPMENT_LABEL, excluded, library, nameTaken, toExercise, type CustomExercise, type CustomGroup, type Equipment, type Exercise } from '../training/strength';
+import { CUSTOM_GROUP_LABEL, EQUIPMENT_LABEL, exById, excluded, library, nameTaken, toExercise, type CustomExercise, type CustomGroup, type Equipment, type Exercise } from '../training/strength';
 import { Chips } from './inputs';
 import { GROUP_LABEL, groupsOf, historyOf, showLoad, toUnit, type ExGroup, type WeightUnit } from '../training/strength-load';
 import { parseYmd } from '../lib/format';
@@ -184,4 +184,10 @@ export function OwnNote({ ex }: { ex: Exercise }) {
   if (!ex.custom) return null;
   const link = ex.note && /^https?:\/\//i.test(ex.note) ? ex.note : undefined;
   return <div className="own-demo" aria-label="Your own exercise"><span className="mine-tag">Mine</span>{link ? <a href={link} target="_blank" rel="noreferrer" className="caption">Watch how to do it</a> : <span className="caption">Your own exercise</span>}</div>;
+}
+
+/** Start a saved workout in the recorder */
+export function startTemplate(t: import('../training/strength-load').StrengthTemplate, nav: (to: string) => void) {
+  stashWorkout({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)) });
+  nav('/strength/free?w=1');
 }

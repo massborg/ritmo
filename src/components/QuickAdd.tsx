@@ -6,6 +6,7 @@ import { BodyCheckinSheet } from './BodyCheckin';
 import { useApp } from '../app/AppContext';
 import { Chips, DateField, Sheet, Stepper } from './inputs';
 import { CrossFields } from './LogBits';
+import { sortTemplates } from '../training/strength-load';
 import { StatusLine } from './ui';
 import { LogRunSheet } from './LogRun';
 import { longDate, parseYmd, ymd } from '../lib/format';
@@ -112,6 +113,7 @@ function LogStrength({ onClose }: { onClose: () => void }) {
   const [minutes, setMinutes] = useState<number | undefined>(45);
   const [rpe, setRpe] = useState<number>(6);
   const [hr, setHr] = useState<number | undefined>();
+  const saved = sortTemplates(data.profile.strength?.templates ?? []);
   // Logged on a day with a planned strength session: it counts as that session
   const planned = plan?.sessions.find((s) => s.date === date && s.strengthPlan && !(data.profile.log ?? []).some((e) => e.kind === 'strength' && e.strength?.sessionId === s.id));
   const title = type === 'gym' ? 'Gym strength session' : type === 'class' ? 'Strength class' : 'Strength at home';
@@ -123,6 +125,12 @@ function LogStrength({ onClose }: { onClose: () => void }) {
         <button type="button" className="choice" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} onClick={() => { onClose(); nav('/strength?log=1'); }}>
           <span className="row-icon"><Dumbbell size={20} strokeWidth={2} aria-hidden="true" /></span><span className="stack-sm" style={{ gap: 0 }}><span className="label">Pick exercises</span><span className="caption">Log the exercises, sets and weights you did</span></span>
         </button>
+        {saved.length > 0 && (
+          <div className="stack-sm" role="group" aria-label="Use a saved workout">
+            <p className="caption">Use a saved workout:</p>
+            <div className="row wrap" style={{ gap: 6 }}>{saved.slice(0, 6).map((t) => <button key={t.id} type="button" className="chip" onClick={() => { onClose(); nav(`/strength?log=1&t=${t.id}`); }}>{t.name}</button>)}</div>
+          </div>
+        )}
         <p className="caption">Or log just the time and effort:</p>
         <DateField id="ls-date" label="Date" value={date} onChange={setDate} />
         <Chips<'gym' | 'class' | 'home'> label="Type" value={type} onChange={setType} options={[{ value: 'gym', label: 'Gym' }, { value: 'class', label: 'Class' }, { value: 'home', label: 'At home' }]} />

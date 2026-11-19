@@ -14,7 +14,7 @@ import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
 import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout, OwnNote } from '../components/StrengthBits';
 import { exById, noteInUnit, resolveStrength, type Exercise, type Routine } from '../training/strength';
-import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
+import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, nextSessionName, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
 import { duration, ymd } from '../lib/format';
 
@@ -183,8 +183,8 @@ export default function StrengthPlayer() {
         {free && !free.templateId && logged.length > 0 && (
           <section className="card stack-sm" aria-label="Save as a workout">
             {savedAs ? <p className="label" role="status"><Check size={16} aria-hidden="true" /> Saved as "{savedAs}"</p> : <>
-              <div className="field"><label htmlFor="sp-save-name">Save this as a workout, to start it again</label><input id="sp-save-name" className="input" maxLength={40} placeholder="Leg day" value={saveName} onChange={(e) => setSaveName(e.target.value)} /></div>
-              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={!saveName.trim()} onClick={() => { const stored = freeName(prefs?.templates ?? [], saveName.trim()); saveTemplate({ name: stored, exercises: asTemplateExercises(logged) }); setSavedAs(stored); }}>Save as a workout</button>
+              <div className="field"><label htmlFor="sp-save-name">Save these exercises as a workout, to start it again</label><input id="sp-save-name" className="input" maxLength={40} placeholder={nextSessionName(prefs?.templates ?? [])} value={saveName} onChange={(e) => setSaveName(e.target.value)} /></div>
+              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => { const stored = saveName.trim() ? freeName(prefs?.templates ?? [], saveName.trim()) : nextSessionName(prefs?.templates ?? []); saveTemplate({ name: stored, exercises: asTemplateExercises(logged) }); setSavedAs(stored); }}>Save as a workout</button>
             </>}
           </section>
         )}

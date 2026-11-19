@@ -1,15 +1,17 @@
 // Activity (update 4, task 3): one place to record. Today's planned session first, whatever its type, with Start
 // and Details; then a free run, your own strength workout, or log something already done.
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Bike, ChevronRight, Dumbbell, Play, Plus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bike, ChevronRight, Dumbbell, Play, Plus, Star } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { QuickAdd } from '../components/QuickAdd';
-import { resolveStrength } from '../training/strength';
+import { exById, resolveStrength } from '../training/strength';
+import { sortTemplates, templateLine } from '../training/strength-load';
+import { startTemplate } from '../components/StrengthBits';
 import { sessionAmount, structureLine } from '../training/session-view';
 import { resetVoice, unlockAudio } from '../run/cues';
-import { localise, ymd } from '../lib/format';
+import { localise, parseYmd, ymd } from '../lib/format';
 
 // A tap that leads to the run recorder unlocks speech, so the first voice cue is heard
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
@@ -19,6 +21,11 @@ export default function Record() {
   const [adding, setAdding] = useState(false);
   const t0 = ymd(today);
   const log = data.profile.log ?? [];
+  const nav = useNavigate();
+  // Saved workouts, favourites first, with the next day each is scheduled for
+  const workouts = sortTemplates((data.profile.strength?.templates ?? []).filter((t) => t.exercises.some((x) => exById.has(x.exerciseId))));
+  const sched = data.profile.strength?.scheduled ?? [];
+  const shortDay = (d: string) => parseYmd(d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   const strengthDone = (id: string) => log.some((e) => e.kind === 'strength' && e.strength?.sessionId === id);
   // Today's session still to do: a run first, then strength. The plan puts strength on the run's own session
   // ("after the run"), so one session can be both: the run while it is open, then the strength workout.
@@ -54,6 +61,28 @@ export default function Record() {
         <section className="card stack-sm" aria-label="Today's planned session">
           <p className="label">{plan ? 'Nothing planned for the rest of today' : 'No plan yet'}</p>
           <p className="caption">{plan ? 'Rest is part of training. You can still record anything below.' : 'You can record a run or a strength workout below.'}</p>
+        </section>
+      )}
+      {workouts.length > 0 && (
+        <section className="stack-sm" aria-labelledby="rec-workouts">
+          <div className="row-between"><h2 id="rec-workouts" className="record-eyebrow dim">Your workouts</h2><Link to="/strength" className="caption">All ({workouts.length})</Link></div>
+          <ul className="workout-row">
+            {workouts.slice(0, 6).map((t) => {
+              const next = sched.filter((x) => x.templateId === t.id && x.date >= t0).sort((a, b) => a.date.localeCompare(b.date))[0];
+              const last = log.filter((e) => e.kind === 'strength' && e.strength?.templateId === t.id).sort((a, b) => b.date.localeCompare(a.date))[0];
+              return (
+                <li key={t.id} className="card workout-card">
+                  <span className="label workout-name">{t.name}{t.favourite && <Star size={14} fill="var(--accent)" color="var(--accent)" aria-label="Favourite" />}</span>
+                  <span className="caption">{templateLine(t)}</span>
+                  <span className="caption">{next ? `Scheduled ${next.date === t0 ? 'today' : shortDay(next.date)}` : last ? `Last done ${shortDay(last.date)}` : 'Never done'}</span>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button type="button" className={`btn btn-small${t.favourite ? ' btn-primary' : ''}`} style={{ flex: 1 }} aria-label={`Start ${t.name}`} onClick={() => startTemplate(t, nav)}>Start</button>
+                    <Link to={`/strength?menu=${t.id}`} className="btn btn-small" aria-label={`More for ${t.name}: schedule, edit, log as done`}>More</Link>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
       <section className="stack-sm" aria-labelledby="rec-else">

@@ -51,3 +51,20 @@ describe('your own exercises', () => {
     expect(exerciseSummary([{ reps: 40, unit: 'm', load: 24 }, { reps: 40, unit: 'm', load: 24 }]).text).toMatch(/40 m/);
   });
 });
+
+import { nextSessionName, scheduledOn, type StrengthTemplate } from './strength-load';
+describe('saved workouts (update 5, U3)', () => {
+  const t = (id: string, name: string): StrengthTemplate => ({ id, name, exercises: [{ exerciseId: 'goblet-squat', sets: 3, reps: 10 }], favourite: false, createdAt: '2026-11-01T00:00:00Z' });
+  it('a workout saved without a name is "Strength session N", the next number not in use', () => {
+    expect(nextSessionName([])).toBe('Strength session 1');
+    expect(nextSessionName([t('a', 'Strength session 1'), t('b', 'Leg day')])).toBe('Strength session 2');
+    expect(nextSessionName([t('a', 'strength session 1'), t('b', 'Strength session 3')])).toBe('Strength session 2');
+  });
+  it('a workout scheduled on a day is listed for that day, and done once a session from it is logged that day', () => {
+    const strength = { templates: [t('a', 'Legs'), t('b', 'Core')], scheduled: [{ id: 's1', templateId: 'a', date: '2026-11-19' }, { id: 's2', templateId: 'b', date: '2026-11-20' }, { id: 's3', templateId: 'gone', date: '2026-11-19' }] };
+    expect(scheduledOn(strength, [], '2026-11-19').map((x) => [x.id, x.template.name, x.done])).toEqual([['s1', 'Legs', false]]);
+    expect(scheduledOn(strength, [{ kind: 'strength', date: '2026-11-19', strength: { templateId: 'a' } }], '2026-11-19')[0].done).toBe(true);
+    expect(scheduledOn(strength, [{ kind: 'strength', date: '2026-11-18', strength: { templateId: 'a' } }], '2026-11-19')[0].done).toBe(false);
+    expect(scheduledOn(undefined, undefined, '2026-11-19')).toEqual([]);
+  });
+});

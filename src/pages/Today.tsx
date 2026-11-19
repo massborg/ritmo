@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeftRight, ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Footprints, Lightbulb, MessageCircle, Pencil, Play, Plus, Sparkles, Upload, Zap } from 'lucide-react';
 import { resetVoice, unlockAudio } from '../run/cues';
 import { useApp } from '../app/AppContext';
@@ -14,9 +14,11 @@ import { forStats } from '../data/quality';
 import { LogRunSheet } from '../components/LogRun';
 import { GearQuestion } from '../components/GearQuestion';
 import { LogSessionSheet } from '../components/LogSession';
-import { MonthCalendar, Sheet } from '../components/inputs';
+import { DateField, MonthCalendar, Sheet } from '../components/inputs';
 import { FeedRow } from '../components/LogBits';
 import { dayLog } from '../training/feed';
+import { scheduledOn, templateLine } from '../training/strength-load';
+import { startTemplate } from '../components/StrengthBits';
 import { SeeMore } from '../components/setup-ui';
 import { NotFeeling, QuickAdd } from '../components/QuickAdd';
 import { addDays, DAY_NAMES, daysBetween, dist, localise, localiseStep, duration, durationWords, longDate, pace, paceRange, parseYmd, shortDate, startOfWeek, toUnit, ymd, runDay } from '../lib/format';
@@ -149,7 +151,7 @@ const hyroxStart = (s: { hyrox?: { kind: string } }) => (s.hyrox?.kind === 'race
 const primeSpeech = () => { resetVoice(); unlockAudio(); };
 
 export default function Today() {
-  const { data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen, linkRunToSession } = useApp();
+  const { moveScheduled, data, today, readinessToday, plan, aRace, aRaceReadiness, analysisFor, buildMyPlan, fitness, stage, paces, zones, handleMissed, athlete, skipSession, hasFlag, typeOf, labelOf, hrIssue, markRebuildSeen, linkRunToSession } = useApp();
   const [itsBack, setItsBack] = useState(false);
   const niggle = activeNiggle(data.profile.body, today);
   const U = data.profile.units;
@@ -168,6 +170,9 @@ export default function Today() {
   const [logSession, setLogSession] = useState<PlannedSession>();
   const [editing, setEditing] = useState<PlannedSession>();
   const [picking, setPicking] = useState(false);
+  const [moving, setMoving] = useState<string>();
+  const [moveTo, setMoveTo] = useState<string>();
+  const nav = useNavigate();
   const [hurts, setHurts] = useState(false);
   // The report sheet opened from "Update details": it corrects the current injury instead of starting a new one
   const [fixing, setFixing] = useState(false);
@@ -227,6 +232,7 @@ export default function Today() {
   const runsHere = data.activities.filter((a) => runDay(a.startTime) === selected).sort((a, b) => a.startTime.localeCompare(b.startTime));
   const s = plan?.sessions.find((x) => x.date === selected);
   const isToday = selected === t;
+  const schedHere = scheduledOn(data.profile.strength, data.profile.log, selected);
   // A planned strength workout already shows as done on its session, so it is not listed twice
   const logHere = dayLog(data.profile, selected).filter((it) => !(it.type === 'strength' && (data.profile.log ?? []).find((e) => e.id === it.id)?.strength?.sessionId));
   const weekSessions = (plan?.sessions ?? []).filter((x) => week.includes(x.date) && x.type !== 'rest');
@@ -342,7 +348,7 @@ export default function Today() {
       {hasFlag('body') && isToday && <CareCard />}
       {hurts && <BodyCheckinSheet onClose={() => { setHurts(false); setFixing(false); }} editing={fixing && !!injuryNow} start={injuryNow ? { area: injuryNow.area, side: injuryNow.side } : niggle ? { area: niggle.area, side: niggle.side } : undefined} />}
       <Sheet open={picking} onClose={() => setPicking(false)} title="Go to a day">
-        <MonthCalendar value={selected} marks={new Set([...data.activities.map((a) => runDay(a.startTime)), ...(data.profile.log ?? []).filter((e) => e.kind !== 'note').map((e) => e.date)])} onChange={(d) => { setSelected(d); setPicking(false); }} />
+        <MonthCalendar value={selected} marks={new Set([...(data.profile.strength?.scheduled ?? []).map((x) => x.date), ...data.activities.map((a) => runDay(a.startTime)), ...(data.profile.log ?? []).filter((e) => e.kind !== 'note').map((e) => e.date)])} onChange={(d) => { setSelected(d); setPicking(false); }} />
         <p className="caption" style={{ textAlign: 'center' }}>Dots mark days you ran.</p>
       </Sheet>
 
@@ -440,6 +446,31 @@ export default function Today() {
           <DayRuns runs={runsHere} unplanned={!s || s.type === 'rest'} session={s} />
         </section>
       )}
+
+      {/* Saved workouts put on this day (update 5, U3) */}
+      {schedHere.map((x) => (
+        <section key={x.id} className="card stack-sm sched-card" aria-label={`Scheduled workout: ${x.template.name}`}>
+          <div className="row-between" style={{ gap: 8 }}>
+            <span className="stack-sm" style={{ gap: 0, minWidth: 0 }}><span className="caption">Your workout · {isToday ? 'today' : 'scheduled'}</span><span className="title">{x.template.name}</span><span className="caption">{templateLine(x.template)}</span></span>
+            {x.done && <span className="pill pill-done">Done</span>}
+          </div>
+          {!x.done && (moving === x.id ? (
+            <div className="stack-sm">
+              <DateField id="sched-move" label="Move to" value={moveTo ?? selected} min={t} onChange={setMoveTo} />
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="btn btn-small btn-primary" onClick={() => { moveScheduled(x.id, moveTo ?? selected); setMoving(undefined); setMoveTo(undefined); }}>Move</button>
+                <button type="button" className="btn btn-small btn-ghost" onClick={() => { setMoving(undefined); setMoveTo(undefined); }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="row wrap" style={{ gap: 8 }}>
+              {selected <= t && <button type="button" className="btn btn-primary" onClick={() => startTemplate(x.template, nav)}>Start</button>}
+              <button type="button" className="btn btn-small" onClick={() => setMoving(x.id)}>Move</button>
+              <button type="button" className="btn btn-small btn-ghost" onClick={() => moveScheduled(x.id, undefined)}>Remove</button>
+            </div>
+          ))}
+        </section>
+      ))}
 
       {/* Everything else done that day: other sports, strength, HYROX and notes (they used to be saved and shown nowhere) */}
       {logHere.length > 0 && (

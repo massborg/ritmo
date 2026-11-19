@@ -116,6 +116,18 @@ export function templateLine(t: Pick<StrengthTemplate, 'exercises'>): string {
   return `${n} exercise${n === 1 ? '' : 's'} · about ${Math.max(5, Math.round(secs / 60 / 5) * 5)} min`;
 }
 /** A name not used yet: "Legs", "Legs 2", "Legs 3" */
+/** A workout saved without a name: "Strength session 1", then 2, 3… (the next number not in use) */
+export function nextSessionName(list: StrengthTemplate[]): string {
+  const names = new Set(list.map((x) => x.name.toLowerCase()));
+  for (let i = 1; ; i++) if (!names.has(`strength session ${i}`)) return `Strength session ${i}`;
+}
+/** A saved workout put on a day (update 5, U3): it shows on Training that day with Start */
+export interface ScheduledWorkout { id: string; templateId: string; date: string }
+/** The saved workouts planned for a day, with whether one was already done (a session logged from it that day) */
+export function scheduledOn(strength: { templates?: StrengthTemplate[]; scheduled?: ScheduledWorkout[] } | undefined, log: { kind: string; date: string; strength?: { templateId?: string } }[] | undefined, date: string): { id: string; template: StrengthTemplate; done: boolean }[] {
+  return (strength?.scheduled ?? []).filter((s) => s.date === date).map((s) => ({ s, template: (strength?.templates ?? []).find((t) => t.id === s.templateId) })).filter((x): x is { s: ScheduledWorkout; template: StrengthTemplate } => !!x.template)
+    .map((x) => ({ id: x.s.id, template: x.template, done: (log ?? []).some((e) => e.kind === 'strength' && e.date === date && e.strength?.templateId === x.template.id) }));
+}
 export function freeName(list: StrengthTemplate[], base: string): string {
   const names = new Set(list.map((x) => x.name.toLowerCase()));
   if (!names.has(base.toLowerCase())) return base;
