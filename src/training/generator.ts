@@ -5,7 +5,7 @@ import { applyWeekChoice, weekWarnings, type WeekChoice } from './week-choice';
 import { ROUTINE_TITLE, type Intensity, type Routine } from './strength';
 import type { Phase, Plan, PlannedSession, PlanWeek, Profile, Race, SessionStep, SessionType, TrainingSettings } from '../lib/types';
 import { addDays, DAY_NAMES, daysBetween, distanceLabel, duration, pace, parseYmd, startOfWeek, uid, weekday, ymd } from '../lib/format';
-import type { TrainingPaces } from './fitness';
+import { predictTime, type TrainingPaces } from './fitness';
 import { EQUIPMENT, hyroxRunPace, planGoal, stationBlocks, stationExercises, type HyroxGoal } from '../hyrox/plan-goal';
 
 const P = (s: number) => pace(s, 'km', false);
@@ -32,6 +32,13 @@ const RATE = { maintain: 0, steady: 0.05, progressive: 0.08, aggressive: 0.12 };
 export const MAX_SHARE = 0.35;
 /** A HYROX simulation is about as much station work as running, so in the share-of-the-week rule it counts as
  *  twice its running distance (a half simulation as 8 km, not 4). */
+/** Marathon and half-marathon plans build the long run toward the distance the race needs (update 5, U4): 28 to
+ *  32 km for a marathon, 18 to 21 km for a half. For those plans the long run may be a larger share of the week
+ *  than the 35% rule allows other runs, because low-volume marathon training cannot reach it otherwise. */
+export const LONG_TARGET: Partial<Record<DistanceClass, { goal: number; least: number; share: number; step: number }>> = { M: { goal: 32, least: 28, share: 0.45, step: 3 }, HM: { goal: 21, least: 18, share: 0.42, step: 2 } };
+/** HYROX weeks are small by design, so the key HYROX sessions (1 km repeats, compromised runs) may take a larger
+ *  share of the week: 8 x 1 km with a warm-up needs about 11 km. */
+const HX_KEY_SHARE = 0.42;
 const weekShareM = (x: PlannedSession) => (x.hyrox?.kind.startsWith('sim') ? x.distanceM * 2 : x.distanceM) + (x.second?.distanceM ?? 0);
 export const HARD_TYPES: SessionType[] = ['long', 'threshold', 'vo2max', 'tempo', 'hills', 'race', 'timetrial'];
 
@@ -44,6 +51,8 @@ export interface GenInput {
   longestRecentKm: number;
   /** Plain words for where the paces come from, e.g. "your 10K in 33:11 on 1 Nov" */
   pacesFrom?: string;
+  /** Current fitness (VDOT), to compare a goal time with what is realistic */
+  vdot?: number;
   /** B and C races before the main race: B races get a short taper, C races replace a session */
   otherRaces?: Race[];
 }
@@ -64,7 +73,9 @@ export function resolveSettings(profile: Profile, race: Race | undefined, recent
   const t = profile.training ?? {};
   const dc: DistanceClass = hyrox ? 'HX' : distanceClass(race?.distanceM);
   const available = (profile.daysAvailable.length ? [...new Set(profile.daysAvailable)] : [0, 1, 3, 4, 5, 6]).sort((a, b) => a - b);
-  const weeklyKm = Math.max(10, Math.round(t.weeklyKm ?? (hyrox ? recentWeeklyKm * HX_VOLUME : recentWeeklyKm)));
+  // A weekly limit below what the runner does now is a limit: the plan starts there, it does not ignore it
+  const recent = hyrox ? recentWeeklyKm * HX_VOLUME : recentWeeklyKm;
+  const weeklyKm = Math.max(10, Math.round(t.weeklyKm ?? (t.peakKm != null ? Math.min(recent, t.peakKm) : recent)));
   const progression = t.progression ?? 'progressive';
   const peakKm = Math.max(weeklyKm, Math.round(t.peakKm ?? (progression === 'maintain' ? weeklyKm : Math.max(weeklyKm, Math.min(PEAK_DEFAULT[dc], weeklyKm * 1.3)))));
   const longDay = available.includes(profile.longRunDay) ? profile.longRunDay : available.includes(5) ? 5 : available.includes(6) ? 6 : available[available.length - 1];
@@ -164,6 +175,8 @@ export interface VolumeFit {
   minDays?: number; minDayList?: number[];
   /** Easy runs longer than ideal (over 15% of the week each) */
   easyHeavy: boolean;
+  /** How long each easy run comes out at this volume and these days */
+  easyKm?: number;
 }
 
 function rolesCount(roles: Role[]) { return { nQ: roles.filter((x) => x === 'q1' || x === 'q2').length, nEasy: roles.filter((x) => x === 'easy').length, hasLong: roles.includes('long') }; }
@@ -192,7 +205,7 @@ export function checkVolumeFit(r: Resolved, paces: TrainingPaces, vol = r.peakKm
   const recommendedDayList = recommendedDays ? weekRoles({ ...r, available: all, daysPerWeek: recommendedDays }).roles.map((x, i) => (x === 'rest' ? -1 : i)).filter((i) => i >= 0) : undefined;
   return {
     fits: cur.split.fits, weeklyKm: vol, days: r.daysPerWeek, maxKm: cur.split.fits ? vol : Math.floor(lo),
-    recommendedDays, recommendedDayList, minDays, minDayList, easyHeavy: cur.split.fits && cur.nEasy > 0 && cur.split.easyKm > 0.15 * vol + 0.3,
+    recommendedDays, recommendedDayList, minDays, minDayList, easyHeavy: cur.split.fits && cur.nEasy > 0 && cur.split.easyKm > 0.15 * vol + 0.3, easyKm: cur.nEasy ? cur.split.easyKm : undefined,
   };
 }
 
@@ -340,7 +353,8 @@ function racePace(date: string, km: number, phase: Phase, ctx: Ctx, sharpener = 
 function hxRepeats(date: string, km: number, phase: Phase, ctx: Ctx, stage: number): PlannedSession {
   const hp = ctx.hx!.pace;
   const n0 = Math.min(8, 6 + stage), rec = stage <= 2 ? 90 : stage === 3 ? 60 : 45;
-  const work = fitReps(n0, ctx.vol >= 32 ? 6 : 4, km, (n) => reps(n, 1, hp, rec, ctx.paces.recovery, `${n} x 1 km at HYROX pace`, 'the pace you will run between stations: controlled, never a sprint', [4]));
+  // The warm-up and cool-down can be a little shorter here (about 2 km each), so 8 x 1 km fits in 12 km
+  const work = fitReps(n0, ctx.vol >= 32 ? 6 : 4, km + 1.2, (n) => reps(n, 1, hp, rec, ctx.paces.recovery, `${n} x 1 km at HYROX pace`, 'the pace you will run between stations: controlled, never a sprint', [4]));
   const n = Number(work.label.split(' ')[0]);
   return make(date, phase, 'vo2max', `HYROX 1 km repeats: ${n} x 1 km`, 'HYROX',
     `Teaches your legs the exact pace of the 8 race runs, ${rec < 90 ? `with only ${rec} s between them, so it starts to feel like the race` : 'with enough rest to hold it evenly'}.`,
@@ -423,7 +437,44 @@ export function phaseForWeeks(W: number): Phase[] {
   return [...Array(bs).fill('base'), ...Array(bd).fill('build'), ...Array(W - bs - bd).fill('peak')];
 }
 
+/**
+ * The plan. For a "Both" athlete with a running race and a HYROX race, both are planned (update 5, U4): the block
+ * for the nearer race, a recovery week, then the block for the other. Before this the plan stopped at the first.
+ */
 export function generatePlan(input: GenInput): GenResult {
+  const first = generateOne(input);
+  const { profile } = input;
+  const hxDate = profile.hyrox?.raceDate;
+  if (!first.ok || profile.athleteType !== 'both' || !input.race || !hxDate || !first.plan.endDate) return first;
+  const hxFirst = first.plan.goal === 'hyrox';
+  const firstDate = hxFirst ? hxDate : input.race.date, secondDate = hxFirst ? input.race.date : hxDate;
+  // The second race needs at least three weeks after the first to be worth a block of its own
+  if (first.plan.endDate !== firstDate || daysBetween(parseYmd(firstDate), parseYmd(secondDate)) < 21) return first;
+  const after = addDays(parseYmd(firstDate), 1);
+  const weeksA = first.plan.weeks ?? [];
+  const peakA = Math.max(...weeksA.map((w) => w.targetKm), input.recentWeeklyKm);
+  const second = generateOne({ ...input, today: after, recentWeeklyKm: peakA * 0.85, otherRaces: [],
+    profile: { ...profile, athleteType: hxFirst ? 'runner' : 'hyrox', training: { ...(profile.training ?? {}), startMode: 'today', weeklyKm: undefined, peakKm: undefined } } });
+  if (!second.ok) return { ...first, warnings: [...first.warnings, `The plan covers ${hxFirst ? 'HYROX' : input.race.name} only: the block for ${hxFirst ? input.race.name : 'HYROX'} afterwards could not be built (${second.problem.message}). Rebuild after the race.`] };
+  // A recovery week between the blocks: two days off, then easy running only
+  const easyUntil = ymd(addDays(after, 6)), offUntil = ymd(addDays(after, 1));
+  const ctx = { paces: input.paces, race: undefined };
+  const block2 = second.plan.sessions.map((x) => {
+    if (x.date > easyUntil || x.type === 'race') return x;
+    if (x.date <= offUntil) return { ...restDay(x.date, x.phase, 'Recovery after your race: rest, or a short walk.'), id: x.id };
+    if (x.type === 'rest') return x;
+    return { ...easyRun(x.date, Math.max(3, Math.min(8, (x.distanceM / 1000) * 0.6)), x.phase, ctx, { why: 'Recovery week after your race: easy running only, before the next block starts.' }), id: x.id };
+  });
+  const what = (hx: boolean) => (hx ? 'HYROX' : input.race!.name);
+  const plan: Plan = {
+    ...first.plan, endDate: second.plan.endDate, sessions: [...first.plan.sessions, ...block2], weeks: [...weeksA, ...(second.plan.weeks ?? []).filter((w) => !weeksA.some((a) => a.start === w.start))],
+    phases: [...first.plan.phases, ...second.plan.phases], next: { startDate: ymd(after), ...(hxFirst ? { raceId: input.race.id } : { goal: 'hyrox' as const }) },
+    changes: [{ ...first.plan.changes[0], summary: `${first.plan.changes[0].summary} Two races, two blocks: ${what(hxFirst)} on ${firstDate}, a recovery week, then ${what(!hxFirst)} on ${secondDate}.` }, ...first.plan.changes.slice(1)],
+  };
+  return { ok: true, plan, warnings: [...first.warnings, ...second.warnings.map((w) => `After ${what(hxFirst)}: ${w}`)] };
+}
+
+function generateOne(input: GenInput): GenResult {
   const { profile, paces } = input;
   // HYROX athletes (update 4, task 6): the plan is for HYROX; "Both" is for whichever race is nearer
   const goal = planGoal(profile, input.race, input.today);
@@ -435,6 +486,7 @@ export function generatePlan(input: GenInput): GenResult {
   if (goal.keepHyrox && r.strengthPerWeek < 1 && !r.week) r.strengthPerWeek = 1;
   const hxExtra = hx || goal.keepHyrox ? stationExercises(hx?.hardest ?? (profile.hyrox?.hardest?.length ? profile.hyrox.hardest : ['sled_push', 'sandbag_lunges', 'wall_balls']), hx?.equipment ?? profile.hyrox?.equipment ?? EQUIPMENT.map((e) => e.value)) : undefined;
   const warnings: string[] = [];
+  const t0 = profile.training ?? {};
 
   // 1) Does the volume fit the days? Never fix it silently.
   const fit = checkVolumeFit(r, paces);
@@ -458,7 +510,18 @@ export function generatePlan(input: GenInput): GenResult {
       message: `${Math.round(fit.weeklyKm)} km a week does not fit safely into ${r.daysPerWeek} days: some runs would be longer than is safe or sensible for ${hx ? 'HYROX' : race ? `a ${raceWord(race.distanceM)}` : 'your goal'}. The most that fits in ${r.daysPerWeek} days is about ${fit.maxKm} km.${fit.recommendedDays ? ` ${fit.recommendedDays} days a week would spread ${Math.round(fit.weeklyKm)} km well.` : ''}`,
     } };
   }
-  if (fit.easyHeavy) warnings.push(`Easy runs are a little long at ${Math.round(r.weeklyKm)} km on ${r.daysPerWeek} days.${fit.recommendedDays && fit.recommendedDays > r.daysPerWeek ? ` A ${fit.recommendedDays}th day would spread the volume better.` : ''}`);
+  // Not in race week (nothing to change by then), and only days the runner offered are suggested
+  const daysToRace = race ? daysBetween(parseYmd(ymd(input.today)), parseYmd(race.date)) : undefined;
+  if (fit.easyHeavy && (daysToRace == null || daysToRace >= 7)) {
+    const more = fit.recommendedDays && fit.recommendedDays > r.daysPerWeek && fit.recommendedDays <= r.available.length ? fit.recommendedDays : undefined;
+    warnings.push(`Easy runs are a little long, about ${Math.round(fit.easyKm ?? 0)} km each, with ${Math.round(r.peakKm)} km a week on ${r.daysPerWeek} days.${more ? ` Running ${more} days a week would spread it better.` : ''}`);
+  }
+  if (t0.peakKm != null && t0.weeklyKm == null && t0.peakKm < Math.round(input.recentWeeklyKm) - 1) warnings.push(`You set a limit of ${t0.peakKm} km a week, below the ${Math.round(input.recentWeeklyKm)} km you run now, so the plan stays at ${r.peakKm} km. Raise the limit in Goals if you want more.`);
+  // A goal well beyond current fitness: say so, with what is realistic (paces always come from current fitness)
+  if (race?.goalS && input.vdot && !hx) {
+    const predicted = predictTime(input.vdot, race.distanceM);
+    if (race.goalS < predicted * 0.92) warnings.push(`Your goal of ${duration(race.goalS)} is ${Math.round((1 - race.goalS / predicted) * 100)}% faster than your current fitness suggests (about ${duration(predicted)}). Your paces are set from where you are now. A realistic goal for this plan is about ${duration(Math.round(predicted * 0.97))}.`);
+  }
   if (r.peakKm > input.recentWeeklyKm * 1.3 && input.recentWeeklyKm > 5) warnings.push(`The peak of ${r.peakKm} km is more than 30% above your recent ${Math.round(input.recentWeeklyKm)} km a week. Build carefully.`);
 
   // 2) Dates
@@ -482,13 +545,15 @@ export function generatePlan(input: GenInput): GenResult {
   const counts = rolesCount(roles);
 
   const sessions: PlannedSession[] = [];
+  // Where the long run has got to (starts from the longest recent run, never above what this week allows)
+  let longBuild = Math.min(input.longestRecentKm || 0, LONG_TARGET[r.dc]?.goal ?? 0);
   const phases: Plan['phases'] = [];
   const weeks: PlanWeek[] = [];
   const rate = RATE[r.progression];
   let normal = r.weeklyKm;
   let qVariant = 0;
   // HYROX: how far the 1 km repeats and compromised runs have progressed, and whether the full simulation is done
-  let hxStage = 0, hxBuildWeeks = 0, hxFullDone = false;
+  let hxStage = 0, hxBuildWeeks = 0, hxFullDone = false, hxLastSim = -1;
   let strengthN = 0;
   let strengthDows: number[] = [];
   for (let w = 0; w < totalWeeks; w++) {
@@ -502,11 +567,27 @@ export function generatePlan(input: GenInput): GenResult {
     const oneQ = !keepTypes && (cutback || vol < 25 || phase === 'base');
     const nDoubles = r.doubles.filter((d) => roles[d] !== 'rest' && roles[d] !== 'long').length;
     const split = splitWeek(vol, oneQ ? Math.min(1, counts.nQ) : counts.nQ, counts.nEasy + nDoubles + (oneQ && counts.nQ > 1 ? 1 : 0), counts.hasLong, caps);
+    // Marathon and half: the long run builds toward the distance the race needs, a few km a week, limited by the
+    // long-run time cap and its share of the week. The easy runs give the distance back.
+    const lt = hx ? undefined : LONG_TARGET[r.dc];
+    if (lt && counts.hasLong && phase !== 'taper') {
+      const lMaxW = Math.min(caps.longKm, lt.share * vol);
+      if (!cutback) longBuild = Math.min(lt.goal, Math.max(longBuild + (w > 0 ? lt.step : 0), split.longKm));
+      const want = Math.min(lMaxW, cutback ? longBuild * 0.8 : longBuild);
+      if (want > split.longKm + 0.3) {
+        const extra = want - split.longKm, nE = counts.nEasy + nDoubles + (oneQ && counts.nQ > 1 ? 1 : 0);
+        split.longKm = want;
+        if (nE > 0) split.easyKm = Math.max(Math.min(4, split.easyKm), split.easyKm - extra / nE);
+      }
+      if (!cutback) longBuild = Math.min(longBuild, split.longKm);
+    }
     // HYROX sessions need room for 6 x 1 km even at a modest weekly volume (still under the 35% rule). The easy
     // runs give the distance back, so the week's total stays where it should be.
     let hxQ: number | undefined;
     if (hx && phase !== 'base' && !cutback && !oneQ) {
-      hxQ = Math.min(caps.qualityKm, Math.max(split.qKm, Math.min(12.5, vol * 0.33)));
+      // Room for the reps this stage calls for (6, building to 8) plus a warm-up and cool-down, within the HYROX share
+      const wantKm = Math.min(8, 6 + hxStage) + 3;
+      hxQ = Math.min(caps.qualityKm, Math.max(split.qKm, Math.min(12.5, Math.max(vol * 0.33, Math.min(wantKm, vol * (HX_KEY_SHARE - 0.02))))));
       const nEasy = counts.nEasy + nDoubles;
       if (nEasy > 0) split.easyKm = Math.max(Math.min(4, split.easyKm), split.easyKm - ((hxQ - split.qKm) * counts.nQ) / nEasy);
     }
@@ -589,8 +670,9 @@ export function generatePlan(input: GenInput): GenResult {
         const mkLong = (k: number) => (dayPhase === 'taper' && toRace <= 6 ? easyRun(date, k, 'taper', ctx, { title: 'Easy run (race week)' }) : longRun(date, Math.round(k), dayPhase, ctx, dayPhase === 'taper' || cutback ? 'steady' : longStyle));
         // HYROX: a half simulation every third build week, and the full one once, 3 to 4 weeks before the race
         const simOk = !!hx && dayPhase !== 'taper' && !cutback && (phase === 'build' || phase === 'peak');
-        if (simOk && !hxFullDone && toRace >= 21 && toRace <= 34) { s = hxSim(date, true, dayPhase, ctx); hxFullDone = true; }
-        else if (simOk && hxBuildWeeks % 3 === 1 && !(toRace >= 14 && toRace < 21)) s = hxSim(date, false, dayPhase, ctx);
+        if (simOk && !hxFullDone && toRace >= 21 && toRace <= 34) { s = hxSim(date, true, dayPhase, ctx); hxFullDone = true; hxLastSim = hxBuildWeeks; }
+        // A half simulation every second build week (every 2 to 3 weeks on the calendar, with lighter weeks between)
+        else if (simOk && hxBuildWeeks >= 1 && hxBuildWeeks - hxLastSim >= 2 && !(toRace >= 14 && toRace < 21)) { s = hxSim(date, false, dayPhase, ctx); hxLastSim = hxBuildWeeks; }
         else { s = mkLong(km); rebuild.set(s.id, mkLong); }
       } else if (role === 'q1' || role === 'q2') {
         // HYROX sessions need room for 6 x 1 km even at a modest weekly volume (still under the 35% rule)
@@ -695,13 +777,15 @@ export function generatePlan(input: GenInput): GenResult {
     // (a first week that starts mid-week only shows part of the week, so it is left alone)
     if (ws >= start && !runsIn().some((x) => x.phase === 'taper' || x.type === 'race') && runsIn().length >= 3) {
       const totalKm = () => runsIn().reduce((x, y) => x + weekShareM(y), 0) / 1000;
-      const tooBig = () => runsIn().filter((x) => !x.hyrox?.kind.startsWith('sim') && x.distanceM / 1000 > totalKm() * MAX_SHARE).sort((a, b) => b.distanceM - a.distanceM);
+      const limit = (x: PlannedSession) => (x.type === 'long' && !hx ? LONG_TARGET[r.dc]?.share ?? MAX_SHARE : x.hyrox ? HX_KEY_SHARE : MAX_SHARE);
+      const tooBig = () => runsIn().filter((x) => !x.hyrox?.kind.startsWith('sim') && x.distanceM / 1000 > totalKm() * limit(x) + 0.3).sort((a, b) => b.distanceM - a.distanceM);
       for (let pass = 0; pass < 8; pass++) {
         const total = totalKm();
         const big = tooBig().find((x) => rebuild.has(x.id));
         if (!big) break;
         const others = total - big.distanceM / 1000;
-        const next = rebuild.get(big.id)!(Math.floor((others * 0.34) / 0.66 * 10) / 10);
+        const lim = limit(big) - 0.01;
+        const next = rebuild.get(big.id)!(Math.floor((others * lim) / (1 - lim) * 10) / 10);
         rebuild.set(next.id, rebuild.get(big.id)!);
         weekSessions[weekSessions.indexOf(big)] = next;
       }
@@ -759,10 +843,41 @@ export function generatePlan(input: GenInput): GenResult {
     soften(i + 1, `Easy the day after ${o.name}, to recover.`);
   }
 
+  // An injury noted in the profile (or an open care plan) changes the start of the plan: no hard sessions and
+  // shorter long runs for the first two weeks. While a care plan is open, the daily check-ins take over from there.
+  const hurt = profile.body?.injury?.area ?? profile.injuries?.find((i) => i.status === 'current')?.area;
+  if (hurt) {
+    const until = ymd(addDays(start, 13));
+    let changed = 0;
+    plan.sessions = plan.sessions.map((x) => {
+      if (x.date > until || x.type === 'rest' || x.type === 'race' || x.type === 'easy' || x.type === 'recovery') return x;
+      changed++;
+      return { ...easyRun(x.date, Math.max(3, Math.min(10, (x.distanceM / 1000) * (x.type === 'long' ? 0.75 : 0.7))), x.phase, { paces, race }, { why: `Easy and flat because of your ${hurt.toLowerCase()}: hard and long sessions come back after two weeks, if it is settling.` }), id: x.id, strengthPlan: x.strengthPlan };
+    });
+    if (changed) warnings.push(`Because of your ${hurt.toLowerCase()}, the first two weeks have no hard sessions and shorter long runs (${changed} session${changed === 1 ? '' : 's'} changed). Report it on Training to get a return plan that follows how it feels day by day.`);
+  }
+
   // 3) Sanity checks: refuse to hand over a plan that breaks the rules
   // A week the runner chose may put hard days next to each other: that is a warning they saw, not a refusal
   const issues = validatePlan(plan, paces).filter((x) => !(r.week && /two hard days back to back/.test(x)));
   if (issues.length) return { ok: false, problem: { kind: 'invalid', message: 'The plan did not pass its safety checks, so it was not saved. Please try different settings.', issues, options: [] } };
+  // Marathon or half: say so when the longest run stays short of what the race needs, and what would change it
+  const lt = hx ? undefined : LONG_TARGET[r.dc];
+  if (lt && race) {
+    const longest = Math.max(0, ...plan.sessions.filter((x) => x.type === 'long').map((x) => x.distanceM / 1000));
+    if (longest < lt.least - 0.5) {
+      const byTime = caps.longKm < lt.least, needPeak = Math.ceil(lt.least / lt.share);
+      const why = byTime ? `your long-run limit of ${r.maxLongMin} minutes` : r.peakKm < needPeak ? `a peak of ${r.peakKm} km a week` : 'the weeks left before the race';
+      const fix = byTime ? 'a longer long-run limit' : r.peakKm < needPeak ? `a peak of about ${needPeak} km a week, or more weeks` : 'a later race';
+      warnings.push(`Your longest run in this plan is ${Math.round(longest)} km. For a ${r.dc === 'M' ? 'marathon' : 'half marathon'}, ${lt.least} to ${lt.goal} km is the usual target; ${why} does not allow it. To get there you would need ${fix}${r.dc === 'M' ? ', or choose the half marathon' : ''}.`);
+    }
+  }
+  // Sessions longer than the time the runner said they have: never changed silently, always said
+  const limitMin = profile.schedule?.sessionMinutes;
+  if (limitMin) {
+    const over = plan.sessions.filter((x) => x.type !== 'rest' && x.type !== 'race' && x.durationS / 60 > limitMin + 5);
+    if (over.length) warnings.push(`${over.length} session${over.length === 1 ? ' is' : 's are'} longer than the ${limitMin} minutes you have for a session (the longest is ${Math.round(Math.max(...over.map((x) => x.durationS)) / 60)} min). Raise that time in Goals, or choose a shorter race.`);
+  }
   return { ok: true, plan, warnings };
 }
 
@@ -805,7 +920,9 @@ export function validatePlan(plan: Plan, paces: TrainingPaces): string[] {
     // and not a first week that starts part-way through (its earlier days are not in the plan)
     const partialFirst = wk < plan.startDate;
     if (partialFirst || runs.length < 3 || total === 0 || runs.some((s) => s.type === 'race' || s.phase === 'taper')) continue;
-    for (const s of runs) if (!s.hyrox?.kind.startsWith('sim') && s.distanceM > total * MAX_SHARE + 500) out.push(`${s.date} ${s.title}: ${Math.round(s.distanceM / total * 100)}% of the week of ${wk}`);
+    // A marathon or half-marathon long run may be a larger share (see LONG_TARGET)
+    const lim = (s: PlannedSession) => (s.type === 'long' && plan.goal !== 'hyrox' ? Math.max(MAX_SHARE, ...Object.values(LONG_TARGET).map((x) => x.share)) : s.hyrox ? HX_KEY_SHARE : MAX_SHARE);
+    for (const s of runs) if (!s.hyrox?.kind.startsWith('sim') && s.distanceM > total * lim(s) + 500) out.push(`${s.date} ${s.title}: ${Math.round(s.distanceM / total * 100)}% of the week of ${wk}`);
   }
   const sorted = [...plan.sessions].sort((a, b) => a.date.localeCompare(b.date));
   for (let i = 1; i < sorted.length; i++) {

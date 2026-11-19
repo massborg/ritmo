@@ -939,7 +939,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const longest = runs.filter((a) => { const x = daysBetween(new Date(a.startTime), today); return x >= 0 && x < 42; }).reduce((m, a) => Math.max(m, a.distanceM), 0);
     const t0 = ymd(today);
     const otherRaces = d.races.filter((r) => r.id !== race?.id && r.date >= t0 && (!race || r.date < race.date));
-    const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn, otherRaces });
+    const res = generatePlan({ today, profile: d.profile, race, paces: trainingPaces(f.vdot), vdot: f.vdot, recentWeeklyKm: recent.reduce((x, a) => x + a.distanceM, 0) / 4000, longestRecentKm: longest / 1000, pacesFrom: f.basedOn, otherRaces });
     if (!res.ok) return { problem: res.problem };
     const plan = res.plan;
     if (res.warnings.length) plan.changes[0].summary += ` ${res.warnings.join(' ')}`;

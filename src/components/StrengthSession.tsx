@@ -170,7 +170,7 @@ export function SwapSheet({ fromId, never, onPick, onClose }: { fromId: string; 
       <ul className="list swap-list">
         {alts.map(({ ex, reason }) => (
           <li key={ex.id}><button className="list-item row" style={{ width: '100%', gap: 12 }} onClick={() => onPick(ex.id, always)}>
-            {ex.custom ? <OwnNote ex={ex} /> : <ExerciseDemo pattern={ex.pattern} name={ex.name} muscles={ex.muscles} weights={ex.equipment === 'light' && !!ex.tags?.includes('weights')} size={56} />}
+            {ex.custom ? <OwnNote ex={ex} /> : <ExerciseDemo id={ex.id} pattern={ex.pattern} name={ex.name} muscles={ex.muscles} weights={ex.equipment === 'light' && !!ex.tags?.includes('weights')} size={56} />}
             <span className="stack-sm" style={{ gap: 0, textAlign: 'left' }}><span className="label">{ex.name}</span><span className="caption">{reason}</span></span>
           </button></li>
         ))}

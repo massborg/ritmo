@@ -57,6 +57,7 @@ const RecordsPage = lazyPage(() => import('./pages/Records'));
 const RecordPage = lazyPage(() => import('./pages/Record'));
 const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
 const HistoryPage = lazyPage(() => import('./pages/History'));
+const ExerciseGalleryPage = lazyPage(() => import('./pages/ExerciseGallery'));
 const LogEntryPage = lazyPage(() => import('./pages/LogEntry'));
 const OtherSportPage = lazyPage(() => import('./pages/OtherSport'));
 const ProfileHyroxPage = lazyPage(() => import('./pages/ProfileHyrox'));
@@ -296,6 +297,7 @@ function Shell() {
               <Route path="/record" element={<RecordPage />} />
               <Route path="/strength" element={<StrengthFreePage />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/exercise-demos" element={<ExerciseGalleryPage />} />
               <Route path="/log/:id" element={<LogEntryPage />} />
               <Route path="/other" element={<OtherSportPage />} />
               <Route path="/hyrox" element={<HyroxPage />} />
