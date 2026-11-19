@@ -173,7 +173,8 @@ function ProgressTab() {
   return (
     <div className="stack-lg">
       <div className="row wrap" role="group" aria-label="Kind of training" style={{ gap: 6 }}>
-        {SPORTS.map((x) => <button key={x.value} type="button" className="chip" aria-pressed={sport === x.value} onClick={() => setSport(x.value)}>{x.label}</button>)}
+        {/* "All training": the period control below also has an "All" (all time), and the two must not share a name */}
+        {SPORTS.map((x) => <button key={x.value} type="button" className="chip" aria-pressed={sport === x.value} aria-label={x.value === 'all' ? 'All training' : undefined} onClick={() => setSport(x.value)}>{x.label}</button>)}
       </div>
       <div className="stack-sm">
         <Segmented<P> label="Period" value={p} onChange={(x) => { setP(x); setAnchor(today); setShown(10); }} options={[{ value: 'W', label: 'W' }, { value: 'M', label: 'M' }, { value: 'Y', label: 'Y' }, { value: 'A', label: 'All' }]} />
