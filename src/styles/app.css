@@ -1437,3 +1437,20 @@ div.hx-row { cursor: default; }
 /* ---- Update 5, U5: every exercise drawing on one page ---- */
 .demo-gallery { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .demo-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px; text-align: center; }
+
+/* ---- Update 5, U6: a workout in progress is never lost ---- */
+.workout-live { background: var(--graphite); color: #fff; border-radius: var(--r-card); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.workout-live-eyebrow { margin: 0; font: 700 12px/16px var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.workout-live-clock { font: 600 13px/16px var(--font-mono, monospace); background: var(--accent); color: #171412; border-radius: var(--r-pill); padding: 2px 8px; letter-spacing: 0; }
+.workout-live-title { margin: 0; font: 700 22px/28px var(--font-display); color: #fff; }
+.workout-live-sub { margin: 0 0 4px; font: 400 14px/20px var(--font-body); opacity: 0.8; }
+.workout-live-btn { background: rgb(255 255 255 / 0.14); color: #fff; border-color: transparent; }
+.workout-live-btn:disabled { opacity: 0.45; }
+.workout-live-ghost { color: #fff; }
+.workout-live-link { align-self: center; background: none; border: 0; color: #fff; opacity: 0.8; text-decoration: underline; font: 500 14px/20px var(--font-body); min-height: 44px; padding: 0 12px; cursor: pointer; }
+.workout-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 55; display: flex; align-items: center; gap: 10px; max-width: min(94vw, 440px); min-height: 44px; padding: 6px 8px 6px 14px; border: 0; border-radius: var(--r-pill); background: var(--graphite); color: #fff; box-shadow: 0 8px 24px rgb(0 0 0 / 0.2); font: 600 14px/20px var(--font-body); cursor: pointer; }
+.workout-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.workout-bar-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.workout-bar-clock { font-family: var(--font-mono, monospace); opacity: 0.85; flex: none; }
+.workout-bar-go { flex: none; background: var(--brand); color: var(--on-brand); border-radius: var(--r-pill); padding: 4px 12px; }
+@media (min-width: 900px) { .workout-bar { bottom: 24px; } }

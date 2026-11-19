@@ -13,6 +13,8 @@ import { exById, type Exercise } from '../training/strength';
 import { MAX_FAVOURITES, defaultLoadType, freeName, nextSessionName, fromUnit, sortTemplates, templateLine, toUnit, type StrengthTemplate, type TemplateExercise, type WeightUnit } from '../training/strength-load';
 import { longDate, parseYmd, ymd } from '../lib/format';
 
+const DRAFT_KEY = 'ritmo:strength:draft';
+
 export default function StrengthFree() {
   const { data, plan, saveTemplate, deleteTemplate, duplicateTemplate, starTemplate, saveStrength, scheduleTemplate } = useApp();
   const nav = useNavigate();
@@ -21,7 +23,8 @@ export default function StrengthFree() {
   const prefs = data.profile.strength ?? {};
   const unit: WeightUnit = prefs.units ?? 'kg';
   const templates = sortTemplates((prefs.templates ?? []).filter((t) => t.exercises.some((x) => exById.has(x.exerciseId))));
-  const [list, setList] = useState<TemplateExercise[]>([]);
+  // The exercise list being built is kept on the device (update 5, U6): a reload or a closed tab does not lose it
+  const [list, setList] = useState<TemplateExercise[]>(() => { if (logMode) return []; try { const v = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? '[]') as TemplateExercise[]; return Array.isArray(v) ? v.filter((x) => exById.has(x.exerciseId)) : []; } catch { return []; } });
   const [editing, setEditing] = useState<StrengthTemplate>();
   const [name, setName] = useState('');
   const [naming, setNaming] = useState(false);
@@ -48,7 +51,7 @@ export default function StrengthFree() {
   const move = (i: number, d: -1 | 1) => setList((l) => { const n = [...l]; const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   // A row counts when it has sets, and a hold has a time (an emptied Seconds field is not a 0-second hold)
   const valid = list.filter((x) => exById.has(x.exerciseId) && x.sets > 0 && !(x.seconds != null && x.seconds <= 0));
-  const start = (w: { name: string; templateId?: string; exercises: TemplateExercise[] }) => { stashWorkout(w); nav('/strength/free?w=1'); };
+  const start = (w: { name: string; templateId?: string; exercises: TemplateExercise[] }) => { const to = stashWorkout(w); if (!w.templateId) { try { localStorage.removeItem(DRAFT_KEY); } catch { /* */ } } nav(to); };
   const use = (t: StrengthTemplate) => {
     if (logMode) { setList(t.exercises.filter((x) => exById.has(x.exerciseId))); setName(t.name); setFromTemplate(t.id); setMsg(`"${t.name}" loaded. Change anything that was different, then save.`); return; }
     start({ name: t.name, templateId: t.id, exercises: t.exercises.filter((x) => exById.has(x.exerciseId)) });
@@ -73,6 +76,7 @@ export default function StrengthFree() {
     nav('/');
   };
   const stars = templates.filter((t) => t.favourite).length;
+  useEffect(() => { if (logMode || editing) return; try { if (list.length) localStorage.setItem(DRAFT_KEY, JSON.stringify(list)); else localStorage.removeItem(DRAFT_KEY); } catch { /* */ } }, [list, logMode, editing]);
   useEffect(() => { if (!added) return; const t = window.setTimeout(() => setAdded(undefined), 5000); return () => window.clearTimeout(t); }, [added]);
   // Opened from elsewhere for one workout: "Log as done" loads it, "More" opens its menu
   useEffect(() => {

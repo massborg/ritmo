@@ -5,17 +5,18 @@
 // a saved workout). Then a summary with volume, best set and estimated 1-rep max. Strength counts toward streaks
 // and sessions done, and as light load, never as running km.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { Check, ChevronRight, Circle, Plus, Timer } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AppHeader } from '../components/app';
 import { Sheet } from '../components/inputs';
 import { ExerciseDemo } from '../components/ExerciseDemo';
 import { worksLabel } from '../components/figure';
-import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout, OwnNote } from '../components/StrengthBits';
+import { ExerciseLibrary, NumInput, liveWorkoutKey, stashedWorkout, OwnNote, type FreeWorkout } from '../components/StrengthBits';
 import { exById, noteInUnit, resolveStrength, type Exercise, type Routine } from '../training/strength';
-import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, nextSessionName, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type SetLog, type WeightUnit } from '../training/strength-load';
+import { LOAD_LABEL, asTemplateExercises, defaultLoadType, doubleProgression, exerciseSummary, freeName, fromUnit, groupsOf, nextSessionName, lastLine, lastSets, sessionSummary, showLoad, showVolume, toUnit, type Band, type LoadType, type WeightUnit } from '../training/strength-load';
 import { useStrengthAt } from '../components/StrengthSession';
+import { asLog, clearActive, currentActive, doneSets as doneSetsOf, loggedOf, minutesOf, saveActive, type ActiveWorkout } from '../training/active-workout';
 import { duration, ymd } from '../lib/format';
 
 interface SetRow { reps?: number; load?: number; seconds?: number; effort?: number; done: boolean }
@@ -23,23 +24,33 @@ interface Item { id: string; ex: Exercise; sets: number; reps?: number; seconds?
 interface Meta { loadType: LoadType; band?: Band }
 /** A workout in progress, kept for the tab: a stray Back, a tab tap or a reload does not lose the sets done */
 interface Kept { startedAt: number; idx: number; items: Omit<Item, 'ex'>[]; sets: SetRow[][]; meta: Meta[]; notes: string }
-const KEEP_MS = 12 * 3600 * 1000;
-function readKept(key: string): (Omit<Kept, 'items'> & { items: Item[] }) | undefined {
-  try {
-    const k = JSON.parse(sessionStorage.getItem(key) ?? 'null') as Kept | null;
-    if (!k || Date.now() - k.startedAt > KEEP_MS || !k.items.length || k.items.length !== k.sets.length || k.items.length !== k.meta.length || k.items.some((x) => !exById.has(x.id))) return undefined;
-    return { ...k, idx: Math.min(Math.max(0, k.idx), k.items.length - 1), items: k.items.map((x) => ({ ...x, ex: exById.get(x.id)! })) };
-  } catch { return undefined; }
+function readKept(uid: string, key: string, fromAccount: ActiveWorkout | undefined): (Omit<Kept, 'items'> & { items: Item[]; free?: FreeWorkout; restEndsAt?: number }) | undefined {
+  const k = currentActive(uid, fromAccount);
+  if (!k || k.key !== key || k.items.some((x) => !exById.has(x.id))) return undefined;
+  return { ...k, idx: Math.min(Math.max(0, k.idx), k.items.length - 1), items: k.items.map((x) => ({ ...x, ex: exById.get(x.id)! })) };
 }
 
-export default function StrengthPlayer() {
+/** One recorder per workout: going from one workout to another (Resume it) starts from that workout's own state */
+export default function StrengthPlayerPage() {
+  const loc = useLocation();
+  return <StrengthPlayer key={`${loc.pathname}${loc.search}`} />;
+}
+
+function StrengthPlayer() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const { data, plan, saveStrength, setStrengthPrefs, saveTemplate } = useApp();
+  const { data, plan, saveStrength, setStrengthPrefs, saveTemplate, session: auth } = useApp();
+  const uid = auth?.user.id ?? 'me';
   const session = plan?.sessions.find((s) => s.id === id);
   // The runner's own workout, from the builder or a saved workout
-  const [free] = useState(() => (id === 'free' && params.get('w') ? stashedWorkout() : undefined));
+  // After the tab was closed the builder's copy is gone: the workout in progress carries its own
+  const [free] = useState(() => {
+    if (id !== 'free' || !params.get('w')) return undefined;
+    // The start named in the address: from the builder (this tab), else the workout in progress (after the tab was closed)
+    const sid = params.get('sid'), stash = stashedWorkout(), act = currentActive(uid, data.profile.strength?.active)?.free;
+    return [stash, act].find((w) => w && (!sid || w.sid === sid)) ?? stash ?? act;
+  });
   const sp = free ? undefined : session?.strengthPlan ?? (id === 'free' ? { routine: (params.get('routine') as Routine) || 'A', intensity: 'moderate' as const, why: '' } : undefined);
   const prefs = data.profile.strength;
   const unit: WeightUnit = prefs?.units ?? 'kg';
@@ -63,8 +74,8 @@ export default function StrengthPlayer() {
     }
     return sp ? resolveStrength(sp, prefs, at) : undefined;
   }, [free, sp?.routine, sp?.intensity, sp?.custom, at.block, at.week, at.skips]); // eslint-disable-line react-hooks/exhaustive-deps
-  const keepKey = liveWorkoutKey(free ? 'free:w' : id === 'free' ? `free:${params.get('routine') ?? 'A'}` : id ?? '');
-  const [kept, setKept] = useState(() => readKept(keepKey));
+  const keepKey = liveWorkoutKey(free ? `free:w:${free.sid ?? ''}` : id === 'free' ? `free:${params.get('routine') ?? 'A'}` : id ?? '');
+  const [kept, setKept] = useState(() => readKept(uid, keepKey, data.profile.strength?.active));
   const [startedAt, setStartedAt] = useState(() => kept?.startedAt ?? Date.now());
   const [now, setNow] = useState(Date.now());
   const [idx, setIdx] = useState(kept?.idx ?? 0);
@@ -89,6 +100,9 @@ export default function StrengthPlayer() {
   useEffect(() => { if (workout && !items.length && workout.items.length) { setItems(workout.items); setSets(workout.items.map(rowsFor)); setMeta(workout.items.map((x) => metaFor(x, rowsFor(x)))); } }, [workout]); // eslint-disable-line react-hooks/exhaustive-deps
   const [restLen, setRestLen] = useState(prefs?.rest ?? 60);
   const [restLeft, setRestLeft] = useState<number>();
+  const [leaving, setLeaving] = useState(false);
+  // Another workout is still in progress with sets done: it is never replaced without asking
+  const [other, setOther] = useState(() => { const a = currentActive(uid, data.profile.strength?.active); return a && a.key !== keepKey && doneSetsOf(a) > 0 ? a : undefined; });
   const [finished, setFinished] = useState(false);
   const [rpe, setRpe] = useState<number>();
   const [picker, setPicker] = useState<'swap' | 'add'>();
@@ -98,13 +112,26 @@ export default function StrengthPlayer() {
   const [savedAs, setSavedAs] = useState<string>();
   const beep = useRef(false);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  // Kept for the tab once a set is done (nothing to keep before that)
+  // Kept on the device from the moment it starts, on every change (update 5, U6): closing the tab, the phone
+  // killing the app or going back never loses it. A copy goes to the account every 30 s and when the app is hidden.
+  const active = useRef<ActiveWorkout | undefined>(undefined);
+  const gone = useRef(false);
   useEffect(() => {
-    try {
-      if (!sets.some((s) => s.some((x) => x.done))) { sessionStorage.removeItem(keepKey); return; }
-      sessionStorage.setItem(keepKey, JSON.stringify({ startedAt, idx, items: items.map(({ ex: _ex, ...x }) => x), sets, meta, notes } satisfies Kept)); // eslint-disable-line @typescript-eslint/no-unused-vars
-    } catch { /* storage may be off: the workout is then only on screen */ }
-  }, [keepKey, startedAt, idx, items, sets, meta, notes]);
+    if (!workout || !items.length || gone.current || other) return;
+    const a: ActiveWorkout = { key: keepKey, route: `${window.location.pathname}${window.location.search}`, title: workout.title, source: free ? (free.templateId ? 'template' : 'free') : 'plan', sessionId: session?.id, templateId: free?.templateId, free,
+      startedAt, idx, items: items.map(({ ex: _ex, ...x }) => x), sets, meta, notes, updatedAt: Date.now() }; // eslint-disable-line @typescript-eslint/no-unused-vars
+    active.current = a;
+    saveActive(uid, a);
+  }, [keepKey, startedAt, idx, items, sets, meta, notes, other]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const sync = () => { if (active.current && !gone.current) setStrengthPrefs({ active: active.current }); };
+    const t = window.setInterval(sync, 30000);
+    const vis = () => { if (document.visibilityState === 'hidden') sync(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', vis); sync(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Finished or discarded: off the device and off the account */
+  const drop = () => { gone.current = true; active.current = undefined; clearActive(uid); if (data.profile.strength?.active) setStrengthPrefs({ active: undefined }); };
   useEffect(() => {
     if (restLeft == null) return;
     if (restLeft <= 0) { setRestLeft(undefined); if (!beep.current) { beep.current = true; try { navigator.vibrate?.(200); } catch { /* */ } } return; }
@@ -115,6 +142,18 @@ export default function StrengthPlayer() {
   if (!workout || !items.length) return (
     <div className="stack-lg"><AppHeader title="Strength" back large={false} /><p className="muted">{id === 'free' && params.get('w') ? 'This workout is no longer open. Start it again from Strength.' : "This strength session isn't in your plan any more."}</p><Link to={id === 'free' ? '/strength' : '/'} className="btn">{id === 'free' ? 'Back to Strength' : 'Back to Training'}</Link></div>
   );
+  if (other) return (
+    <div className="stack-lg">
+      <AppHeader title="Another workout is open" back large={false} />
+      <section className="card stack-sm" aria-label="Workout in progress">
+        <p className="label">{other.title}</p>
+        <p className="caption">{doneSetsOf(other)} set{doneSetsOf(other) === 1 ? '' : 's'} done and not saved yet. What should happen to it before you start {workout.title}?</p>
+        <button type="button" className="btn btn-primary btn-block" onClick={() => nav(other.route, { replace: true })}>Resume it</button>
+        <button type="button" className="btn btn-block" onClick={() => { const ex = loggedOf(other); if (ex.length) saveStrength({ date: ymd(new Date(other.startedAt)), minutes: minutesOf(other), strength: { title: other.title, source: other.source === 'plan' ? 'ritmo' : 'free', sessionId: other.sessionId, templateId: other.templateId, exercises: ex, notes: other.notes.trim() || undefined } }); setStartedAt(Date.now()); setOther(undefined); }}>Save it and start this one</button>
+        <button type="button" className="btn btn-ghost btn-danger btn-block" onClick={() => { if (window.confirm(`Discard ${other.title}? Its sets will not be saved.`)) { setStartedAt(Date.now()); setOther(undefined); } }}>Discard it and start this one</button>
+      </section>
+    </div>
+  );
   const totalSets = sets.reduce((a, s) => a + s.length, 0);
   const doneSets = sets.reduce((a, s) => a + s.filter((x) => x.done).length, 0);
   const cur = items[idx], curSets = sets[idx] ?? [], curMeta = meta[idx] ?? { loadType: 'bodyweight' as LoadType };
@@ -123,10 +162,6 @@ export default function StrengthPlayer() {
   const hasKg = curMeta.loadType === 'added' || curMeta.loadType === 'bodyweight_plus';
   const was = lastSets(log, cur.id);
   // What gets saved for a set: its load only when the exercise is loaded with weight
-  const asLog = (x: SetRow, m: Meta, ex: Exercise): SetLog => {
-    const kg = m.loadType === 'added' || m.loadType === 'bodyweight_plus';
-    return { reps: x.reps, unit: ex.unit, seconds: x.seconds, load: kg && x.load ? x.load : undefined, loadType: kg && !x.load && ex.equipment === 'none' ? 'bodyweight' : m.loadType, band: m.loadType === 'band' ? m.band ?? 'medium' : undefined, perSide: ex.perSide || undefined, effort: x.effort };
-  };
   const setRow = (j: number, p: Partial<SetRow>) => setSets((all) => all.map((s, i) => (i !== idx ? s : s.map((x, k) => (k === j ? { ...x, ...p } : x)))));
   // A change to the set you're on carries to the sets still to come
   const carry = (j: number, field: 'reps' | 'load' | 'seconds', v: number | undefined) => setSets((all) => all.map((s, i) => (i !== idx ? s : s.map((x, k) => (k === j || k > j && !x.done && j === nowSet ? { ...x, [field]: v } : x)))));
@@ -154,7 +189,7 @@ export default function StrengthPlayer() {
   const logged = items.map((x, i) => ({ id: x.id, name: x.ex.name, planned: sets[i].length, sets: sets[i].filter((y) => y.done).map((y) => asLog(y, meta[i], x.ex)) })).filter((x) => x.sets.length);
   const save = () => {
     setStrengthPrefs({ rest: restLen });
-    try { sessionStorage.removeItem(keepKey); } catch { /* */ }
+    drop();
     saveStrength({ date: ymd(new Date(startedAt)), minutes: Math.max(1, Math.round(elapsed / 60)), rpe, strength: { title: workout.title, source: free ? 'free' : 'ritmo', sessionId: session?.id, templateId: free?.templateId, exercises: logged, notes: notes.trim() || undefined } });
     nav(session ? `/session/${session.id}` : '/');
   };
@@ -205,7 +240,7 @@ export default function StrengthPlayer() {
 
   return (
     <div className="stack strength-player">
-      <AppHeader title={workout.title} back large={false} />
+      <AppHeader title={workout.title} back large={false} right={<button type="button" className="btn btn-small btn-outline" onClick={() => setLeaving(true)}>Leave</button>} />
       {kept && (
         <p className="row-between caption" role="status"><span>Carried on from where you left it.</span>
           <button type="button" className="btn btn-ghost btn-small" onClick={() => { const fresh = workout.items; setItems(fresh); setSets(fresh.map(rowsFor)); setMeta(fresh.map((x) => metaFor(x, rowsFor(x)))); setIdx(0); setNotes(''); setStartedAt(Date.now()); setKept(undefined); }}>Start again</button></p>
@@ -292,6 +327,16 @@ export default function StrengthPlayer() {
           {[30, 45, 60, 90, 120].map((s) => <option key={s} value={s}>{s} s</option>)}
         </select>
       </label>
+      {leaving && (
+        <Sheet open onClose={() => setLeaving(false)} title="Leave this workout?">
+          <div className="stack-sm">
+            <p className="caption">It keeps running. Come back any time from Activity or Training. Nothing is lost if you close the app.</p>
+            <button type="button" className="btn btn-primary btn-block" onClick={() => nav('/record')}>Keep it running and leave</button>
+            <button type="button" className="btn btn-block" disabled={!doneSets} onClick={() => { setLeaving(false); setFinished(true); setRestLeft(undefined); }}>Finish and save</button>
+            <button type="button" className="btn btn-ghost btn-danger btn-block" onClick={() => { if (window.confirm('Discard this workout? The sets you did will not be saved.')) { drop(); nav('/record'); } }}>Discard</button>
+          </div>
+        </Sheet>
+      )}
       {items.length > 1 && (
         <section className="stack-sm" aria-label="Up next">
           <span className="label">Up next</span>
