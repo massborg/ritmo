@@ -21,7 +21,7 @@ export function activityLoad(a: Activity, hr: HrSetup, thresholdPace?: number): 
 
 /** How much of a cross-training session's effort counts as running load. Non-impact sports build the
  *  heart and lungs but load the legs less, so they count partly. */
-const CROSS_TRANSFER: Record<string, number> = { Bike: 0.7, Elliptical: 0.8, Swim: 0.5, Gym: 0.5, Walk: 0.4, Other: 0.6 };
+export const CROSS_TRANSFER: Record<string, number> = { Bike: 0.7, 'Indoor bike': 0.7, Elliptical: 0.8, Row: 0.7, Swim: 0.5, Gym: 0.5, Class: 0.5, Walk: 0.4, 'Walk / hike': 0.4, Other: 0.6 };
 
 /** Load for one cross-training entry from minutes and effort (1 easy, 10 all out), on the same scale
  *  as runs: an hour at effort 7 (about threshold) of running is about 100. */

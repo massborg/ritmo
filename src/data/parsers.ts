@@ -9,16 +9,38 @@ export const SKIP_LABEL: Record<SkipCategory, string> = {
   gym: 'gym and strength', 'other-sport': 'other sports', unreadable: 'could not be read', unsupported: 'not an activity file',
 };
 
+/** Another sport found in a file or a sync (a ride, a swim, a walk, a gym session): kept as cross-training */
+export interface CrossImport { importId: string; sport: string; startTime: string; durationS: number; distanceM?: number; avgHr?: number; name?: string }
+/** The sport as Ritmo names it, from whatever the file or service calls it */
+export function crossSport(raw: string): string {
+  const s = raw.toLowerCase().replace(/_/g, ' ');
+  if (/indoor.*(cycl|bik|ride)|virtual.*ride|spin|trainer/.test(s)) return 'Indoor bike';
+  if (/cycl|bik|ride/.test(s)) return 'Bike';
+  if (/swim/.test(s)) return 'Swim';
+  if (/ellipt/.test(s)) return 'Elliptical';
+  if (/row/.test(s)) return 'Row';
+  if (/walk|hik/.test(s)) return 'Walk / hike';
+  if (/yoga|pilates|class|hiit|cardio|fitness|aerobic/.test(s)) return 'Class';
+  if (/strength|train|gym|weight/.test(s)) return 'Gym';
+  return 'Other';
+}
+const crossOf = (o: { id: string; sport: string; start: Date; durationS?: number; distanceM?: number; avgHr?: number; name?: string }): CrossImport | undefined =>
+  (!isNaN(o.start.getTime()) && (o.durationS ?? 0) >= 60 ? { importId: o.id, sport: crossSport(o.sport), startTime: o.start.toISOString(), durationS: Math.round(o.durationS!), distanceM: o.distanceM ? Math.round(o.distanceM) : undefined, avgHr: o.avgHr ? Math.round(o.avgHr) : undefined, name: o.name } : undefined);
+
 export interface ParsedFile {
   activities: Activity[];
   skipped: { file: string; reason: string; category: SkipCategory }[];
+  /** Rides, swims, walks and gym sessions found in the files: saved as cross-training */
+  cross: CrossImport[];
 }
 
 /** A file that is not a run: the sport it was, for the import report */
 export class NotARun {
   category: SkipCategory;
   sport?: string;
-  constructor(category: SkipCategory, sport?: string) { this.category = category; this.sport = sport; }
+  /** What it was instead, when the file says enough to keep it as cross-training */
+  cross?: CrossImport;
+  constructor(category: SkipCategory, sport?: string, cross?: CrossImport) { this.category = category; this.sport = sport; this.cross = cross; }
 }
 
 const sportCategory = (sport: string): SkipCategory => {
@@ -102,7 +124,12 @@ export function parseGpx(text: string, fileName: string): Activity | undefined {
   const pts = byLocal(doc, 'trkpt');
   if (pts.length < 2) return undefined;
   const type = (childText(doc.documentElement, 'type') ?? '').toLowerCase();
-  if (type && !/run|9|1/.test(type)) return new NotARun(sportCategory(type), type) as unknown as undefined; // Strava/Garmin export runs as "running" or "9"
+  if (type && !/run|9|1/.test(type)) { // Strava/Garmin export runs as "running" or "9"
+    const a = new Date(childText(pts[0], 'time') ?? ''), b = new Date(childText(pts[pts.length - 1], 'time') ?? '');
+    let dist = 0;
+    for (let i = 1; i < pts.length; i++) dist += haversine({ lat: Number(pts[i - 1].getAttribute('lat')), lon: Number(pts[i - 1].getAttribute('lon')) }, { lat: Number(pts[i].getAttribute('lat')), lon: Number(pts[i].getAttribute('lon')) });
+    return new NotARun(sportCategory(type), type, crossOf({ id: `gpx-${a.getTime()}`, sport: type, start: a, durationS: (b.getTime() - a.getTime()) / 1000, distanceM: dist, name: childText(doc.documentElement, 'name') })) as unknown as undefined;
+  }
   const t0 = new Date(childText(pts[0], 'time') ?? '');
   if (isNaN(t0.getTime())) return undefined;
   const streams: StreamPoint[] = [];
@@ -132,7 +159,13 @@ export function parseTcx(text: string, fileName: string): Activity | undefined {
   const act = byLocal(doc, 'Activity')[0];
   if (!act) return undefined;
   const sport = (act.getAttribute('Sport') ?? '').toLowerCase();
-  if (sport && sport !== 'running') return new NotARun(sportCategory(sport), sport) as unknown as undefined;
+  if (sport && sport !== 'running') {
+    const start = new Date(childText(act, 'Id') ?? '');
+    const laps = byLocal(act, 'Lap');
+    const num = (el: Element, tag: string) => Number(childText(el, tag) ?? 0) || 0;
+    const hrs = laps.map((l) => Number(byLocal(l, 'AverageHeartRateBpm')[0]?.textContent?.trim() ?? 0)).filter((x) => x > 0);
+    return new NotARun(sportCategory(sport), sport, crossOf({ id: `tcx-${start.getTime()}`, sport, start, durationS: laps.reduce((a, l) => a + num(l, 'TotalTimeSeconds'), 0), distanceM: laps.reduce((a, l) => a + num(l, 'DistanceMeters'), 0), avgHr: hrs.length ? hrs.reduce((a, b) => a + b, 0) / hrs.length : undefined })) as unknown as undefined;
+  }
   const tps = byLocal(act, 'Trackpoint');
   const t0 = new Date(childText(act, 'Id') ?? childText(tps[0], 'Time') ?? '');
   if (isNaN(t0.getTime())) return undefined;
@@ -173,7 +206,7 @@ export function parseTcx(text: string, fileName: string): Activity | undefined {
 
 interface FitRecord { timestamp?: string | Date; elapsed_time?: number; distance?: number; heart_rate?: number; cadence?: number; altitude?: number; enhanced_altitude?: number; position_lat?: number; position_long?: number }
 interface FitData {
-  sessions?: { sport?: string; start_time?: string | Date; total_distance?: number; total_elapsed_time?: number; total_timer_time?: number; avg_heart_rate?: number; max_heart_rate?: number; avg_cadence?: number; total_ascent?: number; total_calories?: number }[];
+  sessions?: { sport?: string; sub_sport?: string; start_time?: string | Date; total_distance?: number; total_elapsed_time?: number; total_timer_time?: number; avg_heart_rate?: number; max_heart_rate?: number; avg_cadence?: number; total_ascent?: number; total_calories?: number }[];
   records?: FitRecord[];
   laps?: { start_time?: string | Date; total_elapsed_time?: number; total_distance?: number; avg_heart_rate?: number; intensity?: string | number }[];
 }
@@ -185,7 +218,11 @@ export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Acti
   const data = await new Promise<FitData>((res, rej) => parser.parse(buf, (e, d) => (e ? rej(e) : res(d))));
   const sess = data.sessions?.[0];
   // Any running file counts: road, treadmill, track, trail, indoor and virtual runs (sport "running", any sub-sport)
-  if (sess?.sport && !/running|^1$/i.test(String(sess.sport))) return new NotARun(sportCategory(String(sess.sport)), String(sess.sport));
+  if (sess?.sport && !/running|^1$/i.test(String(sess.sport))) {
+    const start = new Date(sess.start_time ?? '');
+    const kind = [sess.sub_sport, sess.sport].filter(Boolean).join(' ');
+    return new NotARun(sportCategory(String(sess.sport)), String(sess.sport), crossOf({ id: `fit-${start.getTime()}`, sport: kind, start, durationS: sess.total_timer_time ?? sess.total_elapsed_time, distanceM: sess.total_distance, avgHr: sess.avg_heart_rate }));
+  }
   const recs = data.records ?? [];
   // No activity session and no distance: a wellness or monitoring file, not a run
   if (!sess && !recs.some((r) => (r.distance ?? 0) > 0)) return new NotARun('wellness');
@@ -218,15 +255,19 @@ export async function parseFit(buf: ArrayBuffer, fileName: string): Promise<Acti
 /** Garmin's summarizedActivities JSON from the account export: summaries only, no streams. */
 interface GarminSummary { activityId?: number; name?: string; activityType?: string; sportType?: string; beginTimestamp?: number; startTimeGmt?: number; distance?: number; duration?: number; movingDuration?: number; elevationGain?: number; avgHr?: number; maxHr?: number; avgRunCadence?: number; avgDoubleCadence?: number }
 
-function parseGarminSummaries(json: unknown): { runs: Activity[]; others: { name: string; type: string; category: SkipCategory }[] } {
+function parseGarminSummaries(json: unknown): { runs: Activity[]; others: { name: string; type: string; category: SkipCategory; cross?: CrossImport }[] } {
   const arr = Array.isArray(json) ? (json[0]?.summarizedActivitiesExport ?? json) : [];
   const out: Activity[] = [];
-  const others: { name: string; type: string; category: SkipCategory }[] = [];
+  const others: { name: string; type: string; category: SkipCategory; cross?: CrossImport }[] = [];
   for (const g of arr as GarminSummary[]) {
     const type = (g.activityType ?? g.sportType ?? '').toLowerCase();
     // treadmill_running, track_running, trail_running, indoor_running, virtual_run, street_running all count
-    if (!type.includes('run')) { others.push({ name: g.name ?? 'Activity', type: type.replace(/_/g, ' ') || 'unknown', category: sportCategory(type) }); continue; }
     const start = new Date(g.beginTimestamp ?? g.startTimeGmt ?? 0);
+    if (!type.includes('run')) {
+      others.push({ name: g.name ?? 'Activity', type: type.replace(/_/g, ' ') || 'unknown', category: sportCategory(type),
+        cross: type ? crossOf({ id: `garmin-${g.activityId ?? start.getTime()}`, sport: type, start, durationS: (g.movingDuration ?? g.duration ?? 0) / 1000, distanceM: (g.distance ?? 0) / 100, avgHr: g.avgHr, name: g.name }) : undefined });
+      continue;
+    }
     // Garmin export uses centimetres for distance and milliseconds for duration
     const distanceM = (g.distance ?? 0) / 100;
     const durS = (g.duration ?? 0) / 1000;
@@ -251,7 +292,9 @@ export type Progress = (done: number, total: number, label: string) => void;
 export async function parseFiles(files: File[], onProgress: Progress = () => {}): Promise<ParsedFile> {
   const activities: Activity[] = [];
   const skipped: ParsedFile['skipped'] = [];
+  const cross: CrossImport[] = [];
   const skip = (file: string, x: unknown, fallback: SkipCategory = 'unreadable') => {
+    if (x instanceof NotARun && x.cross) { cross.push(x.cross); return; }
     if (x instanceof NotARun) skipped.push({ file, category: x.category, reason: x.category === 'wellness' ? 'Wellness or monitoring data, not an activity' : `Not a run${x.sport ? ` (${x.sport.replace(/_/g, ' ')})` : ''}` });
     else skipped.push({ file, category: fallback, reason: fallback === 'unreadable' ? 'No track points or summary in this file' : 'Not an activity file' });
   };
@@ -293,7 +336,7 @@ export async function parseFiles(files: File[], onProgress: Progress = () => {})
       } else if (lower.endsWith('.json')) {
         const res = parseGarminSummaries(JSON.parse(new TextDecoder().decode(await item.get())));
         activities.push(...res.runs);
-        for (const o of res.others) skipped.push({ file: `${item.name.split('/').pop()} · ${o.name}`, category: o.category, reason: `Not a run (${o.type})` });
+        for (const o of res.others) { if (o.cross) cross.push(o.cross); else skipped.push({ file: `${item.name.split('/').pop()} · ${o.name}`, category: o.category, reason: `Not a run (${o.type})` }); }
       } else {
         skipped.push({ file: item.name, category: 'unsupported', reason: 'Unsupported file type. Use FIT, GPX, TCX or a ZIP export.' });
       }
@@ -304,7 +347,9 @@ export async function parseFiles(files: File[], onProgress: Progress = () => {})
     if (done % 20 === 0) await new Promise((r) => setTimeout(r, 0)); // keep the UI responsive
   }
   onProgress(total, total, 'Done');
-  return { activities, skipped };
+  // The same session in two files (a FIT and its GPX) is one entry
+  const seen = new Set<string>();
+  return { activities, skipped, cross: cross.filter((c) => { const k = `${c.startTime.slice(0, 16)}|${c.sport}`; if (seen.has(k)) return false; seen.add(k); return true; }) };
 }
 
 /** FIT lap intensity (a name or the enum number) as a Ritmo workout step type */

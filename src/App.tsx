@@ -3,6 +3,7 @@ import { ChunkBoundary } from './components/ChunkBoundary';
 import { UpdateToast } from './components/UpdateToast';
 import { ConsentBanner } from './components/ConsentBanner';
 import { UndoDeleteToast } from './components/DeleteRun';
+import { LogSavedToast } from './components/LogBits';
 import { HubSync } from './components/HubSync';
 import { PushHints } from './components/PushHints';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
@@ -55,6 +56,9 @@ const InsightsPage = lazyPage(() => import('./pages/Insights'));
 const RecordsPage = lazyPage(() => import('./pages/Records'));
 const RecordPage = lazyPage(() => import('./pages/Record'));
 const StrengthFreePage = lazyPage(() => import('./pages/StrengthFree'));
+const HistoryPage = lazyPage(() => import('./pages/History'));
+const LogEntryPage = lazyPage(() => import('./pages/LogEntry'));
+const OtherSportPage = lazyPage(() => import('./pages/OtherSport'));
 const ProfileHyroxPage = lazyPage(() => import('./pages/ProfileHyrox'));
 const HyroxPage = lazyPage(() => import('./pages/Hyrox'));
 const HyroxRaceDayPage = lazyPage(() => import('./pages/HyroxRaceDay'));
@@ -67,7 +71,7 @@ interface Tab { to: string; label: string; icon: typeof Sun; also?: string[] }
 const TABS: Tab[] = [
   { to: '/', label: 'Training', icon: Sun, also: ['/session/', '/goals', '/readiness'] },
   { to: '/coach', label: 'Coach', icon: MessageCircle },
-  { to: '/record', label: 'Activity', icon: Play, also: ['/run', '/strength', '/hyrox'] },
+  { to: '/record', label: 'Activity', icon: Play, also: ['/run', '/strength', '/hyrox', '/other', '/history', '/log/'] },
   { to: '/hub', label: 'Hub', icon: Users },
   { to: '/you', label: 'You', icon: User, also: ['/activity/', '/race/', '/story', '/review'] },
 ];
@@ -291,6 +295,9 @@ function Shell() {
               <Route path="/session/:id" element={<PlannedPage />} />
               <Route path="/record" element={<RecordPage />} />
               <Route path="/strength" element={<StrengthFreePage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/log/:id" element={<LogEntryPage />} />
+              <Route path="/other" element={<OtherSportPage />} />
               <Route path="/hyrox" element={<HyroxPage />} />
               <Route path="/hyrox/live" element={<HyroxLivePage />} />
               <Route path="/hyrox/race-day" element={<HyroxRaceDayPage />} />
@@ -339,6 +346,7 @@ function Shell() {
         </Gate>
         <UpdateToast />
         <UndoDeleteToast />
+        <LogSavedToast />
         <HubSync />
         <PushHints />
         <ConsentBanner />

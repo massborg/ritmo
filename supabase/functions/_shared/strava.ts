@@ -38,13 +38,14 @@ export async function accessTokenFor(db: SupabaseClient, userId: string): Promis
 /** Runs only: Run, TrailRun and VirtualRun (treadmill runs are VirtualRun or Run with trainer set). */
 export const isRun = (a: { sport_type?: string; type?: string }) => /^(Run|TrailRun|VirtualRun)$/.test(a.sport_type ?? a.type ?? '');
 
-/** One activity with its streams, ready for the inbox; null if it is not a run or cannot be read. */
+/** One activity ready for the inbox: a run with its streams, or another sport (a ride, a swim, a gym session) as a
+ *  summary only, which Ritmo keeps as cross-training. Null if it cannot be read. */
 export async function fetchRun(token: string, id: string | number): Promise<{ activity: Record<string, unknown>; streams: Record<string, unknown> } | null> {
   const auth = { headers: { Authorization: `Bearer ${token}` } };
   const a = await fetch(`${STRAVA.api}/activities/${id}?include_all_efforts=false`, auth);
   if (!a.ok) { if (a.status === 404) return null; throw new Error(`Strava activity ${id} (${a.status})`); }
   const activity = await a.json();
-  if (!isRun(activity)) return null;
+  if (!isRun(activity)) return { activity, streams: {} };
   const s = await fetch(`${STRAVA.api}/activities/${id}/streams?keys=time,distance,latlng,heartrate,altitude,cadence&key_by_type=true`, auth);
   const streams = s.ok ? await s.json() : {};
   return { activity, streams };
@@ -73,6 +74,8 @@ export async function catchUp(db: SupabaseClient, userId: string, days = 7): Pro
   const after = Math.floor(Date.now() / 1000) - days * 86400;
   const r = await fetch(`${STRAVA.api}/athlete/activities?after=${after}&per_page=60`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`Strava activity list (${r.status})`);
+  // Runs only here: other sports arrive through the webhook. (They are not in the activities table, so the
+  // hourly check could not tell which ones Ritmo already has and would fetch them again every time.)
   const list = (await r.json() as { id: number; sport_type?: string; type?: string }[]).filter(isRun);
   if (!list.length) return 0;
   const ids = list.map((a) => String(a.id));
