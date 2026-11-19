@@ -11,7 +11,7 @@ export const LOAD_LABEL: Record<LoadType, string> = { added: 'Added weight', bod
 export type Band = 'light' | 'medium' | 'heavy';
 
 /** One logged set. `load` is kg (the added weight; per side when `perSide`). */
-export interface SetLog { reps?: number; seconds?: number; load?: number; loadType?: LoadType; band?: Band; perSide?: boolean; /** Effort 5–10 */ effort?: number }
+export interface SetLog { reps?: number; /** 'm': reps holds metres (a carry or a sled) */ unit?: 'm'; seconds?: number; load?: number; loadType?: LoadType; band?: Band; perSide?: boolean; /** Effort 5–10 */ effort?: number }
 
 export type WeightUnit = 'kg' | 'lb';
 const LB = 2.2046226218;
@@ -21,7 +21,7 @@ export const fromUnit = (v: number, u: WeightUnit) => (u === 'lb' ? Math.round((
 export const showLoad = (kg: number | undefined, u: WeightUnit) => (kg ? `${toUnit(kg, u)} ${u}` : '');
 
 /** How the exercise is loaded by default */
-export const defaultLoadType = (e: Pick<Exercise, 'equipment'>): LoadType => (e.equipment === 'none' ? 'bodyweight' : 'added');
+export const defaultLoadType = (e: Pick<Exercise, 'equipment' | 'loadType'>): LoadType => e.loadType ?? (e.equipment === 'none' ? 'bodyweight' : 'added');
 /** The step when load goes up: 2.5 kg for two-legged lower-body lifts, 1 kg for one-sided and dumbbell moves */
 export const loadStep = (e: Pick<Exercise, 'perSide' | 'equipment' | 'pattern'>): number => (e.perSide || e.equipment === 'light' && !['squat', 'hinge', 'bridge'].includes(e.pattern) ? 1 : 2.5);
 /** The rep range an exercise works in: from its usual reps to 4 more ("8 to 12") */
@@ -35,7 +35,9 @@ export interface NextTarget { reps?: number; seconds?: number; load?: number; no
  * An exercise done without load stays on reps (the harder version comes with the next block).
  */
 export function doubleProgression(e: Exercise, last: SetLog[] | undefined, planned: number | undefined, sessionEffort?: number, unit: WeightUnit = 'kg'): NextTarget {
-  if (!last?.length) return { reps: e.reps, seconds: e.seconds, note: 'First time: find a weight you could do 2 more reps with.', change: 'first' };
+  if (!last?.length) return { reps: e.reps, seconds: e.seconds, note: e.unit === 'm' ? 'First time: a distance you could repeat.' : 'First time: find a weight you could do 2 more reps with.', change: 'first' };
+  // A distance (a carry, a sled): the same again, then more load or a little further by feel
+  if (e.unit === 'm') { const m = Math.max(...last.map((s) => s.reps ?? e.reps ?? 0)), w = Math.max(0, ...last.map((s) => s.load ?? 0)); return { reps: m, load: w || undefined, note: `Same distance again: ${m} m${w ? ` at ${showLoad(w, unit)}` : ''}. Add load or go a little further when it feels easy`, change: 'repeat' }; }
   const top = last.reduce((a, s) => ((s.load ?? 0) > (a.load ?? 0) || (s.load ?? 0) === (a.load ?? 0) && (s.reps ?? 0) < (a.reps ?? 0) ? s : a), last[0]);
   const efforts = last.map((s) => s.effort ?? sessionEffort ?? 6);
   const allDone = last.length >= (planned ?? last.length);
@@ -70,7 +72,7 @@ export function exerciseSummary(sets: SetLog[], unit: WeightUnit = 'kg'): Exerci
   const best = loaded.length ? loaded.map((s) => ({ load: s.load!, reps: s.reps!, e1rm: epley(s.load!, s.reps!) })).sort((a, b) => b.e1rm - a.e1rm)[0] : undefined;
   const first = sets[0] ?? {};
   const same = sets.every((s) => s.reps === first.reps && s.load === first.load && s.seconds === first.seconds);
-  const one = (s: SetLog) => `${s.seconds ? `${s.seconds} s` : s.reps ?? '–'}${s.load ? ` · ${showLoad(s.load, unit)}` : ''}`;
+  const one = (s: SetLog) => `${s.seconds ? `${s.seconds} s` : s.unit === 'm' && s.reps ? `${s.reps} m` : s.reps ?? '–'}${s.load ? ` · ${showLoad(s.load, unit)}` : ''}`;
   const text = !sets.length ? 'No sets' : same ? `${sets.length} × ${one(first)}` : sets.map(one).join(', ');
   return { volumeKg: Math.round(volumeKg), best, text };
 }
@@ -114,6 +116,18 @@ export function templateLine(t: Pick<StrengthTemplate, 'exercises'>): string {
   return `${n} exercise${n === 1 ? '' : 's'} · about ${Math.max(5, Math.round(secs / 60 / 5) * 5)} min`;
 }
 /** A name not used yet: "Legs", "Legs 2", "Legs 3" */
+/** A workout saved without a name: "Strength session 1", then 2, 3… (the next number not in use) */
+export function nextSessionName(list: StrengthTemplate[]): string {
+  const names = new Set(list.map((x) => x.name.toLowerCase()));
+  for (let i = 1; ; i++) if (!names.has(`strength session ${i}`)) return `Strength session ${i}`;
+}
+/** A saved workout put on a day (update 5, U3): it shows on Training that day with Start */
+export interface ScheduledWorkout { id: string; templateId: string; date: string }
+/** The saved workouts planned for a day, with whether one was already done (a session logged from it that day) */
+export function scheduledOn(strength: { templates?: StrengthTemplate[]; scheduled?: ScheduledWorkout[] } | undefined, log: { kind: string; date: string; strength?: { templateId?: string } }[] | undefined, date: string): { id: string; template: StrengthTemplate; done: boolean }[] {
+  return (strength?.scheduled ?? []).filter((s) => s.date === date).map((s) => ({ s, template: (strength?.templates ?? []).find((t) => t.id === s.templateId) })).filter((x): x is { s: ScheduledWorkout; template: StrengthTemplate } => !!x.template)
+    .map((x) => ({ id: x.s.id, template: x.template, done: (log ?? []).some((e) => e.kind === 'strength' && e.date === date && e.strength?.templateId === x.template.id) }));
+}
 export function freeName(list: StrengthTemplate[], base: string): string {
   const names = new Set(list.map((x) => x.name.toLowerCase()));
   if (!names.has(base.toLowerCase())) return base;

@@ -222,7 +222,7 @@ export interface Profile {
   athleteType?: 'runner' | 'hyrox' | 'both';
   /** HYROX: division, Roxzone timing, swaps, saved sessions and targets (update 4, task 5) */
   hyrox?: import('../hyrox/hyrox').HyroxPrefs;
-  strength?: import('../training/strength').StrengthPrefs & { rest?: number; /** Saved workouts (update 4, task 4) */ templates?: import('../training/strength-load').StrengthTemplate[]; /** Weights are stored in kg and shown in this unit */ units?: import('../training/strength-load').WeightUnit };
+  strength?: import('../training/strength').StrengthPrefs & { rest?: number; /** Saved workouts (update 4, task 4) */ templates?: import('../training/strength-load').StrengthTemplate[]; /** Saved workouts put on a day (update 5, U3) */ scheduled?: import('../training/strength-load').ScheduledWorkout[]; /** The athlete's own exercises (update 5, U2) */ customExercises?: import('../training/strength').CustomExercise[]; /** Weights are stored in kg and shown in this unit */ units?: import('../training/strength-load').WeightUnit };
   /** For reminders the server can't work out: today's readiness and shoe wear (update 2, §15) */
   pushHints?: { readiness?: { date: string; score: number; band: 'recover' | 'easy' | 'hard' }; shoes?: { id: string; name: string; pct: number }[]; sessions?: { from: string; to: string; sessions: { id: string; date: string; type: string; title: string; distanceM: number; durationS: number; status?: string }[] } };
   /** PBs on the Hub profile (off by default, up to 4 distances) */
