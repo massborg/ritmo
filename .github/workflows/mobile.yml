@@ -1,15 +1,27 @@
 name: Mobile apps
 
+# Builds on pull requests only (not again on main after the merge), and never for docs-only changes.
+# `labeled` is listed so that adding the `ios` label to an open pull request starts the iOS build straight away;
+# for any other label nothing is built (see the job conditions).
 on:
-  push:
-    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths-ignore: ['**/*.md', 'docs/**']
   workflow_dispatch:
+
+# A new push to the same pull request cancels the older run. A label event has its own group, so adding a label
+# never cancels a build that is under way.
+concurrency:
+  group: mobile-${{ github.ref }}${{ github.event.action == 'labeled' && '-label' || '' }}
+  cancel-in-progress: true
 
 jobs:
   android:
     name: Android debug build
+    # Not for a label being added: the code has not changed
+    if: github.event.action != 'labeled'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,16 +43,31 @@ jobs:
         with:
           name: ritmo-android-debug
           path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 3
 
   ios:
     name: iOS simulator build
+    # macOS minutes cost far more than Linux ones, so this runs only when asked for: started by hand from the
+    # Actions tab, or on a pull request that has the `ios` label (on each push to it, and when the label is added).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (contains(github.event.pull_request.labels.*.name, 'ios') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'ios'))
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      # Swift packages Xcode downloads (the project uses Swift Package Manager, not CocoaPods). Only the
+      # downloaded sources are kept, never build output, so every build still compiles everything.
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/*/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'ios/App/CapApp-SPM/Package.swift') }}
+          restore-keys: spm-${{ runner.os }}-
       - run: npm ci
       - run: npm run build
       - run: npx cap sync ios
